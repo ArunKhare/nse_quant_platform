@@ -1,0 +1,47 @@
+# Global non-secret platform configuration.
+# Secrets remain in .env. Environment variables override YAML.
+
+safety:
+  dry_run: true
+  trading_enabled: false
+  paper_trading: true
+  allowed_strategies: [iron_condor_monitor]
+
+universe:
+  underlying: NIFTY
+  strikes_per_side: 10
+
+runtime:
+  stale_seconds: 15
+  loop_interval_seconds: 15
+
+storage:
+  db_path: data/nse_quant.duckdb
+  parquet_dir: data/parquet
+  dashboard_host: 127.0.0.1
+  dashboard_port: 8050
+
+analytics:
+  risk_free_rate: 0.07
+  rv_window: 20
+  iv_history_limit: 250
+  min_iv_rank: 40
+  min_iv_rv_spread: 0.02
+  max_expected_move_buffer: 1.15
+
+strategy:
+  iron_condor_monitor:
+    wing_distance_points: 200
+    min_credit: 20
+
+risk:
+  max_lots_per_order: 2
+  max_open_positions: 3
+  max_notional_exposure: 2000000
+  max_daily_loss: 25000
+  max_portfolio_delta: 100
+  max_portfolio_vega: 5000
+  max_portfolio_gamma: 0.01
+  max_spread_pct: 0.03
+  min_oi: 50000
+  min_volume: 500
