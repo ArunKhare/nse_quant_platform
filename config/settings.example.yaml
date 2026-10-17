@@ -53,6 +53,11 @@ exits:
   data_quality_max_age_seconds: 30
   expected_move_violation_buffer: 1.25
 
+notifier:
+  enabled: true
+  telegram:
+    enabled: true
+
 paper_execution:
   fill_slippage_pct: 0.0
   allow_partial_fills: false

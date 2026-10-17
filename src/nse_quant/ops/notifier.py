@@ -11,12 +11,12 @@ import os
 
 import requests
 import structlog
+from dotenv import load_dotenv
+from nse_quant.core.settings import get_settings
 
+load_dotenv()
 logger = structlog.get_logger(__name__)
-
-TELEGRAM_API_URL = "https://api.telegram.org/bot{token}/sendMessage"
-MAX_MESSAGE_LENGTH = 4096
-
+settings = get_settings()
 
 class Notifier:
     """Send operational notifications through Telegram."""
@@ -27,11 +27,19 @@ class Notifier:
         chat_id: str | None = None,
         session: requests.Session | None = None,
         timeout_seconds: float = 10.0,
+        enabled: bool | None = None,
     ) -> None:
-        self.token = token or os.getenv("TELEGRAM_BOT_TOKEN")
-        self.chat_id = chat_id or os.getenv("TELEGRAM_CHAT_ID")
+        self.secrets = settings.secrets
+        self.token = token or self.secrets.telegram_bot_token or os.getenv("TELEGRAM_BOT_TOKEN")
+        self.chat_id = chat_id or self.secrets.telegram_chat_id or os.getenv("TELEGRAM_CHAT_ID")
         self.session = session or requests.Session()
         self.timeout_seconds = timeout_seconds
+        self.notifier_settings = settings.notifier
+        self.enabled = (
+            self.notifier_settings.enabled and self.notifier_settings.telegram.enabled
+            if enabled is None
+            else enabled
+        )
 
     @property
     def is_configured(self) -> bool:
@@ -39,8 +47,12 @@ class Notifier:
 
     def send(self, message: str) -> bool:
         """Send a message. Returns True only when Telegram accepts it."""
+        if not self.enabled:
+            logger.info("telegram_notifier_disabled")
+            return False
+
         if not self.is_configured:
-            logger.warning(
+            logger.debug(
                 "telegram_notifier_not_configured",
                 reason="missing_token_or_chat_id",
             )
@@ -57,7 +69,7 @@ class Notifier:
 
         try:
             response = self.session.post(
-                TELEGRAM_API_URL.format(token=self.token),
+                self.notifier_settings.telegram.uri.format(token=self.token),
                 json=payload,
                 timeout=self.timeout_seconds,
             )
@@ -78,12 +90,12 @@ class Notifier:
         logger.info("telegram_notifier_sent")
         return True
 
-    @staticmethod
-    def _truncate(message: str) -> str:
-        if len(message) <= MAX_MESSAGE_LENGTH:
+
+    def _truncate(self, message: str) -> str:
+        if len(message) <= self.notifier_settings.telegram.message_length_limit:
             return message
 
-        return message[: MAX_MESSAGE_LENGTH - 3] + "..."
+        return message[: self.notifier_settings.telegram.message_length_limit - 3] + "..."
 
 
 class NullNotifier:

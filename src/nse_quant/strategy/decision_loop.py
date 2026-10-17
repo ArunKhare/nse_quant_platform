@@ -24,6 +24,7 @@ from nse_quant.core.models import (
 from nse_quant.core.settings import get_settings
 from nse_quant.execution.broker import PaperBroker
 from nse_quant.features.feature_store import FeatureStore
+from nse_quant.ops.live_snapshot import build_snapshot, write_live_snapshot
 from nse_quant.persistence.repositories import (
     DecisionRepository,
     PositionRepository,
@@ -67,21 +68,51 @@ class DecisionLoop:
             features.model_dump(mode="json"),
         )
 
+        iv_smile = []
+
+        for quote in snapshot.quotes:
+            if quote.iv is not None:
+                iv_smile.append(
+                    {
+                        "strike": quote.instrument.strike,
+                        "option_type": quote.instrument.option_type.value,
+                        "iv": quote.iv,
+                    }
+                )
+
+        features.diagnostics["iv_smile"] = iv_smile
+
         proposal, gates = self.strategy.evaluate(snapshot, features)
-        self.decisions.save_gate_results(
-            self.run_id,
-            proposal,
-            gates,
-        ) if proposal else None
+        if proposal:
+            self.decisions.save_gate_results(
+                self.run_id,
+                proposal,
+                gates,
+            )
 
         if proposal is None:
-            self.decisions.save_decision(
-                self.run_id,
-                "no_proposal",
-                None,
-                {"gates": [gate.model_dump(mode="json") for gate in gates]},
+            result_status = "no_proposal"
+
+            write_live_snapshot(
+                build_snapshot(
+                    features=features,
+                    open_positions=self.positions.get_open_strategy_positions(),
+                    kill_switch_active=False,
+                    loop_status=result_status,
+                )
             )
-            return {"status": "no_proposal"}
+
+            return {
+                "status": result_status,
+                "reason": (
+                    "gate_failed"
+                    if gates and not all(gate.passed for gate in gates)
+                    else "missing_legs_or_low_credit"
+                ),
+                "gates": [
+                    gate.model_dump(mode="json") for gate in gates
+                ],
+            }
 
         self.decisions.save_decision(
             self.run_id,
@@ -103,27 +134,42 @@ class DecisionLoop:
         )
 
         if not risk_decision.approved:
+            result_status = "risk_rejected"
+
+            write_live_snapshot(
+                build_snapshot(
+                    features=features,
+                    open_positions=self.positions.get_open_strategy_positions(),
+                    kill_switch_active=False,
+                    loop_status=result_status,
+                )
+            )
+
             return {
-                "status": "risk_rejected",
+                "status": result_status,
                 "proposal_id": proposal.proposal_id,
                 "reasons": risk_decision.reasons,
-            }
-
-        if self.settings.safety.dry_run or not self.settings.safety.trading_enabled:
-            self.decisions.save_decision(
-                self.run_id,
-                "dry_run_order_skipped",
-                proposal,
-                {"would_submit": True},
-            )
-            return {
-                "status": "dry_run",
-                "proposal_id": proposal.proposal_id,
             }
 
         order = self.broker.submit(proposal)
         self._persist_order(order)
 
+        if self.settings.safety.dry_run or not self.settings.safety.trading_enabled:
+            result_status = "dry_run"
+
+            write_live_snapshot(
+                build_snapshot(
+                    features=features,
+                    open_positions=self.positions.get_open_strategy_positions(),
+                    kill_switch_active=False,
+                    loop_status=result_status,
+                )
+            )
+
+            return {
+                "status": result_status,
+                "proposal_id": proposal.proposal_id,
+            }
         if order.status.value != "FILLED":
             return {
                 "status": order.status.value,
@@ -163,6 +209,18 @@ class DecisionLoop:
                 exit_evaluation.selected_reason,
             )
 
+        result_status = "paper_filled"
+        write_live_snapshot(
+            build_snapshot(
+                features=features,
+                open_positions=self.positions.get_open_strategy_positions(),
+                latest_orders=[],
+                latest_exits=[],
+                kill_switch_active=False,
+                loop_status=result_status,
+            )
+        )
+
         return {
             "status": "paper_filled",
             "proposal_id": proposal.proposal_id,
@@ -173,6 +231,7 @@ class DecisionLoop:
                 else None
             ),
         }
+
 
     def _build_features(self, snapshot: ChainSnapshot) -> MarketFeatures:
         iv_history = self.store.latest_iv_history(snapshot.underlying)

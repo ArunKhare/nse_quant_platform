@@ -71,12 +71,6 @@ class PaperOrder(BaseModel):
     created_at:datetime=Field(default_factory=lambda:datetime.now(UTC)); status:OrderStatus=OrderStatus.CREATED
     legs:list[Leg]; limit_price:float; filled_price:float|None=None; filled_at:datetime|None=None; reject_reason:str|None=None
 
-class PaperPosition(BaseModel):
-    position_id:str=Field(default_factory=lambda:uuid4().hex); proposal_id:str; strategy:str; opened_at:datetime
-    legs:list[Leg]; entry_price:float; current_price:float|None=None; realized_pnl:float=0; unrealized_pnl:float=0
-    status:Literal["OPEN","CLOSED"]="OPEN"; exit_reason:str|None=None; closed_at:datetime|None=None; thesis:str=""
-    thesis_status:Literal["ACTIVE","VALID","INVALID","EXPIRED"]="ACTIVE"; review_notes:str|None=None
-
 class StrategyPositionStatus(str, Enum):
     OPEN = "OPEN"
     CLOSED = "CLOSED"
@@ -171,3 +165,22 @@ class PostTradeReview(BaseModel):
     thesis_status: Literal["VALID", "INVALID", "EXPIRED", "UNKNOWN"] = "UNKNOWN"
     decision_quality_notes: str = ""
     outcome_notes: str = ""
+
+class PaperPosition(BaseModel):
+    position_id: str = Field(default_factory=lambda: uuid4().hex)
+    proposal_id: str
+    strategy: str
+    opened_at: datetime
+    legs: list[Leg]
+    entry_price: float
+    current_price: float | None = None
+    realized_pnl: float = 0
+    unrealized_pnl: float = 0
+    status: Literal["OPEN", "CLOSED"] = "OPEN"
+    exit_reason: str | None = None
+    closed_at: datetime | None = None
+    thesis: str = ""
+    thesis_status: Literal["ACTIVE", "VALID", "INVALID", "EXPIRED"] = "ACTIVE"
+    review_notes: str | None = None
+    leg_entry_prices: dict[int, float] = Field(default_factory=dict)
+    leg_current_prices: dict[int, float] = Field(default_factory=dict)

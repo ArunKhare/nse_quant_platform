@@ -12,10 +12,10 @@ from uuid import uuid4
 
 from nse_quant.core.settings import get_settings
 from nse_quant.execution.broker import PaperBroker
-from nse_quant.integrations.kite_auth import get_authenticated_kite
+from nse_quant.integrations.kite_session import get_cached_kite
 from nse_quant.market_data.kite_provider import KiteMarketDataProvider
 from nse_quant.ops.kill_switch import KillSwitch
-from nse_quant.ops.notifier import Notifier
+from nse_quant.ops.notifier import Notifier, NullNotifier
 from nse_quant.persistence.duckdb_store import DuckDBStore
 from nse_quant.strategy.decision_loop import DecisionLoop
 
@@ -45,12 +45,12 @@ def main() -> int:
             "Live trading is blocked in v0.3.0. Set TRADING_ENABLED=false."
         )
 
-    kite = get_authenticated_kite(settings=settings)
+    kite = get_cached_kite(settings=settings)
     provider = KiteMarketDataProvider(kite)
     store = DuckDBStore()
     broker = PaperBroker()
     kill_switch = KillSwitch()
-    notifier = Notifier()
+    notifier = Notifier() if settings.notifier.enabled else NullNotifier()
     run_id = uuid4().hex
 
     loop = DecisionLoop(
