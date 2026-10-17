@@ -24,6 +24,7 @@ class UniverseSettings(BaseModel):
 class RuntimeSettings(BaseModel):
     stale_seconds: float = 15.0
     loop_interval_seconds: int = 15
+    enforce_market_hours: bool = True
 
 class StorageSettings(BaseModel):
     db_path: Path = Path("data/nse_quant.duckdb")
@@ -35,6 +36,7 @@ class AnalyticsSettings(BaseModel):
     risk_free_rate: float = .07
     rv_window: int = 20
     iv_history_limit: int = 250
+    min_iv_history_observations: int = 30
     min_iv_rank: float = 40
     min_iv_rv_spread: float = .02
     max_expected_move_buffer: float = 1.15

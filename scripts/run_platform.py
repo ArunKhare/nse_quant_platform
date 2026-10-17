@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import argparse
+import json
 import threading
 import time
+from datetime import UTC, datetime
 from uuid import uuid4
 
 from nse_quant.core.settings import get_settings
@@ -107,8 +109,32 @@ def main() -> int:
                 notifier.send("NSE Quant: kill switch active; loop stopped.")
                 break
 
-            result = loop.run_once()
-            print(result)
+            try:
+                result = loop.run_once()
+                print(result)
+            except Exception as exc: #noqa:BLE001
+                result = {
+                    "status": "loop_error",
+                    "error": str(exc),
+                }
+                print(result)
+                notifier.send(f"NSE Quant loop error: {exc}")
+                store.conn.execute(
+                    """
+                    INSERT INTO decisions VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    [
+                        uuid4().hex,
+                        datetime.now(UTC),
+                        run_id,
+                        "loop_error",
+                        None,
+                        None,
+                        None,
+                        None,
+                        json.dumps({"error": str(exc)}),
+                    ],
+                )
 
             status = result.get("status")
 

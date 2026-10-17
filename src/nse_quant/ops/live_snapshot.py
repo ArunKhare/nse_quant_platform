@@ -43,6 +43,8 @@ def build_snapshot(
     latest_exits: list[Any] | None = None,
     kill_switch_active: bool = False,
     loop_status: str = "idle",
+    data_quality: dict[str, Any] | None = None,
+    iv_history: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     return {
         "updated_at": datetime.now(UTC).isoformat(),
@@ -55,4 +57,19 @@ def build_snapshot(
         ],
         "latest_orders": latest_orders or [],
         "latest_exits": latest_exits or [],
+        "data_quality": data_quality or {
+            "is_usable": True,
+            "stale": False,
+            "missing_quotes": 0,
+            "missing_bid_ask": 0,
+            "zero_volume_legs": 0,
+            "issues": [],
+            "warnings": [],
+        },
+        "iv_history": iv_history or {
+            "observation_count": 0,
+            "minimum_required": 0,
+            "mode": "COLD_START",
+        },
+
     }

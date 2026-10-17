@@ -63,20 +63,19 @@ def test_decision_loop_persists_feature_and_decision(tmp_path):
         broker=PaperBroker(),
         run_id="test-run",
     )
+    try:
+        result = loop.run_once()
+        assert result["status"] in {"no_proposal", "risk_rejected", "dry_run"}
 
-    result = loop.run_once()
+        feature_count = store.conn.execute(
+            "SELECT COUNT(*) FROM feature_snapshots"
+        ).fetchone()[0]
 
-    assert result["status"] in {"no_proposal", "risk_rejected", "dry_run"}
+        decision_count = store.conn.execute(
+            "SELECT COUNT(*) FROM decisions"
+        ).fetchone()[0]
 
-    feature_count = store.conn.execute(
-        "SELECT COUNT(*) FROM feature_snapshots"
-    ).fetchone()[0]
-
-    decision_count = store.conn.execute(
-        "SELECT COUNT(*) FROM decisions"
-    ).fetchone()[0]
-
-    assert feature_count == 1
-    assert decision_count >= 1
-
-    store.close()
+        assert feature_count == 1
+        assert decision_count >= 1
+    finally:
+        store.close()

@@ -88,7 +88,7 @@ def status_pill(label: str, value: str, color: str) -> html.Div:
 def safety_banner(snapshot: dict[str, Any]) -> html.Div:
     kill_switch_active = bool(snapshot.get("kill_switch_active", False))
     loop_status = snapshot.get("loop_status", "idle")
-
+    quality = snapshot.get("data_quality", {})
     trading_color = GREEN if settings.safety.paper_trading else RED
     kill_color = RED if kill_switch_active else GREEN
     loop_color = (
@@ -122,6 +122,11 @@ def safety_banner(snapshot: dict[str, Any]) -> html.Div:
                 loop_color,
             ),
             status_pill(
+                "Data quality",
+                "OK" if quality.get("is_usable") else "DEGRADED",
+                GREEN if quality.get("is_usable") else AMBER,
+            ),
+            status_pill(
                 "Last update",
                 format_time(snapshot.get("updated_at")),
                 TEXT_PRIMARY,
@@ -135,6 +140,23 @@ def safety_banner(snapshot: dict[str, Any]) -> html.Div:
         },
     )
 
+def data_quality_section(snapshot: dict[str, Any]) -> html.Div:
+    quality = snapshot.get("data_quality", {})
+
+    issues = quality.get("issues", [])
+    warnings = quality.get("warnings", [])
+
+    if not issues and not warnings:
+        return html.Div("Market data quality is healthy.")
+
+    return html.Div(
+        [
+            html.H3("Data-quality issues"),
+            html.Ul([html.Li(issue) for issue in issues]),
+            html.H3("Warnings"),
+            html.Ul([html.Li(warning) for warning in warnings]),
+        ]
+    )
 
 def metric_card(
     label: str,
@@ -546,6 +568,7 @@ app.layout = html.Div(
         ),
         html.Div(id="safety-banner"),
         html.Div(id="market-metrics"),
+        html.Div(id="data-quality"),
         section_card(
             "IV smile",
             dcc.Graph(
@@ -589,6 +612,7 @@ app.layout = html.Div(
 @app.callback(
     Output("safety-banner", "children"),
     Output("market-metrics", "children"),
+    Output("data-quality", "children"),
     Output("iv-smile", "figure"),
     Output("market-features", "children"),
     Output("open-positions", "children"),
@@ -600,6 +624,7 @@ def refresh_dashboard(_n_intervals: int):
     return (
         safety_banner(snapshot),
         market_metric_cards(snapshot),
+        data_quality_section(snapshot),
         iv_smile_figure(snapshot),
         market_features_table(snapshot),
         positions_table(snapshot),

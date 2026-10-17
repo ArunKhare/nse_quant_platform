@@ -7,6 +7,7 @@ import time
 from datetime import UTC, datetime
 from uuid import uuid4
 
+from nse_quant.core.market_calendar import is_market_open_now
 from nse_quant.core.settings import get_settings
 from nse_quant.execution.broker import PaperBroker
 from nse_quant.integrations.kite_session import get_cached_kite
@@ -14,6 +15,7 @@ from nse_quant.market_data.kite_provider import KiteMarketDataProvider
 from nse_quant.ops.kill_switch import KillSwitch
 from nse_quant.ops.notifier import Notifier
 from nse_quant.persistence.duckdb_store import DuckDBStore
+from nse_quant.persistence.repositories import DecisionRepository
 from nse_quant.strategy.decision_loop import DecisionLoop
 
 
@@ -87,15 +89,37 @@ def main() -> int:
 
     try:
         while time.monotonic() < end_time:
+            if is_market_open_now():
+                print("Market is open. Continuing loop.")
+            else:
+                print("NSE Market is closed. waiting...")
+                time.sleep(60)
+                continue
             if kill_switch.is_active():
                 _record_kill_switch(store, run_id)
                 print("Kill switch active. Paper loop stopped.")
                 notifier.send("NSE Quant: kill switch active; loop stopped.")
                 break
 
-            result = loop.run_once()
-            print(result)
-
+            try:
+                result = loop.run_once()
+                print(result)
+            except Exception as exc: #noqa:BLE001
+                result = {
+                    "status": "loop_error",
+                    "error": str(exc),
+                }
+                print(result)
+                notifier.send(f"NSE Quant loop error: {exc}")
+                decision_repo = DecisionRepository(store)
+                decision_repo.save_system_event(
+                    run_id,
+                    event_type='loop_error',
+                    payload={
+                        "error": str(exc),
+                        "error_type": type(exc).__name__
+                        },
+                    )
             status = result.get("status")
 
             if status in {"risk_rejected", "dry_run"}:

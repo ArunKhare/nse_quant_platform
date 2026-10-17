@@ -109,7 +109,34 @@ class DecisionRepository:
             ],
         )
         return risk_decision_id
+    def save_system_event(
+        self,
+        run_id: str,
+        event_type: str,
+        payload: dict[str, Any],
+        proposal: TradeProposal | None = None,
+    ) -> str:
+        """Persist a platform-level event that is not tied to a proposal."""
 
+        decision_id = uuid4().hex
+
+        self.conn.execute(
+            """
+            INSERT INTO decisions VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            [
+                decision_id,
+                datetime.now(UTC),
+                run_id,
+                event_type,
+                proposal.proposal_id if proposal else None,
+                proposal.strategy if proposal else None,
+                proposal.underlying if proposal else None,
+                proposal.expiry if proposal else None,
+                _json(payload),
+            ],
+        )
+        return decision_id
 
 class PositionRepository:
     def __init__(self, conn: Any) -> None:
