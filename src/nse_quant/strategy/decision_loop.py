@@ -1,10 +1,13 @@
 """Paper decision loop: market data to post-trade review.
 
+
 Flow:
-market data -> analytics -> feature snapshot -> strategy proposal -> gates
--> risk check -> paper order -> independent leg positions -> marking/P&L
--> exit evaluation -> close -> post-trade review.
+market data -> analytics -> feature snapshot -> open-position monitoring
+-> strategy proposal -> gates -> risk check -> paper order
+-> independent leg positions -> marking/P&L -> exit evaluation
+-> close -> post-trade review.
 """
+
 
 from __future__ import annotations
 
@@ -19,6 +22,7 @@ from nse_quant.core.models import (
     OptionQuote,
     OrderSide,
     PaperOrder,
+    PostTradeReview,
     StrategyPosition,
     TradeProposal,
 )
@@ -67,6 +71,12 @@ class DecisionLoop:
         features, iv_history_count = self._build_features(snapshot)
         quality: DataQualityReport = self.quality_checker.assess(snapshot)
 
+        position_outcomes = self._monitor_open_positions(
+            snapshot=snapshot,
+            features=features,
+            quality=quality,
+        )
+
         self.feature_store.save(self.run_id, features)
 
         data_quality = {
@@ -111,10 +121,25 @@ class DecisionLoop:
             ),
         }
 
+        open_positions = self.positions.get_open_strategy_positions()
+
+        if len(open_positions) >= self.settings.risk.max_open_positions:
+            return self._finish_cycle(
+                status="max_open_positions",
+                features=features,
+                data_quality=data_quality,
+                iv_history=iv_history,
+                extra={
+                    "open_positions": len(open_positions),
+                    "position_outcomes": position_outcomes,
+                },
+            )
+
         proposal, gates = self.strategy.evaluate(
             snapshot,
             features,
-            iv_history_count=iv_history_count,)
+            iv_history_count=iv_history_count,
+        )
 
         if proposal:
             self.decisions.save_gate_results(
@@ -130,6 +155,9 @@ class DecisionLoop:
                 data_quality=data_quality,
                 iv_history=iv_history,
                 gates=gates,
+                extra={
+                    "position_outcomes": position_outcomes,
+                },
             )
 
         self.decisions.save_decision(
@@ -165,6 +193,7 @@ class DecisionLoop:
                 extra={
                     "proposal_id": proposal.proposal_id,
                     "reasons": risk_decision.reasons,
+                    "position_outcomes": position_outcomes,
                 },
             )
 
@@ -185,7 +214,10 @@ class DecisionLoop:
                 data_quality=data_quality,
                 iv_history=iv_history,
                 proposal=proposal,
-                extra={"proposal_id": proposal.proposal_id},
+                extra={
+                    "proposal_id": proposal.proposal_id,
+                    "position_outcomes": position_outcomes,
+                },
             )
 
         order = self.broker.submit(proposal)
@@ -201,6 +233,7 @@ class DecisionLoop:
                 extra={
                     "proposal_id": proposal.proposal_id,
                     "reason": order.reject_reason,
+                    "position_outcomes": position_outcomes,
                 },
             )
 
@@ -210,10 +243,9 @@ class DecisionLoop:
         )
 
         self._mark_positions(
-            proposal,
-            strategy_position,
-            leg_positions,
-            snapshot,
+            strategy_position=strategy_position,
+            leg_positions=leg_positions,
+            snapshot=snapshot,
         )
 
         exit_evaluation = self.exit_engine.evaluate(
@@ -230,17 +262,11 @@ class DecisionLoop:
 
         if exit_evaluation.selected_reason is not None:
             self._close_positions(
-                proposal,
-                strategy_position,
-                leg_positions,
-                exit_evaluation.selected_reason,
+                proposal=proposal,
+                strategy_position=strategy_position,
+                leg_positions=leg_positions,
+                exit_reason=exit_evaluation.selected_reason,
             )
-
-        self._monitor_existing_positions(
-            snapshot,
-            features,
-            quality,
-        )
 
         return self._finish_cycle(
             status="paper_filled",
@@ -250,14 +276,13 @@ class DecisionLoop:
             proposal=proposal,
             extra={
                 "proposal_id": proposal.proposal_id,
-                "strategy_position_id": (
-                    strategy_position.strategy_position_id
-                ),
+                "strategy_position_id": strategy_position.strategy_position_id,
                 "exit_reason": (
                     exit_evaluation.selected_reason.value
                     if exit_evaluation.selected_reason
                     else None
                 ),
+                "position_outcomes": position_outcomes,
             },
         )
 
@@ -265,9 +290,7 @@ class DecisionLoop:
         self,
         snapshot: ChainSnapshot,
     ) -> tuple[MarketFeatures, int]:
-        iv_history = self.store.latest_iv_history(
-            snapshot.underlying
-        )
+        iv_history = self.store.latest_iv_history(snapshot.underlying)
         spot_history = [snapshot.spot] * 30
 
         features = build_features(
@@ -326,7 +349,10 @@ class DecisionLoop:
         snapshot: ChainSnapshot,
     ) -> dict[tuple[str, float], OptionQuote]:
         return {
-            (quote.instrument.option_type.value, quote.instrument.strike): quote
+            (
+                quote.instrument.option_type.value,
+                quote.instrument.strike,
+            ): quote
             for quote in snapshot.quotes
         }
 
@@ -357,9 +383,16 @@ class DecisionLoop:
         self,
         proposal: TradeProposal,
         order: PaperOrder,
-    ) -> tuple[StrategyPosition, list[Any]]:
+    ) -> tuple[StrategyPosition, list[LegPosition]]:
         filled_at = order.filled_at or datetime.now(UTC)
         entry_price = order.filled_price or proposal.entry_limit_price
+
+        proposal_payload = proposal.model_dump(mode="json")
+
+        metadata = {
+            **proposal.metadata,
+            "original_proposal": proposal_payload,
+        }
 
         strategy_position = StrategyPosition(
             proposal_id=proposal.proposal_id,
@@ -370,12 +403,12 @@ class DecisionLoop:
             entry_price=entry_price,
             current_price=entry_price,
             thesis=proposal.thesis,
-            metadata=proposal.metadata,
+            metadata=metadata,
         )
 
         self.positions.create_strategy_position(strategy_position)
 
-        leg_positions = []
+        leg_positions: list[LegPosition] = []
 
         for leg in proposal.legs:
             leg_position = LegPosition(
@@ -401,9 +434,8 @@ class DecisionLoop:
 
     def _mark_positions(
         self,
-        proposal: TradeProposal,
         strategy_position: StrategyPosition,
-        leg_positions: list[Any],
+        leg_positions: list[LegPosition],
         snapshot: ChainSnapshot,
     ) -> None:
         quote_lookup = self._quote_lookup(snapshot)
@@ -420,11 +452,15 @@ class DecisionLoop:
             mark = self._mark_price(quote)
 
             if mark is None:
-                mark = leg_position.current_price or leg_position.entry_price
+                mark = (
+                    leg_position.current_price
+                    or leg_position.entry_price
+                )
 
             leg_position.current_price = mark
 
             direction = 1 if leg_position.side == OrderSide.BUY else -1
+
             leg_position.unrealized_pnl = (
                 mark - leg_position.entry_price
             ) * leg_position.quantity * direction
@@ -459,13 +495,34 @@ class DecisionLoop:
                 "reason": "dashboard_or_cli_kill_switch",
             },
         )
-        
+
+    def handle_loop_error(self, exc: Exception) -> dict[str, Any]:
+        payload = {
+            "error": str(exc),
+            "error_type": type(exc).__name__,
+        }
+
+        self.decisions.save_system_event(
+            run_id=self.run_id,
+            event_type="loop_error",
+            payload=payload,
+        )
+
+        return {
+            "status": "loop_error",
+            **payload,
+        }
+
     @staticmethod
     def _mark_price(quote: OptionQuote | None) -> float | None:
         if quote is None:
             return None
 
-        if quote.bid is not None and quote.ask is not None and quote.ask >= quote.bid > 0:
+        if (
+            quote.bid is not None
+            and quote.ask is not None
+            and quote.ask >= quote.bid > 0
+        ):
             return (quote.bid + quote.ask) / 2
 
         return quote.ltp
@@ -474,7 +531,7 @@ class DecisionLoop:
         self,
         proposal: TradeProposal,
         strategy_position: StrategyPosition,
-        leg_positions: list[Any],
+        leg_positions: list[LegPosition],
         exit_reason: Any,
     ) -> None:
         closed_at = datetime.now(UTC)
@@ -496,8 +553,6 @@ class DecisionLoop:
 
             self.positions.update_leg_position(leg_position)
 
-        from nse_quant.core.models import PostTradeReview
-
         review = PostTradeReview(
             strategy_position_id=strategy_position.strategy_position_id,
             proposal_id=proposal.proposal_id,
@@ -505,20 +560,29 @@ class DecisionLoop:
             closed_at=closed_at,
             realized_pnl=strategy_position.realized_pnl,
             exit_reason=exit_reason,
-            thesis_status="VALID" if strategy_position.realized_pnl >= 0 else "INVALID",
-            decision_quality_notes="Thesis and gate evidence retained in decision history.",
-            outcome_notes="Realized P&L is an outcome measure, not a decision-quality measure.",
+            thesis_status=(
+                "VALID"
+                if strategy_position.realized_pnl >= 0
+                else "INVALID"
+            ),
+            decision_quality_notes=(
+                "Thesis and gate evidence retained in decision history."
+            ),
+            outcome_notes=(
+                "Realized P&L is an outcome measure, not a "
+                "decision-quality measure."
+            ),
         )
 
         self.positions.save_post_trade_review(review)
 
-    def _monitor_existing_positions(
+    def _monitor_open_positions(
         self,
         snapshot: ChainSnapshot,
         features: MarketFeatures,
         quality: DataQualityReport,
-    ) -> None:
-        self._quote_lookup(snapshot)
+    ) -> list[dict[str, Any]]:
+        outcomes: list[dict[str, Any]] = []
 
         for strategy_position in self.positions.get_open_strategy_positions():
             leg_positions = self.positions.get_leg_positions(
@@ -529,16 +593,23 @@ class DecisionLoop:
                 continue
 
             self._mark_positions(
-                None,
-                strategy_position,
-                leg_positions,
-                snapshot,
+                strategy_position=strategy_position,
+                leg_positions=leg_positions,
+                snapshot=snapshot,
             )
 
-            proposal = self._reconstruct_proposal(
-                strategy_position,
-                leg_positions,
-            )
+            proposal = self._load_proposal(strategy_position)
+
+            if proposal is None:
+                outcomes.append(
+                    {
+                        "strategy_position_id": (
+                            strategy_position.strategy_position_id
+                        ),
+                        "status": "missing_proposal",
+                    }
+                )
+                continue
 
             exit_evaluation = self.exit_engine.evaluate(
                 proposal,
@@ -552,10 +623,39 @@ class DecisionLoop:
 
             self.positions.save_exit_evaluation(exit_evaluation)
 
+            outcome = {
+                "strategy_position_id": (
+                    strategy_position.strategy_position_id
+                ),
+                "status": "open",
+                "selected_exit_reason": (
+                    exit_evaluation.selected_reason.value
+                    if exit_evaluation.selected_reason
+                    else None
+                ),
+            }
+
             if exit_evaluation.selected_reason is not None:
                 self._close_positions(
-                    proposal,
-                    strategy_position,
-                    leg_positions,
-                    exit_evaluation.selected_reason,
+                    proposal=proposal,
+                    strategy_position=strategy_position,
+                    leg_positions=leg_positions,
+                    exit_reason=exit_evaluation.selected_reason,
                 )
+
+                outcome["status"] = "closed"
+
+            outcomes.append(outcome)
+
+        return outcomes
+
+    def _load_proposal(
+        self,
+        strategy_position: StrategyPosition,
+    ) -> TradeProposal | None:
+        payload = strategy_position.metadata.get("original_proposal")
+
+        if not payload:
+            return None
+
+        return TradeProposal.model_validate(payload)
