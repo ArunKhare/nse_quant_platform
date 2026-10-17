@@ -31,36 +31,57 @@ class IvRegimeGate:
     def __init__(self, settings: Any | None = None) -> None:
         self.settings = settings or get_settings()
 
-    def evaluate(self, features: MarketFeatures) -> GateResult:
+    def evaluate(
+        self,
+        features: MarketFeatures,
+        iv_history_count: int | None = None,
+    ) -> GateResult:
+        analytics = self.settings.analytics
         iv_rank = features.iv_rank
         spread = features.iv_rv_spread
-        minimum_rank = self.settings.analytics.min_iv_rank
-        minimum_spread = self.settings.analytics.min_iv_rv_spread
 
-        # Cold-start behavior: if no IV history exists, rank is None.
-        # Allow the strategy to proceed on IV-RV spread alone rather than
-        # blocking all proposals forever.
-        rank_ok = iv_rank is None or iv_rank >= minimum_rank
-        spread_ok = spread is not None and spread >= minimum_spread
+        spread_ok = (
+            spread is not None
+            and spread >= analytics.min_iv_rv_spread
+        )
+
+        has_minimum_history = (
+            iv_history_count is not None
+            and iv_history_count >= analytics.min_iv_history_observations
+        )
+
+        if not has_minimum_history:
+            cold_start_allowed = analytics.allow_iv_rank_cold_start
+            rank_ok = cold_start_allowed
+            mode = "COLD_START"
+        else:
+            rank_ok = iv_rank is not None and iv_rank >= analytics.min_iv_rank
+            mode = "ENFORCED"
+
         passed = rank_ok and spread_ok
 
         return GateResult(
             gate="iv_regime",
             passed=passed,
             reason=(
+                f"mode={mode},"
+                f"iv_history_count={iv_history_count},"
                 f"iv_rank={iv_rank},"
-                f"iv_rv_spread={spread},"
-                f"cold_start={iv_rank is None}"
+                f"iv_rv_spread={spread}"
             ),
             details={
+                "mode": mode,
+                "iv_history_count": iv_history_count,
                 "iv_rank": iv_rank,
                 "iv_rv_spread": spread,
-                "min_iv_rank": minimum_rank,
-                "min_iv_rv_spread": minimum_spread,
-                "cold_start": iv_rank is None,
+                "min_iv_rank": analytics.min_iv_rank,
+                "min_iv_rv_spread": analytics.min_iv_rv_spread,
+                "min_iv_history_observations": (
+                    analytics.min_iv_history_observations
+                ),
+                "cold_start_allowed": analytics.allow_iv_rank_cold_start,
             },
         )
-
 
 class ExpectedMoveGate:
     def __init__(self, settings: Any | None = None) -> None:
@@ -171,10 +192,14 @@ class GateEvaluator:
         snapshot: ChainSnapshot,
         features: MarketFeatures,
         strikes: list[float],
+        iv_history_count: int | None = None,
     ) -> list[GateResult]:
         return [
             self.market_open_gate.evaluate(snapshot),
-            self.iv_regime_gate.evaluate(features),
+            self.iv_regime_gate.evaluate(
+                features,
+                iv_history_count=iv_history_count,
+            ),
             self.expected_move_gate.evaluate(features),
             self.liquidity_gate.evaluate(snapshot, strikes),
         ]

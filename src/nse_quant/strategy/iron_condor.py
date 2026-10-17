@@ -33,6 +33,7 @@ class IronCondorMonitor:
         self,
         snapshot: ChainSnapshot,
         features: MarketFeatures,
+        iv_history_count: int | None = None,
     ) -> tuple[TradeProposal | None, list[GateResult]]:
         if not snapshot.quotes:
             return None, []
@@ -52,7 +53,7 @@ class IronCondorMonitor:
             long_call_strike,
         ]
 
-        gates = self.gates.evaluate(snapshot, features, required_strikes)
+        gates = self.gates.evaluate(snapshot, features, required_strikes, iv_history_count=iv_history_count)
 
         if not self.gates.all_passed(gates):
             return None, gates

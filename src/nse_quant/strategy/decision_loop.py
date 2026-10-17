@@ -111,7 +111,10 @@ class DecisionLoop:
             ),
         }
 
-        proposal, gates = self.strategy.evaluate(snapshot, features)
+        proposal, gates = self.strategy.evaluate(
+            snapshot,
+            features,
+            iv_history_count=iv_history_count,)
 
         if proposal:
             self.decisions.save_gate_results(
@@ -258,8 +261,13 @@ class DecisionLoop:
             },
         )
 
-    def _build_features(self,snapshot: ChainSnapshot,) -> tuple[MarketFeatures, int]:
-        iv_history = self.store.latest_iv_history(snapshot.underlying)
+    def _build_features(
+        self,
+        snapshot: ChainSnapshot,
+    ) -> tuple[MarketFeatures, int]:
+        iv_history = self.store.latest_iv_history(
+            snapshot.underlying
+        )
         spot_history = [snapshot.spot] * 30
 
         features = build_features(
@@ -267,6 +275,7 @@ class DecisionLoop:
             iv_history,
             spot_history,
         )
+
         return features, len(iv_history)
 
     def _finish_cycle(

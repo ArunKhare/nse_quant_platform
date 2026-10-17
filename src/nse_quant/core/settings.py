@@ -33,14 +33,26 @@ class StorageSettings(BaseModel):
     dashboard_port: int = 8050
 
 class AnalyticsSettings(BaseModel):
-    risk_free_rate: float = .07
+    risk_free_rate: float = 0.07
     rv_window: int = 20
     iv_history_limit: int = 250
-    min_iv_history_observations: int = 30
     min_iv_rank: float = 40
-    min_iv_rv_spread: float = .02
+    min_iv_rv_spread: float = 0.02
     max_expected_move_buffer: float = 1.15
+    min_iv_history_observations: int = 30
+    allow_iv_rank_cold_start: bool = True
 
+    @model_validator(mode="after")
+    def validate_analytics(self) -> AnalyticsSettings:
+        if self.min_iv_history_observations < 1:
+            raise ValueError("min_iv_history_observations must be >= 1")
+
+        if self.iv_history_limit < self.min_iv_history_observations:
+            raise ValueError(
+                "iv_history_limit must be >= min_iv_history_observations"
+            )
+
+        return self
 class IronCondorSettings(BaseModel):
     wing_distance_points: float = 200
     min_credit: float = 20

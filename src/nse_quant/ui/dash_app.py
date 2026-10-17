@@ -98,6 +98,9 @@ def safety_banner(snapshot: dict[str, Any]) -> html.Div:
         if loop_status in {"no_proposal", "risk_rejected", "idle"}
         else RED
     )
+    iv_history = snapshot.get("iv_history", {})
+    history_count = iv_history.get("observation_count", 0)
+    minimum_required = iv_history.get("minimum_required", 0)
 
     return html.Div(
         [
@@ -125,6 +128,11 @@ def safety_banner(snapshot: dict[str, Any]) -> html.Div:
                 "Data quality",
                 "OK" if quality.get("is_usable") else "DEGRADED",
                 GREEN if quality.get("is_usable") else AMBER,
+            ),
+            status_pill(
+                "IV history",
+                f"{history_count}/{minimum_required}",
+                GREEN if history_count >= minimum_required else AMBER,
             ),
             status_pill(
                 "Last update",
