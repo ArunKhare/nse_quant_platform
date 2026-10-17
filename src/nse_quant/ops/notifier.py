@@ -12,6 +12,7 @@ import os
 import requests
 import structlog
 from dotenv import load_dotenv
+
 from nse_quant.core.settings import get_settings
 
 load_dotenv()
