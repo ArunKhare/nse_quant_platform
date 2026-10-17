@@ -51,3 +51,10 @@ exits:
   iv_collapse_pct: 20
   data_quality_max_age_seconds: 30
   expected_move_violation_buffer: 1.25
+
+notifier:
+  enabled: true
+  telegram:
+    uri: "https://api.telegram.org/bot{token}/sendMessage"
+    enabled: true
+    message_length_limit: 4096

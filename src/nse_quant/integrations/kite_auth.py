@@ -5,8 +5,8 @@ import binascii
 import json
 import logging
 import webbrowser
-from urllib.parse import parse_qs, urljoin, urlparse
 from http.server import BaseHTTPRequestHandler, HTTPServer
+from urllib.parse import parse_qs, urljoin, urlparse
 
 import pyotp
 import requests
@@ -161,7 +161,7 @@ def manual_request_token(kite, settings: Settings | None = None):
             parsed_target = urlparse(redirect_url)
             if parsed_target.port:
                 port = parsed_target.port
-    except Exception as e:
+    except Exception as e: #noqa:BLE001
         logger.warning("Could not parse custom settings port configuration (%s). Using port 8000.", e)
 
     url = kite.login_url()

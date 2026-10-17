@@ -64,6 +64,19 @@ class ExitSettings(BaseModel):
     data_quality_max_age_seconds: int = 30
     expected_move_violation_buffer: float = 1.25
 
+class PaperExecutionSettings(BaseModel):
+    fill_slippage_pct: float = 0.0
+    allow_partial_fills: bool = False
+
+class TelegramNotifierSettings(BaseModel):
+    enabled: bool = True
+    uri: str = "https://api.telegram.org/bot{token}/sendMessage"
+    message_length_limit: int = 4096
+
+class NotifierSettings(BaseModel):
+    enabled: bool = True
+    telegram: TelegramNotifierSettings = Field(default_factory=TelegramNotifierSettings)
+
 class KiteSecrets(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -79,6 +92,8 @@ class KiteSecrets(BaseSettings):
     kite_auth_mode: str = "manual"
     kite_access_token: str = ""
     kite_redirect_uri: str = ""
+    telegram_bot_token: str = ""
+    telegram_chat_id: str = ""
 
 def _load_yaml(path: Path) -> dict[str, Any]:
     if not path.exists():
@@ -105,6 +120,8 @@ class Settings(BaseSettings):
     strategy: StrategySettings = Field(default_factory=StrategySettings)
     risk: RiskSettings = Field(default_factory=RiskSettings)
     exits: ExitSettings = Field(default_factory=ExitSettings)
+    paper_execution: PaperExecutionSettings = Field(default_factory=PaperExecutionSettings)
+    notifier: NotifierSettings = Field(default_factory=NotifierSettings)
     secrets: KiteSecrets = Field(default_factory=KiteSecrets)
 
     # @model_validator(mode="after")
