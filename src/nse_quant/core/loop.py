@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import argparse
 import time
-from datetime import UTC, datetime
 from uuid import uuid4
 
 from nse_quant.core.market_calendar import is_market_open_now
@@ -17,25 +16,6 @@ from nse_quant.ops.notifier import Notifier
 from nse_quant.persistence.duckdb_store import DuckDBStore
 from nse_quant.persistence.repositories import DecisionRepository
 from nse_quant.strategy.decision_loop import DecisionLoop
-
-
-def _record_kill_switch(store: DuckDBStore, run_id: str) -> None:
-    store.conn.execute(
-        """
-        INSERT INTO decisions VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """,
-        [
-            uuid4().hex,
-            datetime.now(UTC),
-            run_id,
-            "kill_switch_active",
-            None,
-            None,
-            None,
-            None,
-            '{"reason":"cli_or_dashboard_kill_switch"}',
-        ],
-    )
 
 
 def main() -> int:
@@ -76,7 +56,7 @@ def main() -> int:
     kill_switch = KillSwitch()
     notifier = Notifier()
     run_id = uuid4().hex
-
+    decisions = DecisionRepository(store.conn)
     loop = DecisionLoop(
         store=store,
         provider=provider,
@@ -89,18 +69,15 @@ def main() -> int:
 
     try:
         while time.monotonic() < end_time:
-            if is_market_open_now():
+            if not is_market_open_now():
                 print("Market is open. Continuing loop.")
-            else:
-                print("NSE Market is closed. waiting...")
-                time.sleep(60)
+                time.sleep(settings.runtime.market_closed_wait_seconds)
                 continue
             if kill_switch.is_active():
-                _record_kill_switch(store, run_id)
+                loop.handle_kill_switch()
                 print("Kill switch active. Paper loop stopped.")
                 notifier.send("NSE Quant: kill switch active; loop stopped.")
                 break
-
             try:
                 result = loop.run_once()
                 print(result)
@@ -111,8 +88,7 @@ def main() -> int:
                 }
                 print(result)
                 notifier.send(f"NSE Quant loop error: {exc}")
-                decision_repo = DecisionRepository(store)
-                decision_repo.save_system_event(
+                decisions.save_system_event(
                     run_id,
                     event_type='loop_error',
                     payload={
@@ -134,7 +110,7 @@ def main() -> int:
         print("Paper loop interrupted.")
 
     finally:
-        store.close()
+        store.conn.close()
 
     print("Paper decision loop finished.")
     return 0

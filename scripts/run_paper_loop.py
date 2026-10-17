@@ -35,6 +35,11 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="Optional path to settings YAML",
     )
+    parser.add_argument(
+        "--allow-out-of-hours",
+        action="store_true",
+        help="Allow strategy testing while NSE is closed",
+    )
     return parser.parse_args()
 
 
@@ -42,6 +47,8 @@ def main() -> int:
     args = parse_args()
     settings = get_settings(args.config)
 
+    if args.allow_out_of_hours:
+        settings.runtime.allow_out_of_hours_testing = True
     if settings.safety.trading_enabled:
         raise RuntimeError(
             "Live trading is blocked in v0.3.0. Set TRADING_ENABLED=false."
@@ -54,6 +61,7 @@ def main() -> int:
     kill_switch = KillSwitch()
     notifier = Notifier() if settings.notifier.enabled else NullNotifier()
     run_id = uuid4().hex
+    decision_repo = DecisionRepository(store.conn)
 
     loop = DecisionLoop(
         store=store,
@@ -67,33 +75,20 @@ def main() -> int:
 
     try:
         while time.monotonic() < end_time:
-            if is_market_open_now():
-                print("Market is open. Continuing loop.")
-            else:
-                print("NSE Market is closed. waiting...")
-                time.sleep(60)
-                continue
             if kill_switch.is_active():
-                store.conn.execute(
-                    """
-                    INSERT INTO decisions
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """,
-                    [
-                        __import__("uuid").uuid4().hex,
-                        __import__("datetime").datetime.now(__import__("datetime").timezone.utc),
-                        run_id,
-                        "kill_switch_active",
-                        None,
-                        None,
-                        None,
-                        None,
-                        '{"reason":"dashboard_or_cli_kill_switch"}',
-                    ],
-                )
+                loop.handle_kill_switch()
+                print("Kill switch active. Paper loop stopped.")
                 notifier.send("NSE Quant: kill switch active; loop stopped.")
                 break
-
+            if not is_market_open_now() and not settings.runtime.allow_out_of_hours_testing:
+                print("NSE Market is closed. Waiting...")
+                time.sleep(settings.runtime.market_closed_wait_seconds)
+                continue
+            if not is_market_open_now() and settings.runtime.allow_out_of_hours_testing:
+                print(
+                    "NSE Market is closed. "
+                    "Out-of-hours strategy testing enabled."
+                )
             try:
                 result = loop.run_once()
                 print(result)
@@ -104,7 +99,6 @@ def main() -> int:
                 }
                 print(result)
                 notifier.send(f"NSE Quant loop error: {exc}")
-                decision_repo = DecisionRepository(store)
                 decision_repo.save_system_event(
                     run_id,
                     event_type='loop_error',
@@ -126,7 +120,7 @@ def main() -> int:
         print("Paper loop interrupted.")
 
     finally:
-        store.close()
+        store.conn.close()
 
     return 0
 

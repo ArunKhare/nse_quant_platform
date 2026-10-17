@@ -14,7 +14,9 @@ universe:
 runtime:
   stale_seconds: 15
   loop_interval_seconds: 15
+  market_closed_wait_seconds: 60
   enforce_market_hours: true
+  allow_out_of_hours_testing: true
 
 storage:
   db_path: data/nse_quant.duckdb
@@ -26,10 +28,11 @@ analytics:
   risk_free_rate: 0.07
   rv_window: 20
   iv_history_limit: 250
-  min_iv_history_observations: 30
   min_iv_rank: 40
   min_iv_rv_spread: 0.02
   max_expected_move_buffer: 1.15
+  min_iv_history_observations: 30
+  allow_iv_rank_cold_start: true
 
 strategy:
   iron_condor_monitor:
@@ -61,12 +64,3 @@ notifier:
     enabled: true
     message_length_limit: 4096
 
-analytics:
-  risk_free_rate: 0.07
-  rv_window: 20
-  iv_history_limit: 250
-  min_iv_rank: 40
-  min_iv_rv_spread: 0.02
-  max_expected_move_buffer: 1.15
-  min_iv_history_observations: 30
-  allow_iv_rank_cold_start: true

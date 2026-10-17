@@ -3,20 +3,19 @@
 from __future__ import annotations
 
 import argparse
-import json
 import threading
 import time
-from datetime import UTC, datetime
 from uuid import uuid4
 
+from nse_quant.core.market_calendar import is_market_open_now
 from nse_quant.core.settings import get_settings
 from nse_quant.execution.broker import PaperBroker
 from nse_quant.integrations.kite_session import get_cached_kite
 from nse_quant.market_data.kite_provider import KiteMarketDataProvider
 from nse_quant.ops.kill_switch import KillSwitch
-from nse_quant.ops.live_snapshot import build_snapshot, write_live_snapshot
 from nse_quant.ops.notifier import Notifier
 from nse_quant.persistence.duckdb_store import DuckDBStore
+from nse_quant.persistence.repositories import DecisionRepository
 from nse_quant.strategy.decision_loop import DecisionLoop
 from nse_quant.ui.dash_app import app
 
@@ -41,6 +40,11 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Reset the persistent kill switch before starting",
     )
+    parser.add_argument(
+        "--allow-out-of-hours",
+        action="store_true",
+        help="Allow strategy testing while NSE is closed",
+    )
     return parser.parse_args()
 
 
@@ -48,14 +52,17 @@ def main() -> int:
     args = parse_args()
     settings = get_settings(args.config)
 
+
+    if args.allow_out_of_hours:
+        settings.runtime.allow_out_of_hours_testing = True
     if settings.safety.trading_enabled:
         raise RuntimeError(
             "Live trading is blocked in v0.3.0. Set TRADING_ENABLED=false."
         )
 
     store = DuckDBStore()
+    decisions = DecisionRepository(store.conn)
     kill_switch = KillSwitch()
-
     if args.reset_kill_switch:
         kill_switch.reset("platform_manual_reset")
         print("Kill switch reset.")
@@ -99,15 +106,19 @@ def main() -> int:
     try:
         while time.monotonic() < end_time:
             if kill_switch.is_active():
-                write_live_snapshot(
-                    build_snapshot(
-                        kill_switch_active=True,
-                        loop_status="kill_switch_active",
-                    )
-                )
+                loop.handle_kill_switch()
                 print("Kill switch active. Paper loop stopped.")
                 notifier.send("NSE Quant: kill switch active; loop stopped.")
                 break
+            if not is_market_open_now() and not settings.runtime.allow_out_of_hours_testing:
+                print("NSE Market is closed. Waiting...")
+                time.sleep(settings.runtime.market_closed_wait_seconds)
+                continue
+            if not is_market_open_now() and settings.runtime.allow_out_of_hours_testing:
+                print(
+                    "NSE Market is closed. "
+                    "Out-of-hours strategy testing enabled."
+                )
 
             try:
                 result = loop.run_once()
@@ -119,22 +130,14 @@ def main() -> int:
                 }
                 print(result)
                 notifier.send(f"NSE Quant loop error: {exc}")
-                store.conn.execute(
-                    """
-                    INSERT INTO decisions VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """,
-                    [
-                        uuid4().hex,
-                        datetime.now(UTC),
-                        run_id,
-                        "loop_error",
-                        None,
-                        None,
-                        None,
-                        None,
-                        json.dumps({"error": str(exc)}),
-                    ],
-                )
+                decisions.save_system_event(
+                    run_id,
+                    event_type='loop_error',
+                    payload={
+                        "error": str(exc),
+                        "error_type": type(exc).__name__
+                        },
+                    )
 
             status = result.get("status")
 
@@ -150,7 +153,7 @@ def main() -> int:
         print("Platform interrupted.")
 
     finally:
-        store.close()
+        store.conn.close()
 
     return 0
 

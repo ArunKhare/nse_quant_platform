@@ -52,13 +52,9 @@ uv run python scripts/run_paper_loop.py --seconds 120
 uv run python scripts/run_stream_check.py --seconds 120
 ```
 
-## Import legacy IV history
+## Historical data
 
-```bash
-uv run python -m nse_quant.features.historical_importer \
-  --legacy-db data/options_market_data.db \
-  --table option_stream \
-  --dry-run
-```
+The platform builds IV history from its own live option-stream collection.
 
-Remove `--dry-run` only after validating the preview.
+A legacy importer exists for SQLite/DuckDB sources, but no legacy dataset is
+currently configured or required.

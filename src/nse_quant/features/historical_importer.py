@@ -1,13 +1,16 @@
-"""Importer for the legacy options_market_data.db SQLite database."""
+"""Importer status
+The importer should now be treated as a dormant utility, not an active data pipeline. Your"""
 
 from __future__ import annotations
 
 import re
 import sqlite3
-from pathlib import Path
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any, ClassVar
+
 import duckdb
+
 
 def _is_sqlite(path: Path) -> bool:
     with path.open("rb") as handle:

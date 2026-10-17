@@ -444,6 +444,22 @@ class DecisionLoop:
 
         self.positions.update_strategy_position(strategy_position)
 
+    def handle_kill_switch(self) -> None:
+        write_live_snapshot(
+            build_snapshot(
+                kill_switch_active=True,
+                loop_status="kill_switch_active",
+            )
+        )
+
+        self.decisions.save_system_event(
+            run_id=self.run_id,
+            event_type="kill_switch_active",
+            payload={
+                "reason": "dashboard_or_cli_kill_switch",
+            },
+        )
+        
     @staticmethod
     def _mark_price(quote: OptionQuote | None) -> float | None:
         if quote is None:

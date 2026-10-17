@@ -24,7 +24,9 @@ class UniverseSettings(BaseModel):
 class RuntimeSettings(BaseModel):
     stale_seconds: float = 15.0
     loop_interval_seconds: int = 15
+    market_closed_wait_seconds: int = 60
     enforce_market_hours: bool = True
+    allow_out_of_hours_testing: bool = False
 
 class StorageSettings(BaseModel):
     db_path: Path = Path("data/nse_quant.duckdb")
