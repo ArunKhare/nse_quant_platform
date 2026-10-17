@@ -45,3 +45,9 @@ risk:
   max_spread_pct: 0.03
   min_oi: 50000
   min_volume: 500
+
+exits:
+  theta_decay_target_pct: 50
+  iv_collapse_pct: 20
+  data_quality_max_age_seconds: 30
+  expected_move_violation_buffer: 1.25

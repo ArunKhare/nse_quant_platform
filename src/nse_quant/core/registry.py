@@ -1,14 +1,12 @@
 """Small service registry used by the decision loop and UI."""
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable, Generic, TypeVar
-
-T = TypeVar("T")
 
 
 @dataclass
-class Registry(Generic[T]):
+class Registry[T]:
     _items: dict[str, T]
 
     def __init__(self) -> None:

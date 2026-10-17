@@ -1,5 +1,6 @@
-from analytics.features import iv_rank,realized_volatility
-from analytics.option_analytics import bs_price_greeks,implied_volatility
+from nse_quant.analytics.features import iv_rank, realized_volatility
+from nse_quant.analytics.option_analytics import bs_price_greeks, implied_volatility
+
 
 def test_bs_iv():
     price,*_=bs_price_greeks(25000,25000,7/365,.07,.15,"CE")

@@ -1,5 +1,6 @@
 """Immutable domain constants. Deployment tunables belong in config/settings.yaml."""
 from __future__ import annotations
+
 MARKET_OPEN_MINUTES=555  # 09:15 IST
 MARKET_CLOSE_MINUTES=930 # 15:30 IST
 ENTRY_BLOCK_START_MINUTES=15

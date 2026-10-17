@@ -1,0 +1,29 @@
+.PHONY: install test lint dashboard paper-loop stream-check import-legacy clean
+
+install:
+	uv sync --extra dev
+
+test:
+	uv run pytest
+
+lint:
+	uv run ruff check src tests scripts
+
+dashboard:
+	uv run python scripts/run_dashboard.py
+
+paper-loop:
+	uv run python scripts/run_paper_loop.py --seconds 120
+
+stream-check:
+	uv run python scripts/run_stream_check.py --seconds 120
+
+import-legacy:
+	uv run python -m nse_quant.features.historical_importer \
+		--legacy-db data/options_market_data.db \
+		--table option_stream \
+		--dry-run
+
+clean:
+	rm -rf .pytest_cache .ruff_cache dist build
+	find . -type d -name "__pycache__" -exec rm -rf {} +

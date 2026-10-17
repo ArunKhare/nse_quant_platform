@@ -1,0 +1,142 @@
+from datetime import UTC, datetime, timedelta
+
+from nse_quant.core.models import (
+    ChainSnapshot,
+    Instrument,
+    OptionQuote,
+    OptionType,
+)
+from nse_quant.execution.broker import PaperBroker
+from nse_quant.persistence.duckdb_store import DuckDBStore
+from nse_quant.strategy.decision_loop import DecisionLoop
+
+
+class SyntheticProvider:
+    def get_chain_snapshot(self):
+        expiry = datetime.now(UTC).date() + timedelta(days=5)
+
+        quotes = []
+
+        for strike, option_type in [
+            (24600, OptionType.PE),
+            (24800, OptionType.PE),
+            (25200, OptionType.CE),
+            (25400, OptionType.CE),
+        ]:
+            instrument = Instrument(
+                tradingsymbol=f"NIFTY{strike}{option_type.value}",
+                instrument_token=strike,
+                underlying="NIFTY",
+                expiry=expiry,
+                strike=strike,
+                option_type=option_type,
+                lot_size=75,
+            )
+
+            quotes.append(
+                OptionQuote(
+                    instrument_token=strike,
+                    ltp=100.0,
+                    bid=99.0,
+                    ask=101.0,
+                    volume=100000,
+                    oi=100000,
+                    instrument=instrument,
+                    iv=0.15,
+                )
+            )
+
+        return ChainSnapshot(
+            underlying="NIFTY",
+            spot=25000.0,
+            expiry=expiry,
+            quotes=quotes,
+        )
+
+
+def test_paper_flow_persists_full_lifecycle(tmp_path):
+    store = DuckDBStore(tmp_path / "paper-flow.duckdb")
+    broker = PaperBroker()
+
+    loop = DecisionLoop(
+        store=store,
+        provider=SyntheticProvider(),
+        broker=broker,
+        run_id="paper-flow-test",
+    )
+
+    result = loop.run_once()
+
+    assert result["status"] in {
+        "no_proposal",
+        "risk_rejected",
+        "dry_run",
+        "paper_filled",
+    }
+
+    feature_count = store.conn.execute(
+        "SELECT COUNT(*) FROM feature_snapshots"
+    ).fetchone()[0]
+
+    decision_count = store.conn.execute(
+        "SELECT COUNT(*) FROM decisions"
+    ).fetchone()[0]
+
+    gate_count = store.conn.execute(
+        "SELECT COUNT(*) FROM gate_results"
+    ).fetchone()[0]
+
+    assert feature_count == 1
+    assert decision_count >= 1
+    assert gate_count >= 0
+
+    if result["status"] == "paper_filled":
+        strategy_position_id = result["strategy_position_id"]
+
+        leg_count = store.conn.execute(
+            """
+            SELECT COUNT(*)
+            FROM positions
+            WHERE strategy_position_id = ?
+            """,
+            [strategy_position_id],
+        ).fetchone()[0]
+
+        assert leg_count == 4
+
+        order_count = store.conn.execute(
+            """
+            SELECT COUNT(*)
+            FROM orders
+            WHERE proposal_id = ?
+            """,
+            [result["proposal_id"]],
+        ).fetchone()[0]
+
+        assert order_count == 1
+
+    store.close()
+
+
+def test_dry_run_does_not_create_paper_order(tmp_path):
+    store = DuckDBStore(tmp_path / "dry-run.duckdb")
+    broker = PaperBroker()
+
+    loop = DecisionLoop(
+        store=store,
+        provider=SyntheticProvider(),
+        broker=broker,
+        run_id="dry-run-test",
+    )
+
+    result = loop.run_once()
+
+    if result["status"] == "dry_run":
+        order_count = store.conn.execute(
+            "SELECT COUNT(*) FROM orders"
+        ).fetchone()[0]
+
+        assert order_count == 0
+        assert broker.positions == []
+
+    store.close()

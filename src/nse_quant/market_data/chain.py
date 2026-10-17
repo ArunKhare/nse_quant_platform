@@ -1,9 +1,13 @@
 """Dynamic NFO chain discovery."""
 from __future__ import annotations
-from datetime import date,datetime,timezone
-from typing import Any,Iterable
-from core.constants import CE,PE
-from core.models import ChainSnapshot,Instrument,OptionQuote,OptionType
+
+from collections.abc import Iterable
+from datetime import UTC, date, datetime
+from typing import Any
+
+from ..core.constants import CE, PE
+from ..core.models import ChainSnapshot, Instrument, OptionQuote, OptionType
+
 
 def discover_chain(instruments:Iterable[dict[str,Any]],underlying:str,spot:float,expiry:date|None=None,strikes_per_side:int=10):
     rows=[r for r in instruments if r.get("name")==underlying and r.get("instrument_type") in {CE,PE}]
@@ -15,11 +19,11 @@ def discover_chain(instruments:Iterable[dict[str,Any]],underlying:str,spot:float
     selected=[r for r in rows if as_date(r["expiry"])==expiry]
     strikes=sorted({float(r["strike"]) for r in selected}); atm=min(strikes,key=lambda s:abs(s-spot)); i=strikes.index(atm)
     window=set(strikes[max(0,i-strikes_per_side):i+strikes_per_side+1])
-    out=[Instrument(r["tradingsymbol"],int(r["instrument_token"]),underlying,expiry,float(r["strike"]),OptionType(r["instrument_type"]),int(r["lot_size"])) for r in selected if float(r["strike"]) in window]
+    out=[Instrument(tradingsymbol=r["tradingsymbol"],instrument_token=int(r["instrument_token"]),underlying=underlying,expiry=expiry,strike=float(r["strike"]),option_type=OptionType(r["instrument_type"]),lot_size=int(r["lot_size"])) for r in selected if float(r["strike"]) in window]
     return expiry,out
 
 def build_snapshot(underlying:str,spot:float,expiry:date,instruments:list[Instrument],ticks:dict[int,dict[str,Any]],now:datetime|None=None)->ChainSnapshot:
-    now=now or datetime.now(timezone.utc)
+    now=now or datetime.now(UTC)
     quotes=[]
     for i in instruments:
         t=ticks.get(i.instrument_token,{})

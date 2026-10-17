@@ -48,3 +48,25 @@ and review fields.
 
 Raw option_stream data can be exported to Parquet by date and compacted periodically. Decision
 events are retained longer because they are the audit trail for process quality.
+
+## v0.3.0 persistence model
+
+The platform stores intraday data first. Daily aggregates are derived views.
+
+### Core tables
+
+- `option_stream`: normalized option quotes and Greeks per snapshot.
+- `feature_snapshots`: timestamped intraday market features.
+- `decisions`: feature snapshots, signals, no-proposal outcomes, dry-run skips, and kill-switch events.
+- `gate_results`: individual pre-trade gate outcomes.
+- `risk_decisions`: independent risk approval or rejection.
+- `orders`: paper order lifecycle.
+- `strategy_positions`: logical multi-leg strategy group.
+- `positions`: one independent row per option leg.
+- `exit_events`: every triggered exit reason and the selected highest-priority reason.
+- `post_trade_reviews`: separated decision-quality and trade-outcome notes.
+
+### Position granularity
+
+An iron condor is one `strategy_positions` row and four independent `positions` rows.
+Each leg retains its own instrument, side, quantity, entry, mark, P&L, status, and exit reason.

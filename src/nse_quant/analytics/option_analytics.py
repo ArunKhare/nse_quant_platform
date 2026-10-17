@@ -1,9 +1,14 @@
 """Black-Scholes analytics."""
 from __future__ import annotations
+
 import math
+from datetime import date, datetime, time
+
 from scipy.optimize import brentq
 from scipy.stats import norm
-from ..core.constants import IV_SOLVER_HIGH,IV_SOLVER_LOW
+
+from ..core.constants import IV_SOLVER_HIGH, IV_SOLVER_LOW
+
 
 def bs_price_greeks(spot:float,strike:float,ttm:float,rate:float,iv:float,option_type:str):
     if min(spot,strike,ttm,iv)<=0: raise ValueError("Invalid BS inputs")
@@ -24,8 +29,13 @@ def implied_volatility(price:float,spot:float,strike:float,ttm:float,rate:float,
     try: return float(brentq(lambda v:bs_price_greeks(spot,strike,ttm,rate,v,option_type)[0]-price,IV_SOLVER_LOW,IV_SOLVER_HIGH,xtol=1e-10))
     except (ValueError,OverflowError,ZeroDivisionError): return None
 
-def enrich_quote(quote,spot:float,expiry,now,rate:float):
-    ttm=max((expiry-now).total_seconds()/(365.25*86400),0); price=quote.mid or quote.ltp
+def enrich_quote(quote,spot:float,expiry:date|datetime,now:datetime,rate:float):
+    expiry_datetime = (
+        expiry
+        if isinstance(expiry, datetime)
+        else datetime.combine(expiry, time.max, tzinfo=now.tzinfo)
+    )
+    ttm=max((expiry_datetime-now).total_seconds()/(365.25*86400),0); price=quote.mid or quote.ltp
     iv=implied_volatility(price,spot,quote.instrument.strike,ttm,rate,quote.instrument.option_type.value) if price else None
     if iv: _,quote.delta,quote.gamma,quote.vega,quote.theta=bs_price_greeks(spot,quote.instrument.strike,ttm,rate,iv,quote.instrument.option_type.value)
     quote.iv=iv; return quote

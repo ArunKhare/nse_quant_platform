@@ -1,37 +1,339 @@
-"""DuckDB persistence."""
+"""DuckDB persistence for the NSE Quant Decision Platform."""
+
 from __future__ import annotations
+
 import json
-from datetime import datetime,timezone
 from pathlib import Path
 from typing import Any
-from uuid import uuid4
+
 import duckdb
-from core.models import ChainSnapshot,TradeProposal
-from core.settings import settings
+
+from nse_quant.core.models import ChainSnapshot
+from nse_quant.core.settings import get_settings
+
 
 class DuckDBStore:
-    def __init__(self,path:str|Path|None=None):
-        self.path=Path(path or settings.storage.db_path); self.path.parent.mkdir(parents=True,exist_ok=True)
-        self.conn=duckdb.connect(str(self.path)); self._schema()
-    def _schema(self):
-        self.conn.execute("""CREATE TABLE IF NOT EXISTS option_stream(run_id VARCHAR,ts TIMESTAMPTZ,underlying VARCHAR,expiry DATE,strike DOUBLE,option_type VARCHAR,tradingsymbol VARCHAR,instrument_token BIGINT,lot_size INTEGER,spot DOUBLE,ltp DOUBLE,bid DOUBLE,ask DOUBLE,volume BIGINT,oi BIGINT,iv DOUBLE,delta DOUBLE,gamma DOUBLE,vega DOUBLE,theta DOUBLE,quote_status VARCHAR,payload_json JSON)""")
-        self.conn.execute("""CREATE TABLE IF NOT EXISTS decision_events(event_id VARCHAR,ts TIMESTAMPTZ,run_id VARCHAR,event_type VARCHAR,strategy VARCHAR,underlying VARCHAR,expiry DATE,proposal_json JSON,decision_json JSON,reason VARCHAR)""")
-    def write_option_stream(self,run_id:str,snapshot:ChainSnapshot,ticks:dict[int,dict[str,Any]])->int:
-        rows=[]
-        for q in snapshot.quotes:
-            t=ticks.get(q.instrument_token,{})
-            rows.append((run_id,snapshot.ts,snapshot.underlying,snapshot.expiry,q.instrument.strike,q.instrument.option_type.value,q.instrument.tradingsymbol,q.instrument_token,q.instrument.lot_size,snapshot.spot,t.get("ltp",q.ltp),t.get("bid",q.bid),t.get("ask",q.ask),t.get("volume",q.volume),t.get("oi",q.oi),q.iv,q.delta,q.gamma,q.vega,q.theta,"ready" if t else "missing",json.dumps(t,default=str)))
-        if rows: self.conn.executemany("INSERT INTO option_stream VALUES ("+",".join(["?"]*22)+")",rows)
+    """Owns the DuckDB connection and schema."""
+
+    def __init__(self, path: str | Path | None = None) -> None:
+        settings = get_settings()
+        self.path = Path(path or settings.storage.db_path)
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        self.conn = duckdb.connect(str(self.path))
+        self._create_schema()
+
+    def _create_schema(self) -> None:
+        self.conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS option_stream (
+                run_id VARCHAR,
+                ts TIMESTAMPTZ,
+                underlying VARCHAR,
+                expiry DATE,
+                strike DOUBLE,
+                option_type VARCHAR,
+                tradingsymbol VARCHAR,
+                instrument_token BIGINT,
+                lot_size INTEGER,
+                spot DOUBLE,
+                ltp DOUBLE,
+                bid DOUBLE,
+                ask DOUBLE,
+                volume BIGINT,
+                oi BIGINT,
+                iv DOUBLE,
+                delta DOUBLE,
+                gamma DOUBLE,
+                vega DOUBLE,
+                theta DOUBLE,
+                quote_status VARCHAR,
+                payload_json JSON,
+                PRIMARY KEY (run_id, ts, instrument_token)
+            )
+            """
+        )
+
+        self.conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS feature_snapshots (
+                feature_id VARCHAR PRIMARY KEY,
+                ts TIMESTAMPTZ,
+                run_id VARCHAR,
+                underlying VARCHAR,
+                expiry DATE,
+                spot DOUBLE,
+                atm_iv DOUBLE,
+                iv_rank DOUBLE,
+                iv_percentile DOUBLE,
+                realized_vol DOUBLE,
+                iv_rv_spread DOUBLE,
+                pcr DOUBLE,
+                total_call_oi BIGINT,
+                total_put_oi BIGINT,
+                max_pain DOUBLE,
+                liquidity_score DOUBLE,
+                regime VARCHAR,
+                short_momentum DOUBLE,
+                straddle_price DOUBLE,
+                expected_move_pct DOUBLE,
+                expected_move_points DOUBLE,
+                diagnostics JSON
+            )
+            """
+        )
+
+        self.conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS decisions (
+                decision_id VARCHAR PRIMARY KEY,
+                ts TIMESTAMPTZ,
+                run_id VARCHAR,
+                decision_type VARCHAR,
+                proposal_id VARCHAR,
+                strategy VARCHAR,
+                underlying VARCHAR,
+                expiry DATE,
+                payload JSON
+            )
+            """
+        )
+
+        self.conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS gate_results (
+                gate_result_id VARCHAR PRIMARY KEY,
+                ts TIMESTAMPTZ,
+                run_id VARCHAR,
+                proposal_id VARCHAR,
+                strategy VARCHAR,
+                gate VARCHAR,
+                passed BOOLEAN,
+                reason VARCHAR,
+                details JSON
+            )
+            """
+        )
+
+        self.conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS risk_decisions (
+                risk_decision_id VARCHAR PRIMARY KEY,
+                ts TIMESTAMPTZ,
+                run_id VARCHAR,
+                proposal_id VARCHAR,
+                strategy VARCHAR,
+                approved BOOLEAN,
+                reasons JSON,
+                checks JSON
+            )
+            """
+        )
+
+        self.conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS orders (
+                order_id VARCHAR PRIMARY KEY,
+                ts TIMESTAMPTZ,
+                run_id VARCHAR,
+                proposal_id VARCHAR,
+                strategy VARCHAR,
+                broker VARCHAR,
+                status VARCHAR,
+                limit_price DOUBLE,
+                filled_price DOUBLE,
+                filled_at TIMESTAMPTZ,
+                reject_reason VARCHAR,
+                payload JSON
+            )
+            """
+        )
+
+        self.conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS positions (
+                position_id VARCHAR PRIMARY KEY,
+                strategy_position_id VARCHAR,
+                proposal_id VARCHAR,
+                strategy VARCHAR,
+                underlying VARCHAR,
+                expiry DATE,
+                tradingsymbol VARCHAR,
+                instrument_token BIGINT,
+                option_type VARCHAR,
+                strike DOUBLE,
+                side VARCHAR,
+                lots INTEGER,
+                quantity INTEGER,
+                opened_at TIMESTAMPTZ,
+                entry_price DOUBLE,
+                current_price DOUBLE,
+                realized_pnl DOUBLE,
+                unrealized_pnl DOUBLE,
+                status VARCHAR,
+                closed_at TIMESTAMPTZ,
+                exit_reason VARCHAR
+            )
+            """
+        )
+
+        self.conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS strategy_positions (
+                strategy_position_id VARCHAR PRIMARY KEY,
+                proposal_id VARCHAR,
+                strategy VARCHAR,
+                underlying VARCHAR,
+                expiry DATE,
+                opened_at TIMESTAMPTZ,
+                entry_price DOUBLE,
+                current_price DOUBLE,
+                realized_pnl DOUBLE,
+                unrealized_pnl DOUBLE,
+                status VARCHAR,
+                exit_reason VARCHAR,
+                all_triggered_exits JSON,
+                closed_at TIMESTAMPTZ,
+                thesis VARCHAR,
+                metadata JSON
+            )
+            """
+        )
+
+        self.conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS exit_events (
+                exit_event_id VARCHAR PRIMARY KEY,
+                ts TIMESTAMPTZ,
+                strategy_position_id VARCHAR,
+                proposal_id VARCHAR,
+                strategy VARCHAR,
+                triggered_reasons JSON,
+                selected_reason VARCHAR,
+                details JSON
+            )
+            """
+        )
+
+        self.conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS post_trade_reviews (
+                review_id VARCHAR PRIMARY KEY,
+                ts TIMESTAMPTZ,
+                strategy_position_id VARCHAR,
+                proposal_id VARCHAR,
+                strategy VARCHAR,
+                realized_pnl DOUBLE,
+                exit_reason VARCHAR,
+                thesis_status VARCHAR,
+                decision_quality_notes VARCHAR,
+                outcome_notes VARCHAR
+            )
+            """
+        )
+
+        self.conn.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_feature_snapshots_time
+            ON feature_snapshots (underlying, expiry, ts)
+            """
+        )
+
+        self.conn.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_option_stream_time
+            ON option_stream (underlying, expiry, ts)
+            """
+        )
+
+    def write_option_stream(
+        self,
+        run_id: str,
+        snapshot: ChainSnapshot,
+        ticks: dict[int, dict[str, Any]] | None = None,
+    ) -> int:
+        ticks = ticks or {}
+        rows = []
+
+        for quote in snapshot.quotes:
+            instrument = quote.instrument
+            tick = ticks.get(instrument.instrument_token, {})
+            rows.append(
+                (
+                    run_id,
+                    snapshot.ts,
+                    snapshot.underlying,
+                    snapshot.expiry,
+                    instrument.strike,
+                    instrument.option_type.value,
+                    instrument.tradingsymbol,
+                    instrument.instrument_token,
+                    instrument.lot_size,
+                    snapshot.spot,
+                    tick.get("ltp", quote.ltp),
+                    tick.get("bid", quote.bid),
+                    tick.get("ask", quote.ask),
+                    tick.get("volume", quote.volume),
+                    tick.get("oi", quote.oi),
+                    quote.iv,
+                    quote.delta,
+                    quote.gamma,
+                    quote.vega,
+                    quote.theta,
+                    "ready" if tick else "missing",
+                    json.dumps(tick, default=str),
+                )
+            )
+
+        if rows:
+            placeholders = ",".join(["?"] * 22)
+            self.conn.executemany(
+                f"INSERT OR REPLACE INTO option_stream VALUES ({placeholders})",
+                rows,
+            )
+
         return len(rows)
-    def write_event(self,event_type:str,run_id:str,proposal:TradeProposal|None=None,decision:Any=None,reason:str|None=None)->str:
-        eid=uuid4().hex
-        self.conn.execute("INSERT INTO decision_events VALUES (?,?,?,?,?,?,?,?,?,?)",(eid,datetime.now(timezone.utc),run_id,event_type,proposal.strategy if proposal else None,proposal.underlying if proposal else None,proposal.expiry if proposal else None,proposal.model_dump_json() if proposal else None,json.dumps(decision,default=str) if decision is not None else None,reason))
-        return eid
-    def latest_iv_history(self,underlying:str,limit:int|None=None)->list[float]:
-        limit=limit or settings.analytics.iv_history_limit
-        rows=self.conn.execute("SELECT avg(iv) FROM (SELECT ts,avg(iv) atm_iv FROM option_stream WHERE underlying=? AND iv IS NOT NULL GROUP BY ts ORDER BY ts DESC LIMIT ?) GROUP BY ts ORDER BY ts",[underlying,limit]).fetchall()
-        return [float(r[0]) for r in rows]
-    def export_parquet(self,out_dir:str|Path,date_str:str)->Path:
-        out=Path(out_dir)/f"option_stream_{date_str}.parquet"; out.parent.mkdir(parents=True,exist_ok=True)
-        self.conn.execute("COPY (SELECT * FROM option_stream WHERE CAST(ts AS DATE)=?) TO ? (FORMAT PARQUET)",[date_str,str(out)]); return out
-    def close(self): self.conn.close()
+
+    def latest_iv_history(self, underlying: str, limit: int | None = None) -> list[float]:
+        settings = get_settings()
+        limit = limit or settings.analytics.iv_history_limit
+
+        rows = self.conn.execute(
+            """
+            SELECT atm_iv
+            FROM (
+                SELECT
+                    ts,
+                    AVG(iv) AS atm_iv
+                FROM option_stream
+                WHERE underlying = ?
+                  AND iv IS NOT NULL
+                GROUP BY ts
+                ORDER BY ts DESC
+                LIMIT ?
+            )
+            ORDER BY atm_iv
+            """,
+            [underlying, limit],
+        ).fetchall()
+
+        return [float(row[0]) for row in rows if row[0] is not None]
+
+    def export_parquet(self, output_dir: str | Path, date_str: str) -> Path:
+        output = Path(output_dir) / f"option_stream_{date_str}.parquet"
+        output.parent.mkdir(parents=True, exist_ok=True)
+
+        self.conn.execute(
+            """
+            COPY (
+                SELECT *
+                FROM option_stream
+                WHERE CAST(ts AS DATE) = ?
+            ) TO ? (FORMAT PARQUET)
+            """,
+            [date_str, str(output)],
+        )
+
+        return output
+
+    def close(self) -> None:
+        self.conn.close()

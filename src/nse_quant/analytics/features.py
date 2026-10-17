@@ -1,16 +1,21 @@
 """Feature calculations using centralized settings."""
 from __future__ import annotations
+
 import math
+from collections.abc import Iterable
 from datetime import datetime
-from typing import Iterable
-import numpy as np,pandas as pd
+
+import numpy as np
+import pandas as pd
+
 try:
     from .option_analytics import enrich_quote
 except ImportError:  # pragma: no cover
     from analytics.option_analytics import enrich_quote
 from ..core.constants import TRADING_DAYS_PER_YEAR
-from ..core.models import ChainSnapshot,MarketFeatures,MarketRegime,OptionType
+from ..core.models import ChainSnapshot, MarketFeatures, MarketRegime, OptionType
 from ..core.settings import settings
+
 
 def realized_volatility(returns:Iterable[float],window:int|None=None)->float|None:
     window=window or settings.analytics.rv_window; s=pd.Series(list(returns),dtype=float).dropna()

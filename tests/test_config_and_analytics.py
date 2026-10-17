@@ -1,12 +1,19 @@
 import pytest
-from analytics.features import iv_rank, realized_volatility
-from analytics.option_analytics import bs_price_greeks, implied_volatility
-from core.settings import Settings
+
+from nse_quant.analytics.features import iv_rank, realized_volatility
+from nse_quant.analytics.option_analytics import bs_price_greeks, implied_volatility
+from nse_quant.core.settings import Settings
 
 
 def test_settings_blocks_live_mode():
     with pytest.raises(ValueError):
-        Settings(trading_enabled=True, dry_run=False, paper_trading=False)
+        Settings(
+            safety={
+                "trading_enabled": True,
+                "dry_run": False,
+                "paper_trading": False,
+            }
+        )
 
 
 def test_bs_iv_roundtrip():
