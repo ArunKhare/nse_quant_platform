@@ -8,13 +8,14 @@ from __future__ import annotations
 
 import argparse
 import time
+from datetime import UTC, datetime
 from uuid import uuid4
 
 from nse_quant.core.market_calendar import is_market_open_now
 from nse_quant.core.settings import get_settings
 from nse_quant.execution.broker import PaperBroker
+from nse_quant.features.feature_gates import SpotFeatureGate
 from nse_quant.integrations.kite_session import get_cached_kite
-from nse_quant.market_data.historical import get_historical_date_range
 from nse_quant.market_data.kite_provider import KiteMarketDataProvider
 from nse_quant.market_data.replay_provider import ReplayMarketDataProvider
 from nse_quant.ops.kill_switch import KillSwitch
@@ -56,6 +57,32 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="Underlying symbol; repeat for multiple symbols",
     )
+    parser.add_argument(
+        "--warmup-from",
+        dest="warmup_from",
+        default=None,
+        help=(
+            "Optional ISO start datetime for explicit historical "
+            "candle warm-up; no default lookback is applied"
+        ),
+    )
+    parser.add_argument(
+        "--warmup-to",
+        dest="warmup_to",
+        default=None,
+        help=(
+            "Optional ISO end datetime for explicit historical "
+            "candle warm-up; required when --warmup-from is supplied"
+        ),
+    )
+    parser.add_argument(
+        "--allow-stale-features",
+        action="store_true",
+        help=(
+            "Allow stale historical spot features during out-of-hours "
+            "testing. Never use for live decision-making."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -75,6 +102,41 @@ def main() -> int:
         kite = get_cached_kite(settings=settings)
         provider = KiteMarketDataProvider(kite)
 
+    stale_seconds = int(
+        getattr(settings.runtime, "stale_seconds", 50 * 60 * 60)
+    )
+    feature_gate = SpotFeatureGate(
+        max_age_seconds=(
+            stale_seconds if not args.allow_stale_features else 7 * 24 * 60 * 60
+        ),
+        index_symbols=tuple(settings.market_data.index_symbols),
+    )
+
+    warmup_from = (
+        datetime.fromisoformat(args.warmup_from)
+        if args.warmup_from
+        else None
+    )
+    warmup_to = (
+        datetime.fromisoformat(args.warmup_to)
+        if args.warmup_to
+        else None
+    )
+
+    if (warmup_from is None) != (warmup_to is None):
+        raise ValueError(
+            "--warmup-from and --warmup-to must be supplied together"
+        )
+
+    if (
+        warmup_from is not None
+        and warmup_to is not None
+        and warmup_to <= warmup_from
+    ):
+        raise ValueError("--warmup-to must be later than --warmup-from")
+
+    intervals = list(settings.market_data.candle_intervals)
+
     store = DuckDBStore()
     broker = PaperBroker()
     kill_switch = KillSwitch()
@@ -88,38 +150,73 @@ def main() -> int:
         broker=broker,
         run_id=run_id,
         settings=settings,
-        spot_instrument_token_resolver=provider.resolve_spot_instrument_token,
+        feature_gate=feature_gate
     )
 
-    symbols = args.symbol or [
-        settings.market_data.default_symbol
-    ]
-    intervals:dict = settings.market_data.intervals
+    # symbols = args.symbol or [settings.market_data.default_symbol]
+    symbols: list[str] = (
+        args.symbol
+        if args.symbol
+        else [settings.market_data.default_symbol]
+    )
+
+    primary_symbol = symbols[0]
+    feature_snapshot = loop.feature_service.latest(primary_symbol)
+
+    if feature_snapshot is not None:
+        feature_age = (
+            datetime.now(UTC) - feature_snapshot.ts.tz_convert(UTC)
+        )
+        print(
+            "Latest feature:",
+            feature_snapshot.ts,
+            "age_seconds:",
+            feature_age.total_seconds(),
+        )
+    print(
+        "Gate max age seconds:",
+        loop.feature_gate._max_age_seconds,
+    )
 
     try:
-        if isinstance(provider, KiteMarketDataProvider):
+        if (
+            isinstance(provider, KiteMarketDataProvider)
+            and warmup_from is not None
+            and warmup_to is not None
+        ):
             for symbol in symbols:
-                instrument_token = provider.resolve_spot_instrument_token(symbol)
+                instrument_token = provider.resolve_spot_instrument_token(
+                    symbol
+                )
+
                 for interval in intervals:
-                    from_dt, to_dt = get_historical_date_range(interval)
                     candles = provider.get_historical_candles(
                         symbol=symbol,
                         interval=interval,
-                        from_dt=from_dt,
-                        to_dt=to_dt,
+                        from_dt=warmup_from,
+                        to_dt=warmup_to,
                     )
 
-                    if candles:
-                        rows = store.write_spot_candles(
-                            candles=candles,
-                            symbol=symbol,
-                            instrument_token=instrument_token,
-                            interval=interval,
-                        )
-                        print(
-                            f"{symbol} {interval}: "
-                            f"fetched={len(candles)} persisted={rows}"
-                        )
+                    if not candles:
+                        print(f"No candles: {symbol} {interval}")
+                        continue
+
+                    rows = store.write_spot_candles(
+                        candles=candles,
+                        symbol=symbol,
+                        instrument_token=instrument_token,
+                        interval=interval,
+                    )
+                    print(
+                        f"{symbol} {interval}: "
+                        f"fetched={len(candles)} persisted={rows}"
+                    )
+        elif warmup_from is None:
+            print(
+                "Skipping historical warm-up; supply --warmup-from and "
+                "--warmup-to or pre-import candles with "
+                "scripts/import_candle.py."
+            )
 
         end_time = time.monotonic() + args.seconds
         while time.monotonic() < end_time:

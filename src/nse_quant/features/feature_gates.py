@@ -23,12 +23,19 @@ class SpotFeatureGate:
         max_vwap_distance: float = 0.01,
         require_trend_alignment: bool = True,
         max_age_seconds: int = 300,
+        index_symbols: tuple[str, ...] = (
+            "NIFTY",
+            "BANKNIFTY",
+            "FINNIFTY",
+            "MIDCPNIFTY",
+        ),
     ) -> None:
         self._min_realized_vol = min_realized_vol
         self._max_realized_vol = max_realized_vol
         self._max_vwap_distance = max_vwap_distance
         self._require_trend_alignment = require_trend_alignment
         self._max_age_seconds = max_age_seconds
+        self._index_symbols = set(index_symbols)
 
     def evaluate(
         self,
@@ -60,13 +67,22 @@ class SpotFeatureGate:
             reasons.append("realized_vol_out_of_range")
 
         vwap_distance = snapshot.vwap_distance_1m
-        checks["vwap_distance_available"] = vwap_distance is not None
-        checks["vwap_distance_acceptable"] = (
-            vwap_distance is not None
-            and abs(vwap_distance) <= self._max_vwap_distance
-        )
-        if not checks["vwap_distance_acceptable"]:
-            reasons.append("vwap_distance_excessive")
+
+        is_index = snapshot.symbol in self._index_symbols
+        checks["vwap_distance_applicable"] = not is_index
+
+        if is_index:
+            checks["vwap_distance_available"] = False
+            checks["vwap_distance_acceptable"] = False
+        else:
+            checks["vwap_distance_available"] = vwap_distance is not None
+            checks["vwap_distance_acceptable"] = (
+                vwap_distance is not None
+                and abs(vwap_distance) <= self._max_vwap_distance
+            )
+
+            if not checks["vwap_distance_acceptable"]:
+                reasons.append("vwap_distance_excessive")
 
         trend_15m = snapshot.trend_15m
         trend_60m = snapshot.trend_60m
@@ -84,16 +100,20 @@ class SpotFeatureGate:
             if not checks["trend_aligned"]:
                 reasons.append("multi_timeframe_trend_misaligned")
 
+        required_checks = {
+            "feature_snapshot_available",
+            "feature_snapshot_fresh",
+            "realized_vol_in_range",
+            "trend_aligned",
+        }
+
+        if checks["vwap_distance_applicable"]:
+            required_checks.add("vwap_distance_acceptable")
+
         passed = all(
             value
             for key, value in checks.items()
-            if key in {
-                "feature_snapshot_available",
-                "feature_snapshot_fresh",
-                "realized_vol_in_range",
-                "vwap_distance_acceptable",
-                "trend_aligned",
-            }
+            if key in required_checks
         )
 
         return FeatureGateResult(

@@ -54,6 +54,7 @@ class DecisionLoop:
         run_id: str,
         settings: Any | None = None,
         spot_instrument_token_resolver: Callable[[str], int] | None = None,
+        feature_gate: SpotFeatureGate | None = None
     ) -> None:
         self.settings = settings or get_settings()
         self.store = store
@@ -74,7 +75,7 @@ class DecisionLoop:
             store=store,
             max_age_seconds=self.settings.runtime.stale_seconds,
         )
-        self.feature_gate = SpotFeatureGate(max_age_seconds=self.settings.runtime.stale_seconds,)
+        self.feature_gate = feature_gate or SpotFeatureGate(max_age_seconds=self.settings.runtime.stale_seconds,)
         self.spot_instrument_token_resolver = (
             spot_instrument_token_resolver
             or self._default_spot_token_resolver
