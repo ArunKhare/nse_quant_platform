@@ -15,6 +15,7 @@ from nse_quant.core.settings import get_settings
 from nse_quant.execution.broker import PaperBroker
 from nse_quant.integrations.kite_session import get_cached_kite
 from nse_quant.market_data.kite_provider import KiteMarketDataProvider
+from nse_quant.market_data.replay_provider import ReplayMarketDataProvider
 from nse_quant.ops.kill_switch import KillSwitch
 from nse_quant.ops.notifier import Notifier, NullNotifier
 from nse_quant.persistence.duckdb_store import DuckDBStore
@@ -40,6 +41,11 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Allow strategy testing while NSE is closed",
     )
+    parser.add_argument(
+        "--replay-file",
+        default=None,
+        help="Run the decision loop against a saved snapshot replay",
+    )
     return parser.parse_args()
 
 
@@ -53,15 +59,17 @@ def main() -> int:
         raise RuntimeError(
             "Live trading is blocked in v0.3.0. Set TRADING_ENABLED=false."
         )
-
-    kite = get_cached_kite(settings=settings)
-    provider = KiteMarketDataProvider(kite)
+    if args.replay_file:
+        provider = ReplayMarketDataProvider.from_json(args.replay_file)
+    else:
+        kite = get_cached_kite(settings=settings)
+        provider = KiteMarketDataProvider(kite)
     store = DuckDBStore()
     broker = PaperBroker()
     kill_switch = KillSwitch()
     notifier = Notifier() if settings.notifier.enabled else NullNotifier()
     run_id = uuid4().hex
-    decision_repo = DecisionRepository(store.conn)
+    decision= DecisionRepository(store.conn)
 
     loop = DecisionLoop(
         store=store,
@@ -99,7 +107,7 @@ def main() -> int:
                 }
                 print(result)
                 notifier.send(f"NSE Quant loop error: {exc}")
-                decision_repo.save_system_event(
+                decision.save_system_event(
                     run_id,
                     event_type='loop_error',
                     payload={

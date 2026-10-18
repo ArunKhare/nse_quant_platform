@@ -24,6 +24,7 @@ from nse_quant.core.models import (
     PaperOrder,
     PostTradeReview,
     StrategyPosition,
+    StrategyPositionStatus,
     TradeProposal,
 )
 from nse_quant.core.settings import get_settings
@@ -536,7 +537,7 @@ class DecisionLoop:
     ) -> None:
         closed_at = datetime.now(UTC)
 
-        strategy_position.status = "CLOSED"
+        strategy_position.status = StrategyPositionStatus.CLOSED
         strategy_position.closed_at = closed_at
         strategy_position.exit_reason = exit_reason
         strategy_position.realized_pnl = strategy_position.unrealized_pnl
@@ -545,7 +546,7 @@ class DecisionLoop:
         self.positions.update_strategy_position(strategy_position)
 
         for leg_position in leg_positions:
-            leg_position.status = "CLOSED"
+            leg_position.status = StrategyPositionStatus.CLOSED
             leg_position.closed_at = closed_at
             leg_position.exit_reason = exit_reason
             leg_position.realized_pnl = leg_position.unrealized_pnl

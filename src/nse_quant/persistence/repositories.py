@@ -346,6 +346,8 @@ class PositionRepository:
     def _leg_position_from_row(self, row: tuple[Any, ...]) -> LegPosition:
         from nse_quant.core.models import Instrument, OptionType, OrderSide
 
+        lots = int(row[11])
+        quantity = int(row[12])
         instrument = Instrument(
             tradingsymbol=row[6],
             instrument_token=int(row[7]),
@@ -353,7 +355,7 @@ class PositionRepository:
             expiry=row[5],
             strike=float(row[9]),
             option_type=OptionType(row[8]),
-            lot_size=int(row[11]) if row[11] else 1,
+            lot_size=quantity // lots if lots else 1,
         )
 
         return LegPosition(
@@ -363,13 +365,13 @@ class PositionRepository:
             strategy=row[3],
             instrument=instrument,
             side=OrderSide(row[10]),
-            lots=int(row[11]),
-            opened_at=row[12],
-            entry_price=float(row[13]),
-            current_price=float(row[14]) if row[14] is not None else None,
-            realized_pnl=float(row[15]),
-            unrealized_pnl=float(row[16]),
-            status=row[17],
-            closed_at=row[18],
-            exit_reason=ExitReason(row[19]) if row[19] else None,
+            lots=lots,
+            opened_at=row[13],
+            entry_price=float(row[14]),
+            current_price=float(row[15]) if row[15] is not None else None,
+            realized_pnl=float(row[16]),
+            unrealized_pnl=float(row[17]),
+            status=row[18],
+            closed_at=row[19],
+            exit_reason=ExitReason(row[20]) if row[20] else None,
         )
