@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 import duckdb
+import pandas as pd
 
 from nse_quant.core.models import ChainSnapshot
 from nse_quant.core.settings import get_settings
@@ -266,6 +268,36 @@ class DuckDBStore:
             """
         )
 
+        self.conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS spot_features (
+                symbol VARCHAR,
+                ts TIMESTAMPTZ,
+                close DOUBLE,
+                return_1m DOUBLE,
+                rv_1m_30 DOUBLE,
+                atr_1m_14 DOUBLE,
+                vwap_1m DOUBLE,
+                vwap_distance_1m DOUBLE,
+                volume_zscore_1m_30 DOUBLE,
+                trend_15m DOUBLE,
+                atr_15m_14 DOUBLE,
+                range_position_15m DOUBLE,
+                trend_60m DOUBLE,
+                atr_60m_14 DOUBLE,
+                range_position_60m DOUBLE,
+                PRIMARY KEY (symbol, ts)
+            )
+            """
+        )
+
+        self.conn.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_spot_features_symbol_ts
+            ON spot_features (symbol, ts)
+            """
+        )
+
     def write_option_stream(
         self,
         run_id: str,
@@ -392,6 +424,7 @@ class DuckDBStore:
         )
 
         return len(rows)
+
     def latest_spot_closes(
         self,
         instrument_token: int,
@@ -411,3 +444,71 @@ class DuckDBStore:
         ).fetchall()
 
         return [float(row[0]) for row in reversed(rows)]
+
+    def read_spot_candles(
+        self,
+        symbol: str,
+        interval: str,
+        from_ts: datetime | None = None,
+        to_ts: datetime | None = None,
+    ) -> pd.DataFrame:
+        query = """
+            SELECT
+                symbol,
+                interval,
+                ts,
+                open,
+                high,
+                low,
+                close,
+                volume,
+                oi
+            FROM spot_candles
+            WHERE symbol = ?
+              AND interval = ?
+        """
+        params: list[Any] = [symbol, interval]
+
+        if from_ts is not None:
+            query += " AND ts >= ?"
+            params.append(from_ts)
+
+        if to_ts is not None:
+            query += " AND ts <= ?"
+            params.append(to_ts)
+
+        query += " ORDER BY ts"
+
+        return self.conn.execute(query, params).fetchdf()
+
+    def write_spot_features(self, features: pd.DataFrame) -> int:
+        if features.empty:
+            return 0
+
+        self.conn.register("spot_features_batch", features)
+
+        self.conn.execute(
+            """
+            INSERT OR REPLACE INTO spot_features
+            SELECT
+                symbol,
+                ts,
+                close,
+                return_1m,
+                rv_1m_30,
+                atr_1m_14,
+                vwap_1m,
+                vwap_distance_1m,
+                volume_zscore_1m_30,
+                trend_15m,
+                atr_15m_14,
+                range_position_15m,
+                trend_60m,
+                atr_60m_14,
+                range_position_60m
+            FROM spot_features_batch
+            """
+        )
+
+        self.conn.unregister("spot_features_batch")
+        return len(features)
