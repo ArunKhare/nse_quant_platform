@@ -44,8 +44,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--replay-file",
         default=None,
-        help="Run the decision loop against a saved snapshot replay",
+        help=(
+                "Run against a saved chain-snapshot replay JSON "
+                "instead of live Kite data"
+        ),
     )
+
     return parser.parse_args()
 
 
@@ -64,6 +68,15 @@ def main() -> int:
     else:
         kite = get_cached_kite(settings=settings)
         provider = KiteMarketDataProvider(kite)
+    if args.replay_file:
+        provider = ReplayMarketDataProvider.from_json(
+            args.replay_file
+        )
+    else:
+        kite = get_cached_kite(settings=settings)
+        provider = KiteMarketDataProvider(kite)
+
+
     store = DuckDBStore()
     broker = PaperBroker()
     kill_switch = KillSwitch()

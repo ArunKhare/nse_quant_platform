@@ -68,7 +68,10 @@ class DecisionLoop:
 
     def run_once(self) -> dict[str, Any]:
         snapshot = self.provider.get_chain_snapshot()
-
+         persisted_rows = self.store.write_option_stream(
+            self.run_id,
+            snapshot,
+        )
         features, iv_history_count = self._build_features(snapshot)
         quality: DataQualityReport = self.quality_checker.assess(snapshot)
 
@@ -284,6 +287,7 @@ class DecisionLoop:
                     else None
                 ),
                 "position_outcomes": position_outcomes,
+                "persisted_option_rows": persisted_rows
             },
         )
 
