@@ -43,7 +43,10 @@ from nse_quant.persistence.repositories import (
 from nse_quant.risk.risk_engine import RiskEngine
 from nse_quant.strategy.exit_engine import ExitEngine
 from nse_quant.strategy.iron_condor import IronCondorMonitor
-
+from nse_quant.features.availability import FeatureAvailability
+from nse_quant.features.availability_checker import (
+    FeatureAvailabilityChecker,
+)
 
 class DecisionLoop:
     def __init__(
@@ -80,11 +83,71 @@ class DecisionLoop:
             spot_instrument_token_resolver
             or self._default_spot_token_resolver
         )
+        self.availability_checker = FeatureAvailabilityChecker(store)
 
     def run_once(self) -> dict[str, Any]:
         symbol = self.settings.market_data.default_symbol
         spot_feature_snapshot = self.feature_service.latest(symbol)
+        provider_token = self.provider.resolve_spot_instrument_token(symbol)
+        availability = self.availability_checker.evaluate(
+            symbol=symbol,
+            instrument_token=provider_token,
+            as_of=datetime.now(UTC),
+        )
+
+        self.store.write_feature_availability_result(
+            gate_result_id=uuid4().hex,
+            ts=datetime.now(UTC),
+            run_id=self.run_id,
+            symbol=symbol,
+            passed=availability.core_status
+            == FeatureAvailability.READY,
+            reasons=availability.reasons,
+            checks={
+                "core_status": availability.core_status.value,
+                "htf_status": availability.htf_status.value,
+                "iv_status": availability.iv_status.value,
+                "overall_status": availability.overall_status.value,
+                "observations": availability.observations,
+                "missing": availability.missing,
+            },
+        )
+
+        if availability.core_status != FeatureAvailability.READY:
+            return {
+                "status": "feature_availability_rejected",
+                "symbol": symbol,
+                "reasons": availability.reasons,
+                "checks": {
+                    "core_status": availability.core_status.value,
+                    "htf_status": availability.htf_status.value,
+                    "iv_status": availability.iv_status.value,
+                },
+            }
+
+        if not availability.can_evaluate_new_entries:
+            open_positions = self.positions.get_open_strategy_positions()
+
+            if not open_positions:
+                return {
+                    "status": "warming_up",
+                    "symbol": symbol,
+                    "reasons": availability.reasons,
+                    "checks": {
+                        "overall_status": (
+                            availability.overall_status.value
+                        ),
+                        "observations": availability.observations,
+                    },
+                }
+
+            # Continue only through open-position monitoring/exits.
+            return self._monitor_and_exit_only(
+                symbol=symbol,
+                availability=availability,
+            )
         gate = self.feature_gate.evaluate(spot_feature_snapshot)
+
 
         self.store.write_feature_gate_result(
             gate_result_id=uuid4().hex,
@@ -735,3 +798,32 @@ class DecisionLoop:
         raise ValueError(
             f"No spot instrument token resolver available for {symbol!r}"
         )
+
+    def _monitor_and_exit_only(
+        self,
+        *,
+        symbol: str,
+        availability: Any,
+    ) -> dict[str, Any]:
+        snapshot = self.provider.get_chain_snapshot()
+        persisted_rows = self.store.write_option_stream(
+            self.run_id,
+            snapshot,
+        )
+
+        features, iv_history_count = self._build_features(snapshot)
+        quality = self.quality_checker.assess(snapshot)
+
+        position_outcomes = self._monitor_open_positions(
+            snapshot=snapshot,
+            features=features,
+            quality=quality,
+        )
+
+        return {
+            "status": "monitoring_open_positions",
+            "symbol": symbol,
+            "availability": availability.overall_status.value,
+            "position_outcomes": position_outcomes,
+            "persisted_option_rows": persisted_rows,
+        }

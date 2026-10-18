@@ -542,3 +542,31 @@ class DuckDBStore:
                 json.dumps(checks),
             ],
         )
+    def write_feature_availability_result(
+        self,
+        gate_result_id: str,
+        ts: datetime,
+        run_id: str,
+        symbol: str,
+        passed: bool,
+        reasons: list[str],
+        checks: dict[str, Any],
+    ) -> None:
+        self.conn.execute(
+            """
+            INSERT OR REPLACE INTO gate_results VALUES (
+                ?, ?, ?, ?, ?, ?, ?, ?, ?
+            )
+            """,
+            [
+                gate_result_id,
+                ts,
+                run_id,
+                None,
+                "feature_availability",
+                "feature_availability",
+                passed,
+                json.dumps(reasons),
+                json.dumps(checks, default=str),
+            ],
+        )
