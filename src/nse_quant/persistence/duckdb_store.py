@@ -21,8 +21,8 @@ class DuckDBStore:
         self.path.parent.mkdir(parents=True, exist_ok=True)
 
         self.conn = duckdb.connect(str(self.path))
-        self.conn.execute("SET memory_limit = '512MB'")
-        self.conn.execute("SET threads = 2")
+        self.conn.execute(  f"SET memory_limit = '{settings.storage.db_memory_limit}'")
+        self.conn.execute(f"SET threads = {settings.storage.db_threads}")
         self._create_schema()
 
     def _create_schema(self) -> None:

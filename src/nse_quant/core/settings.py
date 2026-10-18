@@ -33,6 +33,8 @@ class StorageSettings(BaseModel):
     parquet_dir: Path = Path("data/parquet")
     dashboard_host: str = "127.0.0.1"
     dashboard_port: int = 8050
+    db_memory_limit: str = "512MB"
+    db_threads: int = 2
 
 class AnalyticsSettings(BaseModel):
     risk_free_rate: float = 0.07

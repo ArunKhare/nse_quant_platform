@@ -23,6 +23,8 @@ storage:
   parquet_dir: data/parquet
   dashboard_host: 127.0.0.1
   dashboard_port: 8050
+  db_memory_limit: 512MB
+  db_thread: 2
 
 analytics:
   risk_free_rate: 0.07
