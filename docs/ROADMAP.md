@@ -31,5 +31,6 @@
 
 - BANKNIFTY.
 - Stock options.
+- Stocks
 - Directional defined-risk debit/credit spreads.
 - Multi-leg strategy library.

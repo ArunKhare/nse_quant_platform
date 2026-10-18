@@ -1,9 +1,20 @@
 import json
+
 from nse_quant.market_data.replay_exporter import ReplayExporter
+
+
 def test_replay_exporter_writes_snapshots(
     test_store,
     tmp_path,
+    snapshot_factory,
 ):
+    snapshot = snapshot_factory(
+        spot=23000.0,
+        call_price=120.0,
+        put_price=115.0,
+    )
+    test_store.write_option_stream("replay-test", snapshot)
+
     exporter = ReplayExporter(test_store)
     output = tmp_path / "replay.json"
 
@@ -17,4 +28,4 @@ def test_replay_exporter_writes_snapshots(
 
     payload = json.loads(result.read_text(encoding="utf-8"))
     assert "snapshots" in payload
-
+    assert payload["snapshots"][0]["spot"] == snapshot.spot

@@ -19,7 +19,7 @@ class DuckDBStore:
         settings = get_settings()
         self.path = Path(path or settings.storage.db_path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        
+
         self.conn = duckdb.connect(str(self.path))
         self.conn.execute("SET memory_limit = '512MB'")
         self.conn.execute("SET threads = 2")
@@ -248,6 +248,24 @@ class DuckDBStore:
             """
         )
 
+        self.conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS spot_candles (
+                instrument_token BIGINT,
+                symbol VARCHAR,
+                interval VARCHAR,
+                ts TIMESTAMPTZ,
+                open DOUBLE,
+                high DOUBLE,
+                low DOUBLE,
+                close DOUBLE,
+                volume BIGINT,
+                oi BIGINT,
+                PRIMARY KEY (instrument_token, interval, ts)
+            )
+            """
+        )
+
     def write_option_stream(
         self,
         run_id: str,
@@ -340,3 +358,56 @@ class DuckDBStore:
 
     def close(self) -> None:
         self.conn.close()
+
+    def write_spot_candles(
+        self,
+        candles: list[dict[str, Any]],
+        symbol: str,
+        instrument_token: int,
+        interval: str,
+    ) -> int:
+        rows = [
+            (
+                instrument_token,
+                symbol,
+                interval,
+                candle["date"],
+                candle["open"],
+                candle["high"],
+                candle["low"],
+                candle["close"],
+                candle["volume"],
+                candle.get("oi"),
+            )
+            for candle in candles
+        ]
+
+        self.conn.executemany(
+            """
+            INSERT OR REPLACE INTO spot_candles VALUES (
+                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+            )
+            """,
+            rows,
+        )
+
+        return len(rows)
+    def latest_spot_closes(
+        self,
+        instrument_token: int,
+        interval: str = "minute",
+        limit: int = 60,
+    ) -> list[float]:
+        rows = self.conn.execute(
+            """
+            SELECT close
+            FROM spot_candles
+            WHERE instrument_token = ?
+            AND interval = ?
+            ORDER BY ts DESC
+            LIMIT ?
+            """,
+            [instrument_token, interval, limit],
+        ).fetchall()
+
+        return [float(row[0]) for row in reversed(rows)]

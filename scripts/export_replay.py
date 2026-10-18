@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import argparse
-from pathlib import Path
 
 from nse_quant.market_data.replay_exporter import ReplayExporter
 from nse_quant.persistence.duckdb_store import DuckDBStore
@@ -31,18 +30,6 @@ def parse_args() -> argparse.Namespace:
         default="data/replay/replay.json",
     )
 
-    parser.add_argument(
-        "--start",
-        required=True,
-        help="IST start time, e.g. 2026-10-17T09:15:00+05:30",
-    )
-
-    parser.add_argument(
-        "--end",
-        required=True,
-        help="IST end time, e.g. 2026-10-17T15:40:00+05:30",
-    )
-    
     return parser.parse_args()
 
 

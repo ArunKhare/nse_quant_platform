@@ -3,11 +3,16 @@
 from __future__ import annotations
 
 import json
-from datetime import UTC, datetime, timedelta
+import logging
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-from nse_quant.core.models import ChainSnapshot
+from pydantic import ValidationError
+
+from nse_quant.core.models import ChainSnapshot, Instrument, OptionQuote, OptionType
+
+logger = logging.getLogger(__name__)
 
 
 class ReplayExporter:
@@ -24,7 +29,25 @@ class ReplayExporter:
 
         rows = self.store.conn.execute(
             """
-            SELECT ts, payload_json
+            SELECT
+                ts,
+                spot,
+                expiry,
+                strike,
+                option_type,
+                tradingsymbol,
+                instrument_token,
+                lot_size,
+                ltp,
+                bid,
+                ask,
+                volume,
+                oi,
+                iv,
+                delta,
+                gamma,
+                vega,
+                theta
             FROM option_stream
             WHERE underlying = ?
               AND ts >= ?
@@ -33,33 +56,72 @@ class ReplayExporter:
             [underlying, cutoff],
         ).fetchall()
 
-        grouped: dict[object, list[str]] ={}
-
-        for ts, payload_json in rows:
-            grouped.setdefault(ts,[]).append(payload_json)
-
-        snapshot = []
-        for ts, payload_jsons in grouped.items():
+        grouped: dict[tuple[datetime, float, date], list[OptionQuote]] = {}
+        for row in rows:
+            (
+                ts,
+                spot,
+                expiry,
+                strike,
+                option_type,
+                tradingsymbol,
+                instrument_token,
+                lot_size,
+                ltp,
+                bid,
+                ask,
+                volume,
+                oi,
+                iv,
+                delta,
+                gamma,
+                vega,
+                theta,
+            ) = row
             try:
-                quotes = [
-                    OptionQuote.model_validate_json(payload)
-                    for payload in payloads
-                ]
-
-                first = quotes[0].instrument
-                snapshot = ChainSnapshot(
+                instrument = Instrument(
+                    tradingsymbol=tradingsymbol,
+                    instrument_token=instrument_token,
                     underlying=underlying,
-                    ts=ts,
-                    spot=quotes[0].instrument.underlying_spot
-                    if hasattr(quotes[0].instrument, "underlying_spot")
-                    else None,
-                    expiry=first.expiry,
-                    quotes=quotes,
+                    expiry=expiry,
+                    strike=strike,
+                    option_type=OptionType(option_type),
+                    lot_size=lot_size,
                 )
-
-                snapshots.append(snapshot.model_dump(mode="json"))
-            except Exception:
+                quote = OptionQuote(
+                    instrument_token=instrument_token,
+                    instrument=instrument,
+                    ltp=ltp,
+                    bid=bid,
+                    ask=ask,
+                    volume=volume,
+                    oi=oi,
+                    exchange_ts=ts,
+                    iv=iv,
+                    delta=delta,
+                    gamma=gamma,
+                    vega=vega,
+                    theta=theta,
+                )
+            except (TypeError, ValueError, ValidationError) as exc:
+                logger.warning(
+                    "Skipping invalid replay quote at %s: %s",
+                    ts,
+                    exc,
+                )
                 continue
+            grouped.setdefault((ts, spot, expiry), []).append(quote)
+
+        snapshots = []
+        for (ts, spot, expiry), quotes in grouped.items():
+            snapshot = ChainSnapshot(
+                underlying=underlying,
+                ts=ts,
+                spot=spot,
+                expiry=expiry,
+                quotes=quotes,
+            )
+            snapshots.append(snapshot.model_dump(mode="json"))
         if not snapshots:
             raise ValueError("No replayable snapshots could be reconstructed")
 

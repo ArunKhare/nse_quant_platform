@@ -68,7 +68,7 @@ class DecisionLoop:
 
     def run_once(self) -> dict[str, Any]:
         snapshot = self.provider.get_chain_snapshot()
-         persisted_rows = self.store.write_option_stream(
+        persisted_rows = self.store.write_option_stream(
             self.run_id,
             snapshot,
         )
@@ -296,7 +296,14 @@ class DecisionLoop:
         snapshot: ChainSnapshot,
     ) -> tuple[MarketFeatures, int]:
         iv_history = self.store.latest_iv_history(snapshot.underlying)
-        spot_history = [snapshot.spot] * 30
+        spot_history = self.store.latest_spot_closes(
+            instrument_token=256265,
+            interval="minute",
+            limit=60,
+        )
+
+        if not spot_history:
+            spot_history = [snapshot.spot] * 30
 
         features = build_features(
             snapshot,
