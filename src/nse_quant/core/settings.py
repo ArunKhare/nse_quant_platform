@@ -1,8 +1,10 @@
 """Typed global settings with precedence: .env > YAML > defaults."""
 from __future__ import annotations
 
+from datetime import date as Date
+from datetime import time
 from pathlib import Path
-from typing import Any
+from typing import Any, Self
 
 import yaml
 from pydantic import BaseModel, Field, model_validator
@@ -47,7 +49,7 @@ class AnalyticsSettings(BaseModel):
     allow_iv_rank_cold_start: bool = True
 
     @model_validator(mode="after")
-    def validate_analytics(self) -> AnalyticsSettings:
+    def validate_analytics(self) -> Self:
         if self.min_iv_history_observations < 1:
             raise ValueError("min_iv_history_observations must be >= 1")
 
@@ -91,6 +93,9 @@ class TelegramNotifierSettings(BaseModel):
     uri: str = "https://api.telegram.org/bot{token}/sendMessage"
     message_length_limit: int = 4096
 
+class CandleIntervalSettings(BaseModel):
+    kite_interval: str
+
 class MarketDataSettings(BaseModel):
     default_symbol: str = "NIFTY"
 
@@ -123,12 +128,12 @@ class MarketDataSettings(BaseModel):
 
     index_instrument_tokens: dict[str, int] = Field(default_factory=dict)
 
-    intervals: dict[str, str] = Field(
+    candle_intervals: dict[str, CandleIntervalSettings] = Field(
         default_factory=lambda: {
-            "1m": "minute",
-            "15m": "15minute",
-            "60m": "60minute",
-            "day": "day",
+            "1m": CandleIntervalSettings(kite_interval="minute"),
+            "15m": CandleIntervalSettings(kite_interval="15minute"),
+            "60m": CandleIntervalSettings(kite_interval="60minute"),
+            "day": CandleIntervalSettings(kite_interval="day"),
         }
     )
 
@@ -153,6 +158,20 @@ class KiteSecrets(BaseSettings):
     kite_redirect_uri: str = ""
     telegram_bot_token: str = ""
     telegram_chat_id: str = ""
+
+
+class SpecialSessionSettings(BaseModel):
+    session_date: Date
+    open_time: time
+    close_time: time
+    session_type: str
+
+
+class TradingCalendarSettings(BaseModel):
+    closed_dates: list[Date] = Field(default_factory=list)
+    special_sessions: list[SpecialSessionSettings] = Field(
+        default_factory=list
+    )
 
 def _load_yaml(path: Path) -> dict[str, Any]:
     if not path.exists():
@@ -183,6 +202,7 @@ class Settings(BaseSettings):
     market_data: MarketDataSettings = Field(default_factory=MarketDataSettings)
     notifier: NotifierSettings = Field(default_factory=NotifierSettings)
     secrets: KiteSecrets = Field(default_factory=KiteSecrets)
+    trading_calendar: TradingCalendarSettings = Field(default_factory=TradingCalendarSettings)
 
     @model_validator(mode="before")
     @classmethod
@@ -226,6 +246,21 @@ class Settings(BaseSettings):
             raise ValueError("max_lots_per_order must be >=1")
 
         return data
+
+    @model_validator(mode="after")
+    def validate_candle_intervals(self) -> Self:
+        if not self.market_data.candle_intervals:
+            raise ValueError("market_data.candle_intervals must not be empty")
+
+        for interval, config in self.market_data.candle_intervals.items():
+            if not interval:
+                raise ValueError("Candle interval keys must be non-empty")
+            if not config.kite_interval:
+                raise ValueError(
+                    f"kite_interval must be configured for interval {interval!r}"
+                )
+
+        return self
 
 def load_settings(path: str | Path | None = None) -> Settings:
     # Read the YAML file dictionary

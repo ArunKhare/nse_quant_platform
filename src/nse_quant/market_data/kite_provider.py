@@ -4,9 +4,11 @@ from __future__ import annotations
 from datetime import UTC, date, datetime
 from typing import Any
 
-from nse_quant.core.settings import get_settings
+import pandas as pd
 
-from ..market_data.chain import build_snapshot, discover_chain
+from nse_quant.core.models import Instrument, OptionType
+from nse_quant.core.settings import get_settings
+from nse_quant.market_data.chain import build_snapshot, discover_chain
 
 
 class InstrumentResolutionError(ValueError):
@@ -17,9 +19,10 @@ class KiteMarketDataProvider:
         self.settings = get_settings()
         self.kite=kite
         self.underlying=underlying or self.settings.universe.underlying
-        # self._instruments:list[dict[str, Any]] | None = None
+        self._instruments:list[dict[str, Any]] | None = None
         # self._index_instruments: list[dict[str, Any]] | None = None
         self._instrument_cache: dict[str, dict[str, Any]] = {}
+
     def _is_index(self, symbol: str) -> bool:
         if self.settings is None:
             return symbol in {"NIFTY", "BANKNIFTY", "FINNIFTY", "MIDCPNIFTY"}
@@ -29,6 +32,13 @@ class KiteMarketDataProvider:
         if "NSE" not in self._instrument_cache:
             self._instrument_cache["NSE"] = self.kite.instruments("NSE")
         return self._instrument_cache["NSE"]
+
+    def _load_nfo_instruments(self) -> list[dict[str, Any]]:
+        if self._instruments is None:
+            self.refresh_instruments()
+
+        assert self._instruments is not None
+        return self._instruments
 
     def _resolve_index_token(self, symbol: str) -> int:
         market_data = self.settings.market_data
@@ -83,6 +93,10 @@ class KiteMarketDataProvider:
             return self._resolve_index_token(symbol)
 
         return self._resolve_equity_token(symbol)
+
+    def refresh_instruments(self) -> None:
+        """Load and cache NFO option instruments."""
+        self._instruments = self.kite.instruments("NFO")
 
     def refresh_index_instruments(self) -> None:
         self._index_instruments = self.kite.instruments("NSE")
@@ -140,14 +154,20 @@ class KiteMarketDataProvider:
 
         return f"NSE:{symbol}"
 
-    def get_chain_snapshot(self,expiry: date | None = None,):
-        if self._instruments is None:
-            self.refresh_instruments()
+    def get_chain_snapshot(self, expiry: date | None = None):
+        raw_instruments = self._load_nfo_instruments()
+
+        candidate_instruments = [
+            row
+            for row in raw_instruments
+            if row.get("instrument_type") in {"CE", "PE"}
+            and row.get("name") == self.underlying
+        ]
 
         spot = self.get_spot()
 
-        expiry_date, instruments = discover_chain(
-            self._instruments,
+        expiry_date, option_instruments = discover_chain(
+            candidate_instruments,
             self.underlying,
             spot,
             expiry,
@@ -157,15 +177,14 @@ class KiteMarketDataProvider:
         raw = self.kite.quote(
             [
                 f"NFO:{instrument.tradingsymbol}"
-                for instrument in instruments
+                for instrument in option_instruments
             ]
         )
 
         ticks: dict[int, dict[str, Any]] = {}
-
         received_at = datetime.now(UTC)
 
-        for instrument in instruments:
+        for instrument in option_instruments:
             quote = raw.get(
                 f"NFO:{instrument.tradingsymbol}",
                 {},
@@ -188,10 +207,9 @@ class KiteMarketDataProvider:
             self.underlying,
             spot,
             expiry_date,
-            instruments,
+            option_instruments,
             ticks,
         )
-
     def get_historical_candles(
             self,
             symbol: str,
@@ -218,17 +236,33 @@ class KiteMarketDataProvider:
             return raw
 
     def _resolve_kite_interval(self, interval: str) -> str:
-        if self.settings is None:
-            aliases = {
-                "1m": "minute",
-                "15m": "15minute",
-                "60m": "60minute",
-                "day": "day",
-            }
-        else:
-            aliases = self.settings.market_data.intervals
-
         try:
-            return aliases[interval]
+            return self.settings.market_data.candle_intervals[
+                interval
+            ].kite_interval
         except KeyError as exc:
-            raise ValueError(f"Unsupported candle interval: {interval!r}") from exc
+            raise ValueError(
+                f"Unsupported candle interval: {interval!r}"
+            ) from exc
+
+    def _normalize_nfo_instrument(
+        self,
+        row: dict[str, Any],
+    ) -> Instrument:
+        option_type = OptionType(row["instrument_type"])
+
+        expiry = row["expiry"]
+        if isinstance(expiry, str):
+            expiry = datetime.strptime(expiry, "%Y-%m-%d").date()
+        elif not isinstance(expiry, date):
+            expiry = pd.to_datetime(expiry).date()
+
+        return Instrument(
+            tradingsymbol=str(row["tradingsymbol"]),
+            instrument_token=int(row["instrument_token"]),
+            underlying=str(row["name"]),
+            expiry=expiry,
+            strike=float(row["strike"]),
+            option_type=option_type,
+            lot_size=int(row["lot_size"]),
+        )

@@ -1,14 +1,13 @@
-"""Import multi-timeframe NSE spot candles into DuckDB."""
+"""Import explicit-date-range NSE spot candles into DuckDB."""
 
 from __future__ import annotations
 
 import argparse
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Any
 
 from nse_quant.core.settings import get_settings
 from nse_quant.integrations.kite_session import get_cached_kite
-from nse_quant.market_data.historical import HISTORICAL_LOOKBACK_DAYS
 from nse_quant.market_data.kite_provider import KiteMarketDataProvider
 from nse_quant.persistence.duckdb_store import DuckDBStore
 
@@ -34,23 +33,21 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--from",
         dest="from_dt",
-        default=None,
-        help="Start datetime, ISO format; defaults to a per-interval lookback",
+        required=True,
+        help="Start datetime in ISO format",
     )
 
     parser.add_argument(
         "--to",
         dest="to_dt",
-        default=None,
-        help="End datetime, ISO format; defaults to now",
+        required=True,
+        help="End datetime in ISO format",
     )
 
     return parser.parse_args()
 
 
-def parse_datetime(value: str | None) -> datetime | None:
-    if value is None:
-        return None
+def parse_datetime(value: str) -> datetime:
     return datetime.fromisoformat(value)
 
 
@@ -65,7 +62,11 @@ def main() -> None:
         if interval.strip()
     ]
 
-    end_dt = parse_datetime(args.to_dt) or datetime.now()
+    start_dt = parse_datetime(args.from_dt)
+    end_dt = parse_datetime(args.to_dt)
+
+    if end_dt <= start_dt:
+        raise ValueError("--to must be later than --from")
 
     kite = get_cached_kite(settings=settings)
     provider = KiteMarketDataProvider(kite=kite, underlying=symbols[0])
@@ -77,13 +78,10 @@ def main() -> None:
             print(f"{symbol}: instrument_token={instrument_token}")
 
             for interval_key in intervals:
-                if interval_key not in settings.market_data.intervals:
-                    raise ValueError(f"Unsupported interval: {interval_key!r}")
-
-                lookback_days = HISTORICAL_LOOKBACK_DAYS.get(interval_key, 30)
-                start_dt = parse_datetime(args.from_dt) or (
-                    end_dt - timedelta(days=lookback_days)
-                )
+                if interval_key not in settings.market_data.candle_intervals:
+                    raise ValueError(
+                        f"Unsupported interval: {interval_key!r}"
+                    )
 
                 candles: list[dict[str, Any]] = provider.get_historical_candles(
                     symbol=symbol,

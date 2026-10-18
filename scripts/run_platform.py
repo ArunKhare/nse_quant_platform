@@ -79,7 +79,6 @@ def main() -> int:
         broker=broker,
         run_id=run_id,
         settings=settings,
-        spot_instrument_token_resolver=provider.resolve_spot_instrument_token,
     )
 
     def run_dashboard() -> None:
