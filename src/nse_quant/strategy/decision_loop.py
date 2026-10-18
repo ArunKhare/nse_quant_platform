@@ -11,6 +11,7 @@ market data -> analytics -> feature snapshot -> open-position monitoring
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Any
 from uuid import uuid4
@@ -52,6 +53,7 @@ class DecisionLoop:
         broker: PaperBroker,
         run_id: str,
         settings: Any | None = None,
+        spot_instrument_token_resolver: Callable[[str], int] | None = None,
     ) -> None:
         self.settings = settings or get_settings()
         self.store = store
@@ -72,7 +74,11 @@ class DecisionLoop:
             store=store,
             max_age_seconds=self.settings.runtime.stale_seconds,
         )
-        self.feature_gate = SpotFeatureGate()
+        self.feature_gate = SpotFeatureGate(max_age_seconds=self.settings.runtime.stale_seconds,)
+        self.spot_instrument_token_resolver = (
+            spot_instrument_token_resolver
+            or self._default_spot_token_resolver
+        )
 
     def run_once(self) -> dict[str, Any]:
         symbol = self.settings.market_data.default_symbol
@@ -327,13 +333,13 @@ class DecisionLoop:
             },
         )
 
-    def _build_features(
-        self,
-        snapshot: ChainSnapshot,
-    ) -> tuple[MarketFeatures, int]:
+    def _build_features(self,snapshot: ChainSnapshot,) -> tuple[MarketFeatures, int]:
         iv_history = self.store.latest_iv_history(snapshot.underlying)
+        instrument_token = self.spot_instrument_token_resolver(
+            snapshot.underlying
+        )
         spot_history = self.store.latest_spot_closes(
-            instrument_token=256265,
+            instrument_token=instrument_token,
             interval="minute",
             limit=60,
         )
@@ -707,3 +713,24 @@ class DecisionLoop:
             return None
 
         return TradeProposal.model_validate(payload)
+
+    def _default_spot_token_resolver(self, symbol: str) -> int:
+        resolver = getattr(
+            self.provider,
+            "resolve_spot_instrument_token",
+            None,
+        )
+
+        if callable(resolver):
+            return int(resolver(symbol))
+
+        configured_token = (
+            self.settings.market_data.index_instrument_tokens.get(symbol)
+        )
+
+        if configured_token:
+            return int(configured_token)
+
+        raise ValueError(
+            f"No spot instrument token resolver available for {symbol!r}"
+        )

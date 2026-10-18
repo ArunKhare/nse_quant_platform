@@ -65,6 +65,7 @@ def test_decision_loop_persists_feature_and_decision(
         provider=SyntheticProvider(),
         broker=PaperBroker(),
         run_id="test-run",
+        spot_instrument_token_resolver=lambda symbol: 256265,
     )
     try:
         result = loop.run_once()

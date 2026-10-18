@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
 
 from nse_quant.features.feature_service import SpotFeatureSnapshot
 
@@ -21,11 +22,13 @@ class SpotFeatureGate:
         max_realized_vol: float = 1.0,
         max_vwap_distance: float = 0.01,
         require_trend_alignment: bool = True,
+        max_age_seconds: int = 300,
     ) -> None:
         self._min_realized_vol = min_realized_vol
         self._max_realized_vol = max_realized_vol
         self._max_vwap_distance = max_vwap_distance
         self._require_trend_alignment = require_trend_alignment
+        self._max_age_seconds = max_age_seconds
 
     def evaluate(
         self,
@@ -38,6 +41,14 @@ class SpotFeatureGate:
         if snapshot is None:
             reasons.append("spot_features_unavailable")
             return FeatureGateResult(False, reasons, checks)
+
+        age = datetime.now(UTC) - snapshot.ts.tz_convert(UTC)
+        checks["feature_snapshot_fresh"] = (
+            age <= timedelta(seconds=self._max_age_seconds)
+        )
+
+        if not checks["feature_snapshot_fresh"]:
+            reasons.append("spot_features_stale")
 
         rv = snapshot.rv_1m_30
         checks["realized_vol_available"] = rv is not None
@@ -78,6 +89,7 @@ class SpotFeatureGate:
             for key, value in checks.items()
             if key in {
                 "feature_snapshot_available",
+                "feature_snapshot_fresh",
                 "realized_vol_in_range",
                 "vwap_distance_acceptable",
                 "trend_aligned",

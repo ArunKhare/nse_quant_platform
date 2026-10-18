@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import UTC, timedelta
+from typing import TYPE_CHECKING
 
 import pandas as pd
 
-from nse_quant.persistence.duckdb_store import DuckDBStore
+if TYPE_CHECKING:
+    from nse_quant.persistence.duckdb_store import DuckDBStore
 
 
 @dataclass(frozen=True)
@@ -77,15 +78,6 @@ class SpotFeatureService:
                 record["range_position_60m"]
             ),
         )
-
-    def is_fresh(self, snapshot: SpotFeatureSnapshot | None) -> bool:
-        if snapshot is None:
-            return False
-
-        now = pd.Timestamp.now(tz=UTC)
-        age = now - snapshot.ts.tz_convert(UTC)
-
-        return age <= timedelta(seconds=self._max_age_seconds)
 
     @staticmethod
     def _optional_float(value: object) -> float | None:

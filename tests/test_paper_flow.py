@@ -64,6 +64,8 @@ def test_paper_flow_persists_full_lifecycle(tmp_path, seed_spot_features):
         provider=SyntheticProvider(),
         broker=broker,
         run_id="paper-flow-test",
+        spot_instrument_token_resolver=lambda symbol: 256265,
+
     )
 
     result = loop.run_once()
@@ -129,6 +131,7 @@ def test_dry_run_does_not_create_paper_order(tmp_path, seed_spot_features):
         provider=SyntheticProvider(),
         broker=broker,
         run_id="dry-run-test",
+        spot_instrument_token_resolver=lambda symbol: 256265,
     )
 
     result = loop.run_once()

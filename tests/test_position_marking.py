@@ -60,6 +60,7 @@ def test_mid_price_is_used_when_bid_and_ask_are_valid(tmp_path):
         provider=SyntheticProvider(),
         broker=PaperBroker(),
         run_id="marking-test",
+        spot_instrument_token_resolver=lambda symbol: 256265,
     )
 
     snapshot = loop.provider.get_chain_snapshot()
@@ -77,6 +78,7 @@ def test_ltp_fallback_when_quotes_invalid(tmp_path):
         provider=SyntheticProvider(),
         broker=PaperBroker(),
         run_id="marking-test",
+        spot_instrument_token_resolver=lambda symbol: 256265,
     )
 
     snapshot = loop.provider.get_chain_snapshot()

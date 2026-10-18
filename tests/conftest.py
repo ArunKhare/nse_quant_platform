@@ -183,6 +183,7 @@ def decision_loop_environment(
                 broker=PaperBroker(),
                 run_id="test-run",
                 settings=test_settings,
+                spot_instrument_token_resolver=lambda symbol: 256265,
             )
 
             if proposal is not None:

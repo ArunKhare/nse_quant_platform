@@ -1,3 +1,5 @@
+from datetime import UTC
+
 import pandas as pd
 
 from nse_quant.features.feature_gates import SpotFeatureGate
@@ -12,7 +14,7 @@ def make_snapshot(
 ) -> SpotFeatureSnapshot:
     return SpotFeatureSnapshot(
         symbol="NIFTY",
-        ts=pd.Timestamp("2026-10-16 09:31:00", tz="UTC"),
+        ts=pd.Timestamp.now(tz=UTC),
         close=25000.0,
         return_1m=0.0001,
         rv_1m_30=rv,
@@ -50,3 +52,19 @@ def test_gate_rejects_missing_snapshot() -> None:
 
     assert not result.passed
     assert result.reasons == ["spot_features_unavailable"]
+
+def test_gate_rejects_stale_snapshot() -> None:
+    gate = SpotFeatureGate(max_age_seconds=60)
+
+    snapshot = make_snapshot(0.001, 0.002)
+    stale_snapshot = SpotFeatureSnapshot(
+        **{
+            **snapshot.__dict__,
+            "ts": pd.Timestamp.now(tz=UTC) - pd.Timedelta(minutes=5),
+        }
+    )
+
+    result = gate.evaluate(stale_snapshot)
+
+    assert not result.passed
+    assert "spot_features_stale" in result.reasons

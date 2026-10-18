@@ -8,16 +8,9 @@ from typing import Any
 
 from nse_quant.core.settings import get_settings
 from nse_quant.integrations.kite_session import get_cached_kite
+from nse_quant.market_data.historical import HISTORICAL_LOOKBACK_DAYS
 from nse_quant.market_data.kite_provider import KiteMarketDataProvider
 from nse_quant.persistence.duckdb_store import DuckDBStore
-
-# Keep each request within Kite's per-interval historical range.
-DEFAULT_RANGE_DAYS = {
-    "1m": 5,
-    "15m": 30,
-    "60m": 90,
-    "day": 365 * 3,
-}
 
 
 def parse_args() -> argparse.Namespace:
@@ -87,7 +80,7 @@ def main() -> None:
                 if interval_key not in settings.market_data.intervals:
                     raise ValueError(f"Unsupported interval: {interval_key!r}")
 
-                lookback_days = DEFAULT_RANGE_DAYS.get(interval_key, 30)
+                lookback_days = HISTORICAL_LOOKBACK_DAYS.get(interval_key, 30)
                 start_dt = parse_datetime(args.from_dt) or (
                     end_dt - timedelta(days=lookback_days)
                 )

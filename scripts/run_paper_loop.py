@@ -14,6 +14,7 @@ from nse_quant.core.market_calendar import is_market_open_now
 from nse_quant.core.settings import get_settings
 from nse_quant.execution.broker import PaperBroker
 from nse_quant.integrations.kite_session import get_cached_kite
+from nse_quant.market_data.historical import get_historical_date_range
 from nse_quant.market_data.kite_provider import KiteMarketDataProvider
 from nse_quant.market_data.replay_provider import ReplayMarketDataProvider
 from nse_quant.ops.kill_switch import KillSwitch
@@ -73,13 +74,6 @@ def main() -> int:
     else:
         kite = get_cached_kite(settings=settings)
         provider = KiteMarketDataProvider(kite)
-    if args.replay_file:
-        provider = ReplayMarketDataProvider.from_json(
-            args.replay_file
-        )
-    else:
-        kite = get_cached_kite(settings=settings)
-        provider = KiteMarketDataProvider(kite)
 
     store = DuckDBStore()
     broker = PaperBroker()
@@ -94,26 +88,40 @@ def main() -> int:
         broker=broker,
         run_id=run_id,
         settings=settings,
+        spot_instrument_token_resolver=provider.resolve_spot_instrument_token,
     )
 
     symbols = args.symbol or [
         settings.market_data.default_symbol
     ]
     intervals:dict = settings.market_data.intervals
-    for symbol in symbols:
-        for interval in intervals:
-            candles = provider.get_historical_candles(
-                symbol=symbol,
-                interval=interval,
-                from_dt=...,
-                to_dt=...,
-            )
-
-            store.write_spot_candle(candles)
-
-    end_time = time.monotonic() + args.seconds
 
     try:
+        if isinstance(provider, KiteMarketDataProvider):
+            for symbol in symbols:
+                instrument_token = provider.resolve_spot_instrument_token(symbol)
+                for interval in intervals:
+                    from_dt, to_dt = get_historical_date_range(interval)
+                    candles = provider.get_historical_candles(
+                        symbol=symbol,
+                        interval=interval,
+                        from_dt=from_dt,
+                        to_dt=to_dt,
+                    )
+
+                    if candles:
+                        rows = store.write_spot_candles(
+                            candles=candles,
+                            symbol=symbol,
+                            instrument_token=instrument_token,
+                            interval=interval,
+                        )
+                        print(
+                            f"{symbol} {interval}: "
+                            f"fetched={len(candles)} persisted={rows}"
+                        )
+
+        end_time = time.monotonic() + args.seconds
         while time.monotonic() < end_time:
             if kill_switch.is_active():
                 loop.handle_kill_switch()

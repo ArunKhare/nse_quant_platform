@@ -12,7 +12,7 @@ universe:
   strikes_per_side: 10
 
 runtime:
-  stale_seconds: 15
+  stale_seconds: 300
   loop_interval_seconds: 15
   market_closed_wait_seconds: 60
   enforce_market_hours: true

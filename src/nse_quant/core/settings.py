@@ -22,7 +22,7 @@ class UniverseSettings(BaseModel):
     strikes_per_side: int = 10
 
 class RuntimeSettings(BaseModel):
-    stale_seconds: float = 15.0
+    stale_seconds: float = 300.0
     loop_interval_seconds: int = 15
     market_closed_wait_seconds: int = 60
     enforce_market_hours: bool = True
