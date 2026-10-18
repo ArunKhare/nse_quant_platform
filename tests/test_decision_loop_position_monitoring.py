@@ -71,3 +71,28 @@ def test_new_entry_blocked_at_max_open_positions(
     second = loop.run_once()
     assert second["status"] == "max_open_positions"
 
+def test_run_once_persists_chain_snapshot(
+    decision_loop_environment,
+    replay_snapshots,
+):
+    from nse_quant.market_data.replay_provider import (
+        ReplayMarketDataProvider,
+    )
+
+    provider = ReplayMarketDataProvider(
+        replay_snapshots["snapshots"]
+    )
+
+    loop = decision_loop_environment.build_loop(
+        provider,
+        proposal=replay_snapshots["proposal"],
+    )
+
+    result = loop.run_once()
+
+    rows = loop.store.conn.execute(
+        "SELECT COUNT(*) FROM option_stream"
+    ).fetchone()[0]
+
+    assert rows > 0
+    assert result["persisted_option_rows"] > 0

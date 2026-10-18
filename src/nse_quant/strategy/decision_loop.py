@@ -136,6 +136,7 @@ class DecisionLoop:
                 extra={
                     "open_positions": len(open_positions),
                     "position_outcomes": position_outcomes,
+                    "persisted_option_rows": persisted_rows,
                 },
             )
 
@@ -161,6 +162,7 @@ class DecisionLoop:
                 gates=gates,
                 extra={
                     "position_outcomes": position_outcomes,
+                    "persisted_option_rows": persisted_rows,
                 },
             )
 
@@ -198,6 +200,7 @@ class DecisionLoop:
                     "proposal_id": proposal.proposal_id,
                     "reasons": risk_decision.reasons,
                     "position_outcomes": position_outcomes,
+                    "persisted_option_rows": persisted_rows,
                 },
             )
 
@@ -221,6 +224,7 @@ class DecisionLoop:
                 extra={
                     "proposal_id": proposal.proposal_id,
                     "position_outcomes": position_outcomes,
+                    "persisted_option_rows": persisted_rows,
                 },
             )
 
@@ -238,6 +242,7 @@ class DecisionLoop:
                     "proposal_id": proposal.proposal_id,
                     "reason": order.reject_reason,
                     "position_outcomes": position_outcomes,
+                    "persisted_option_rows": persisted_rows,
                 },
             )
 
