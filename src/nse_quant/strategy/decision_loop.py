@@ -13,6 +13,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from typing import Any
+from uuid import uuid4
 
 from nse_quant.analytics.features import build_features
 from nse_quant.core.models import (
@@ -29,6 +30,8 @@ from nse_quant.core.models import (
 )
 from nse_quant.core.settings import get_settings
 from nse_quant.execution.broker import PaperBroker
+from nse_quant.features.feature_gates import SpotFeatureGate
+from nse_quant.features.feature_service import SpotFeatureService
 from nse_quant.features.feature_store import FeatureStore
 from nse_quant.ops.data_quality import DataQualityChecker, DataQualityReport
 from nse_quant.ops.live_snapshot import build_snapshot, write_live_snapshot
@@ -65,13 +68,41 @@ class DecisionLoop:
         self.quality_checker = DataQualityChecker(
             stale_seconds=self.settings.runtime.stale_seconds,
         )
+        self.feature_service = SpotFeatureService(
+            store=store,
+            max_age_seconds=self.settings.runtime.stale_seconds,
+        )
+        self.feature_gate = SpotFeatureGate()
 
     def run_once(self) -> dict[str, Any]:
+        symbol = self.settings.market_data.default_symbol
+        spot_feature_snapshot = self.feature_service.latest(symbol)
+        gate = self.feature_gate.evaluate(spot_feature_snapshot)
+
+        self.store.write_feature_gate_result(
+            gate_result_id=uuid4().hex,
+            ts=datetime.now(UTC),
+            run_id=self.run_id,
+            symbol=symbol,
+            passed=gate.passed,
+            reasons=gate.reasons,
+            checks=gate.checks,
+        )
+
+        if not gate.passed:
+            return {
+                "status": "feature_gate_rejected",
+                "symbol": symbol,
+                "reasons": gate.reasons,
+                "checks": gate.checks,
+            }
+
         snapshot = self.provider.get_chain_snapshot()
         persisted_rows = self.store.write_option_stream(
             self.run_id,
             snapshot,
         )
+
         features, iv_history_count = self._build_features(snapshot)
         quality: DataQualityReport = self.quality_checker.assess(snapshot)
 

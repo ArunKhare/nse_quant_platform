@@ -512,3 +512,33 @@ class DuckDBStore:
 
         self.conn.unregister("spot_features_batch")
         return len(features)
+
+    def write_feature_gate_result(
+        self,
+        gate_result_id: str,
+        ts: datetime,
+        run_id: str,
+        symbol: str,
+        passed: bool,
+        reasons: list[str],
+        checks: dict[str, bool],
+    ) -> None:
+        import json
+        self.conn.execute(
+            """
+            INSERT OR REPLACE INTO gate_results VALUES (
+                ?, ?, ?, ?, ?, ?, ?, ?, ?
+            )
+            """,
+            [
+                gate_result_id,
+                ts,
+                run_id,
+                None,
+                "spot_feature_gate",
+                "spot_features",
+                passed,
+                json.dumps(reasons),
+                json.dumps(checks),
+            ],
+        )
