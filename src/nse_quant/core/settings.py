@@ -91,6 +91,47 @@ class TelegramNotifierSettings(BaseModel):
     uri: str = "https://api.telegram.org/bot{token}/sendMessage"
     message_length_limit: int = 4096
 
+class MarketDataSettings(BaseModel):
+    default_symbol: str = "NIFTY"
+
+    index_symbols: list[str] = Field(
+        default_factory=lambda: [
+            "NIFTY",
+            "BANKNIFTY",
+            "FINNIFTY",
+            "MIDCPNIFTY",
+        ]
+    )
+
+    spot_quote_keys: dict[str, str] = Field(
+        default_factory=lambda: {
+            "NIFTY": "NSE:NIFTY 50",
+            "BANKNIFTY": "NSE:NIFTY BANK",
+            "FINNIFTY": "NSE:FINNIFTY",
+            "MIDCPNIFTY": "NSE:MIDCPNIFTY",
+        }
+    )
+
+    index_instrument_symbols: dict[str, str] = Field(
+        default_factory=lambda: {
+            "NIFTY": "NIFTY 50",
+            "BANKNIFTY": "NIFTY BANK",
+            "FINNIFTY": "FINNIFTY",
+            "MIDCPNIFTY": "MIDCPNIFTY",
+        }
+    )
+
+    index_instrument_tokens: dict[str, int] = Field(default_factory=dict)
+
+    intervals: dict[str, str] = Field(
+        default_factory=lambda: {
+            "1m": "minute",
+            "15m": "15minute",
+            "60m": "60minute",
+            "day": "day",
+        }
+    )
+
 class NotifierSettings(BaseModel):
     enabled: bool = True
     telegram: TelegramNotifierSettings = Field(default_factory=TelegramNotifierSettings)
@@ -139,23 +180,9 @@ class Settings(BaseSettings):
     risk: RiskSettings = Field(default_factory=RiskSettings)
     exits: ExitSettings = Field(default_factory=ExitSettings)
     paper_execution: PaperExecutionSettings = Field(default_factory=PaperExecutionSettings)
+    market_data: MarketDataSettings = Field(default_factory=MarketDataSettings)
     notifier: NotifierSettings = Field(default_factory=NotifierSettings)
     secrets: KiteSecrets = Field(default_factory=KiteSecrets)
-
-    # @model_validator(mode="after")
-    # def validate_safety(self) -> Settings:
-    #     s = self.safety
-    #     if s.trading_enabled and (s.dry_run or s.paper_trading):
-    #         raise ValueError("Live mode requires DRY_RUN=false and PAPER_TRADING=false")
-    #     if s.trading_enabled:
-    #         raise ValueError("Live trading is blocked in this milestone")
-    #     if self.runtime.stale_seconds <= 0 or self.runtime.loop_interval_seconds <= 0:
-    #         raise ValueError("Runtime timing must be positive")
-    #     if not 0 <= self.analytics.min_iv_rank <= 100:
-    #         raise ValueError("min_iv_rank must be 0-100")
-    #     if self.risk.max_lots_per_order < 1:
-    #         raise ValueError("max_lots_per_order must be >=1")
-        # return self
 
     @model_validator(mode="before")
     @classmethod

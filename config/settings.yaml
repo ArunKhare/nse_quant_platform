@@ -66,3 +66,20 @@ notifier:
     enabled: true
     message_length_limit: 4096
 
+market_data:
+  default_symbol: NIFTY
+  index_symbols:
+    - NIFTY
+    - BANKNIFTY
+    - FINNIFTY
+    - MIDCPNIFTY
+  index_instrument_symbols:
+    NIFTY: "NIFTY 50"
+    BANKNIFTY: "NIFTY BANK"
+    FINNIFTY: "NIFTY FIN SERVICE"
+    MIDCPNIFTY: "NIFTY MID SELECT"
+  intervals:
+    1m: minute
+    15m: 15minute
+    60m: 60minute
+    day: day

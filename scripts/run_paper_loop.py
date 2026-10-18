@@ -49,7 +49,12 @@ def parse_args() -> argparse.Namespace:
                 "instead of live Kite data"
         ),
     )
-
+    parser.add_argument(
+        "--symbol",
+        action="append",
+        default=None,
+        help="Underlying symbol; repeat for multiple symbols",
+    )
     return parser.parse_args()
 
 
@@ -76,7 +81,6 @@ def main() -> int:
         kite = get_cached_kite(settings=settings)
         provider = KiteMarketDataProvider(kite)
 
-
     store = DuckDBStore()
     broker = PaperBroker()
     kill_switch = KillSwitch()
@@ -91,6 +95,21 @@ def main() -> int:
         run_id=run_id,
         settings=settings,
     )
+
+    symbols = args.symbol or [
+        settings.market_data.default_symbol
+    ]
+    intervals:dict = settings.market_data.intervals
+    for symbol in symbols:
+        for interval in intervals:
+            candles = provider.get_historical_candles(
+                symbol=symbol,
+                interval=interval,
+                from_dt=...,
+                to_dt=...,
+            )
+
+            store.write_spot_candle(candles)
 
     end_time = time.monotonic() + args.seconds
 
