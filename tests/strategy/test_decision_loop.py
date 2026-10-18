@@ -54,9 +54,12 @@ class SyntheticProvider:
             quotes=quotes,
         )
 
-
-def test_decision_loop_persists_feature_and_decision(tmp_path):
+def test_decision_loop_persists_feature_and_decision(
+    tmp_path,
+    seed_spot_features,
+):
     store = DuckDBStore(tmp_path / "loop.duckdb")
+    seed_spot_features(store)
     loop = DecisionLoop(
         store=store,
         provider=SyntheticProvider(),
@@ -79,3 +82,32 @@ def test_decision_loop_persists_feature_and_decision(tmp_path):
         assert decision_count >= 1
     finally:
         store.close()
+
+def test_feature_gate_rejection_does_not_call_chain_provider(
+    decision_loop,
+    monkeypatch,
+) -> None:
+    provider_calls = 0
+    get_chain_snapshot = decision_loop.provider.get_chain_snapshot
+
+    def track_chain_snapshot():
+        nonlocal provider_calls
+        provider_calls += 1
+        return get_chain_snapshot()
+
+    monkeypatch.setattr(
+        decision_loop.provider,
+        "get_chain_snapshot",
+        track_chain_snapshot,
+    )
+    monkeypatch.setattr(
+        decision_loop.feature_service,
+        "latest",
+        lambda _symbol: None,
+    )
+
+    result = decision_loop.run_once()
+
+    assert result["status"] == "feature_gate_rejected"
+    assert result["reasons"] == ["spot_features_unavailable"]
+    assert provider_calls == 0

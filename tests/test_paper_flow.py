@@ -54,8 +54,9 @@ class SyntheticProvider:
         )
 
 
-def test_paper_flow_persists_full_lifecycle(tmp_path):
+def test_paper_flow_persists_full_lifecycle(tmp_path, seed_spot_features):
     store = DuckDBStore(tmp_path / "paper-flow.duckdb")
+    seed_spot_features(store)
     broker = PaperBroker()
 
     loop = DecisionLoop(
@@ -118,8 +119,9 @@ def test_paper_flow_persists_full_lifecycle(tmp_path):
     store.close()
 
 
-def test_dry_run_does_not_create_paper_order(tmp_path):
+def test_dry_run_does_not_create_paper_order(tmp_path, seed_spot_features):
     store = DuckDBStore(tmp_path / "dry-run.duckdb")
+    seed_spot_features(store)
     broker = PaperBroker()
 
     loop = DecisionLoop(

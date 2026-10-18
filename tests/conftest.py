@@ -4,6 +4,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
+import pandas as pd
 import pytest
 
 from nse_quant.core.models import (
@@ -16,7 +17,7 @@ from nse_quant.core.models import (
     OrderSide,
     TradeProposal,
 )
-from nse_quant.core.settings import get_settings
+from nse_quant.core.settings import Settings, get_settings
 from nse_quant.execution.broker import PaperBroker
 from nse_quant.market_data.replay_provider import (
     ReplayMarketDataProvider,
@@ -27,13 +28,44 @@ from nse_quant.strategy.decision_loop import DecisionLoop
 
 @pytest.fixture
 def test_settings():
-    settings = get_settings()
+    settings = Settings.model_validate(get_settings().model_dump())
     settings.safety.dry_run = False
     settings.safety.trading_enabled = True
     settings.safety.paper_trading = True
     settings.risk.max_open_positions = 1
     settings.runtime.allow_out_of_hours_testing = True
     return settings
+
+
+@pytest.fixture
+def seed_spot_features():
+    def seed(store: DuckDBStore, symbol: str = "NIFTY") -> None:
+        now = datetime.now(UTC)
+        store.write_spot_features(
+            pd.DataFrame(
+                [
+                    {
+                        "symbol": symbol,
+                        "ts": now,
+                        "close": 23000.0,
+                        "return_1m": 0.001,
+                        "rv_1m_30": 0.2,
+                        "atr_1m_14": 10.0,
+                        "vwap_1m": 23000.0,
+                        "vwap_distance_1m": 0.0,
+                        "volume_zscore_1m_30": 0.5,
+                        "trend_15m": 0.01,
+                        "atr_15m_14": 20.0,
+                        "range_position_15m": 0.5,
+                        "trend_60m": 0.02,
+                        "atr_60m_14": 30.0,
+                        "range_position_60m": 0.5,
+                    }
+                ]
+            )
+        )
+
+    return seed
 
 
 @pytest.fixture
@@ -135,7 +167,10 @@ def decision_loop_environment(
     test_settings,
     test_store,
     monkeypatch,
+    seed_spot_features,
 ):
+    seed_spot_features(test_store)
+
     class Environment:
         def build_loop(
             self,
@@ -172,6 +207,23 @@ def decision_loop_environment(
             ]
 
     return Environment()
+
+
+@pytest.fixture
+def decision_loop(
+    decision_loop_environment,
+    snapshot_factory,
+):
+    provider = ReplayMarketDataProvider(
+        [
+            snapshot_factory(
+                spot=23000.0,
+                call_price=120.0,
+                put_price=115.0,
+            )
+        ]
+    )
+    return decision_loop_environment.build_loop(provider)
 
 
 @pytest.fixture
