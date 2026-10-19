@@ -332,6 +332,7 @@ class DuckDBStore:
                 allowed_regimes JSON,
                 regime_metrics JSON,
                 selection_status VARCHAR,
+                risk_limits JSON,
                 created_at TIMESTAMPTZ
             )
             """
@@ -681,11 +682,12 @@ class DuckDBStore:
         test_start: Any,
         test_end: Any,
         policy: Any,
+        risk_limits: dict[str, Any] | None = None,
     ) -> None:
         self.conn.execute(
             """
             INSERT OR REPLACE INTO regime_policies VALUES (
-                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
             )
             """,
             [
@@ -698,6 +700,7 @@ class DuckDBStore:
                 json.dumps(sorted(policy.allowed_regimes)),
                 json.dumps(policy.regime_metrics, default=str),
                 policy.selection_status,
+                json.dumps(risk_limits or {}, default=str),
                 datetime.now(UTC),
             ],
         )
@@ -714,7 +717,8 @@ class DuckDBStore:
             SELECT
                 allowed_regimes,
                 selection_status,
-                test_end
+                test_end,
+                risk_limits
             FROM regime_policies
             WHERE symbol = ?
               AND test_start <= ?
@@ -733,7 +737,8 @@ class DuckDBStore:
                 SELECT
                     allowed_regimes,
                     selection_status,
-                    test_end
+                    test_end,
+                    risk_limits
                 FROM regime_policies
                 WHERE symbol = ?
                   AND test_end < ?
@@ -750,4 +755,5 @@ class DuckDBStore:
             "allowed_regimes": set(json.loads(row[0])),
             "selection_status": status,
             "test_end": row[2],
+            "risk_limits": json.loads(row[3]) if row[3] else {}
         }

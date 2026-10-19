@@ -54,6 +54,87 @@ class RiskEngine:
             checks=checks,
         )
 
+    def apply_regime_limits(
+        self,
+        proposal: TradeProposal,
+        features: MarketFeatures,
+        regime_limits: Any,
+    ) -> RiskDecision:
+        """Apply point-in-time, regime-specific pre-trade limits."""
+        checks: list[GateResult] = []
+        reasons: list[str] = []
+
+        if not regime_limits.allowed:
+            checks.append(
+                GateResult(
+                    gate="regime_risk_limits",
+                    passed=False,
+                    reason=regime_limits.reason,
+                    details={
+                        "regime": regime_limits.regime,
+                    },
+                )
+            )
+            reasons.append(regime_limits.reason)
+
+            return RiskDecision(
+                approved=False,
+                reasons=reasons,
+                checks=checks,
+            )
+
+        max_lots = max(
+            (leg.lots for leg in proposal.legs),
+            default=0,
+        )
+        lots_ok = (
+            0 < max_lots <= regime_limits.max_lots_per_order
+        )
+
+        checks.append(
+            GateResult(
+                gate="regime_max_lots_per_order",
+                passed=lots_ok,
+                reason=f"max_leg_lots={max_lots}",
+                details={
+                    "max_lots": max_lots,
+                    "limit": regime_limits.max_lots_per_order,
+                },
+            )
+        )
+
+        if not lots_ok:
+            reasons.append("regime_max_lots_exceeded")
+
+        notional = sum(
+            abs(leg.quantity) * features.spot / 10
+            for leg in proposal.legs
+        )
+        notional_ok = (
+            notional <= regime_limits.max_notional_exposure
+        )
+
+        checks.append(
+            GateResult(
+                gate="regime_max_notional_exposure",
+                passed=notional_ok,
+                reason=f"notional={notional:.2f}",
+                details={
+                    "notional": notional,
+                    "limit": regime_limits.max_notional_exposure,
+                },
+            )
+        )
+
+        if not notional_ok:
+            reasons.append("regime_max_notional_exceeded")
+
+        return RiskDecision(
+            approved=not reasons,
+            reasons=reasons,
+            checks=checks,
+        )
+
     def _check_allowed_strategy(
         self,
         proposal: TradeProposal,

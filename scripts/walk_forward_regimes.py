@@ -16,7 +16,9 @@ from nse_quant.research.walk_forward import (
     evaluate_fold,
     summarize_fold_results,
 )
-
+from nse_quant.research.regime_risk_policy import (
+    build_regime_risk_limits,
+)
 
 def parse_date(value: str) -> date:
     return date.fromisoformat(value)
@@ -220,6 +222,22 @@ def main() -> int:
                 f"test_trades={result.test_metrics.get('trades', 0)}"
             )
 
+            training_policy = select_regime_policy(
+                load_outcomes(
+                    result.fold.train_start,
+                    result.fold.train_end,
+                )
+            )
+
+            risk_limits_by_regime = {
+                regime: build_regime_risk_limits(
+                    regime=regime,
+                    policy=training_policy,
+                    base_limits=settings.risk,
+                ).__dict__
+                for regime in training_policy.allowed_regimes
+            }
+
             store.save_regime_policy(
                 policy_id=(
                     f"{args.symbol}:"
@@ -231,12 +249,8 @@ def main() -> int:
                 train_end=result.fold.train_end,
                 test_start=result.fold.test_start,
                 test_end=result.fold.test_end,
-                policy=select_regime_policy(
-                    load_outcomes(
-                        result.fold.train_start,
-                        result.fold.train_end,
-                    )
-                ),
+                policy=training_policy,
+                risk_limits=risk_limits_by_regime,
             )
 
         summary = summarize_fold_results(results)

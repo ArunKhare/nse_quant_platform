@@ -49,7 +49,8 @@ from nse_quant.persistence.repositories import (
 from nse_quant.risk.risk_engine import RiskEngine
 from nse_quant.strategy.exit_engine import ExitEngine
 from nse_quant.strategy.iron_condor import IronCondorMonitor
-
+from nse_quant.research.regime_risk_policy import RegimeRiskLimits, build_regime_risk_limits
+from nse_quant.research.regime_policy import RegimePolicy
 
 class DecisionLoop:
     def __init__(
@@ -99,6 +100,8 @@ class DecisionLoop:
             instrument_token=provider_token,
             as_of=datetime.now(UTC),
         )
+        current_regime = "UNKNOWN"
+        regime_policy: dict[str, Any] | None = None
 
         self.store.write_feature_availability_result(
             gate_result_id=uuid4().hex,
@@ -297,6 +300,7 @@ class DecisionLoop:
             },
         )
 
+
         regime_policy_enforced = (
             self.settings.research.enforce_regime_policy
         )
@@ -312,6 +316,7 @@ class DecisionLoop:
                 if market_regime
                 else "UNKNOWN"
             )
+
 
             regime_policy = self.store.latest_regime_policy(
                 symbol=symbol,
@@ -370,6 +375,39 @@ class DecisionLoop:
                         "persisted_option_rows": persisted_rows,
                     },
                 )
+
+                regime_limits = self._apply_regime_limits(
+                    current_regime=current_regime,
+                    regime_policy=regime_policy,
+                )
+
+                regime_risk_decision = self.risk.apply_regime_limits(
+                    proposal=proposal,
+                    features=features,
+                    regime_limits=regime_limits,
+                )
+
+                self.decisions.save_risk_decision(
+                    self.run_id,
+                    proposal,
+                    regime_risk_decision,
+                )
+
+                if not regime_risk_decision.approved:
+                    return self._finish_cycle(
+                        status="regime_risk_rejected",
+                        features=features,
+                        data_quality=data_quality,
+                        iv_history=iv_history,
+                        proposal=proposal,
+                        extra={
+                            "proposal_id": proposal.proposal_id,
+                            "reasons": regime_risk_decision.reasons,
+                            "position_outcomes": position_outcomes,
+                            "persisted_option_rows": persisted_rows,
+                        },
+                    )
+
         if (
             self.settings.safety.dry_run
             or not self.settings.safety.trading_enabled
@@ -908,3 +946,61 @@ class DecisionLoop:
             )
 
         return int(self._spot_instrument_token_resolver(symbol))
+
+    def _apply_regime_limits(self, *, current_regime:str, regime_policy:dict[str, Any]| None,) -> RegimeRiskLimits:
+        regime_limits_config = (
+            regime_policy["risk_limits"].get(current_regime)
+            if regime_policy
+            else None
+        )
+
+        if regime_limits_config:
+            regime_limits = RegimeRiskLimits(
+                regime=current_regime,
+                allowed=bool(regime_limits_config.get("allowed", False)),
+                max_lots_per_order=int(
+                    regime_limits_config["max_lots_per_order"]
+                ),
+                max_open_positions=int(
+                    regime_limits_config["max_open_positions"]
+                ),
+                max_notional_exposure=float(
+                    regime_limits_config["max_notional_exposure"]
+                ),
+                max_portfolio_vega=float(
+                    regime_limits_config["max_portfolio_vega"]
+                ),
+                max_daily_loss=float(
+                    regime_limits_config["max_daily_loss"]
+                ),
+                reason=str(
+                    regime_limits_config.get("reason", "CONFIGURED")
+                ),
+            )
+        else:
+            regime_limits = build_regime_risk_limits(
+                regime=current_regime,
+                policy=self._policy_from_lookup(regime_policy),
+                base_limits=self.settings.risk,
+            )
+        return regime_limits
+
+    @staticmethod
+    def _policy_from_lookup(
+        regime_policy: dict[str, Any] | None,
+    ) -> Any:
+
+        if regime_policy is None:
+            return RegimePolicy(
+                allowed_regimes=frozenset(),
+                regime_metrics={},
+                selection_status="INSUFFICIENT_TRAIN_DATA",
+            )
+
+        return RegimePolicy(
+            allowed_regimes=frozenset(
+                regime_policy["allowed_regimes"]
+            ),
+            regime_metrics={},
+            selection_status=regime_policy["selection_status"],
+        )
