@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -320,6 +320,23 @@ class DuckDBStore:
             """
         )
 
+        self.conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS regime_policies (
+                policy_id VARCHAR PRIMARY KEY,
+                symbol VARCHAR,
+                train_start DATE,
+                train_end DATE,
+                test_start DATE,
+                test_end DATE,
+                allowed_regimes JSON,
+                regime_metrics JSON,
+                selection_status VARCHAR,
+                created_at TIMESTAMPTZ
+            )
+            """
+        )
+
     def write_option_stream(
         self,
         run_id: str,
@@ -545,7 +562,7 @@ class DuckDBStore:
         reasons: list[str],
         checks: dict[str, bool],
     ) -> None:
-        import json
+
         self.conn.execute(
             """
             INSERT OR REPLACE INTO gate_results VALUES (
@@ -653,4 +670,84 @@ class DuckDBStore:
             "iv_regime": row[2],
             "regime": row[3],
             "features": json.loads(row[4]) if row[4] else {},
+        }
+    def save_regime_policy(
+        self,
+        *,
+        policy_id: str,
+        symbol: str,
+        train_start: Any,
+        train_end: Any,
+        test_start: Any,
+        test_end: Any,
+        policy: Any,
+    ) -> None:
+        self.conn.execute(
+            """
+            INSERT OR REPLACE INTO regime_policies VALUES (
+                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+            )
+            """,
+            [
+                policy_id,
+                symbol,
+                train_start,
+                train_end,
+                test_start,
+                test_end,
+                json.dumps(sorted(policy.allowed_regimes)),
+                json.dumps(policy.regime_metrics, default=str),
+                policy.selection_status,
+                datetime.now(UTC),
+            ],
+        )
+
+    def latest_regime_policy(
+        self,
+        symbol: str,
+        as_of: datetime,
+    ) -> dict[str, Any] | None:
+        as_of_date = as_of.date() if isinstance(as_of, datetime) else as_of
+
+        row = self.conn.execute(
+            """
+            SELECT
+                allowed_regimes,
+                selection_status,
+                test_end
+            FROM regime_policies
+            WHERE symbol = ?
+              AND test_start <= ?
+              AND test_end >= ?
+            ORDER BY test_start DESC
+            LIMIT 1
+            """,
+            [symbol, as_of_date, as_of_date],
+        ).fetchone()
+
+        if row is not None:
+            status = row[1]
+        else:
+            row = self.conn.execute(
+                """
+                SELECT
+                    allowed_regimes,
+                    selection_status,
+                    test_end
+                FROM regime_policies
+                WHERE symbol = ?
+                  AND test_end < ?
+                ORDER BY test_end DESC
+                LIMIT 1
+                """,
+                [symbol, as_of_date],
+            ).fetchone()
+
+            if row is None:
+                return None
+            status = 'STALE'
+        return {
+            "allowed_regimes": set(json.loads(row[0])),
+            "selection_status": status,
+            "test_end": row[2],
         }

@@ -1,7 +1,6 @@
 from datetime import date, timedelta
 
-import pytest
-
+from nse_quant.research.regime_policy import select_regime_policy
 from nse_quant.research.walk_forward import (
     build_folds,
     evaluate_fold,
@@ -33,7 +32,9 @@ def test_folds_use_future_test_windows() -> None:
     assert second.test_start == second.train_end + timedelta(days=1)
 
 
-def test_insufficient_train_trades_clears_parameters() -> None:
+
+
+def test_insufficient_train_trades_clears_policy() -> None:
     fold = build_folds(
         start_date=date(2025, 1, 1),
         end_date=date(2025, 12, 31),
@@ -45,7 +46,8 @@ def test_insufficient_train_trades_clears_parameters() -> None:
     result = evaluate_fold(
         fold=fold,
         load_decisions=lambda *_: [],
-        select_parameters=lambda decisions: {"allowed_regimes": []},
+        load_outcomes=lambda *_: [],
+        select_policy=select_regime_policy,
         evaluate_parameters=lambda decisions, parameters: {
             "trades": 0,
             "wins": 0,
@@ -55,12 +57,15 @@ def test_insufficient_train_trades_clears_parameters() -> None:
         min_test_trades=5,
     )
 
-    assert result.selected_parameters == {}
+    assert result.selected_parameters["allowed_regimes"] == []
+    assert (
+        result.selected_parameters["selection_status"]
+        == "INSUFFICIENT_TRAIN_TRADES"
+    )
     assert (
         result.train_metrics["selection_status"]
         == "INSUFFICIENT_TRAIN_TRADES"
     )
-
 
 def test_summary_handles_no_usable_folds() -> None:
     summary = summarize_fold_results([])

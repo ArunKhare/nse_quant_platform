@@ -4,20 +4,19 @@ from __future__ import annotations
 
 import argparse
 import json
-from datetime import date, datetime
+from datetime import date
 from typing import Any
+
 from nse_quant.core.settings import get_settings
 from nse_quant.persistence.duckdb_store import DuckDBStore
+from nse_quant.research.regime_policy import select_regime_policy
+from nse_quant.research.trade_outcomes import load_trade_outcomes, summarize_outcomes
 from nse_quant.research.walk_forward import (
     build_folds,
     evaluate_fold,
     summarize_fold_results,
 )
 
-from nse_quant.research.trade_outcomes import (
-    load_trade_outcomes,
-    summarize_outcomes,
-)
 
 def parse_date(value: str) -> date:
     return date.fromisoformat(value)
@@ -91,22 +90,6 @@ def load_decisions_factory(store: DuckDBStore, symbol: str):
     return load_decisions
 
 
-def select_parameters(decisions: list[dict[str, Any]]) -> dict[str, Any]:
-    """Placeholder for future strategy calibration.
-
-    Keep this deterministic and train-only. Do not inspect test decisions.
-    """
-    regimes = {
-        decision["regime"]
-        for decision in decisions
-        if decision.get("proposal_id")
-    }
-
-    return {
-        "allowed_regimes": sorted(regimes),
-    }
-
-
 def evaluate_parameters(
     decisions: list[dict[str, Any]],
     parameters: dict[str, Any],
@@ -172,6 +155,20 @@ def evaluate_parameters_factory(store, symbol: str):
 
     return evaluate_parameters
 
+def load_outcomes_factory(store: DuckDBStore, symbol: str):
+    def load_outcomes(
+        start_date: date,
+        end_date: date,
+    ) -> list[Any]:
+        return load_trade_outcomes(
+            store.conn,
+            symbol=symbol,
+            start_date=start_date,
+            end_date=end_date,
+        )
+
+    return load_outcomes
+
 def main() -> int:
     args = parse_args()
     settings = get_settings()
@@ -180,6 +177,8 @@ def main() -> int:
         store,
         args.symbol,
         )
+    load_outcomes = load_outcomes_factory(store, args.symbol)
+
     try:
         folds = build_folds(
             start_date=parse_date(args.start),
@@ -200,7 +199,8 @@ def main() -> int:
             result = evaluate_fold(
                 fold=fold,
                 load_decisions=load_decisions,
-                select_parameters=select_parameters,
+                load_outcomes=load_outcomes,
+                select_policy=select_regime_policy,
                 evaluate_parameters=evaluate_parameters,
                 min_train_trades=(
                     settings.walk_forward.min_train_trades
@@ -218,6 +218,25 @@ def main() -> int:
                 f"test={result.fold.test_start}..{result.fold.test_end} "
                 f"train_trades={result.train_metrics.get('trades', 0)} "
                 f"test_trades={result.test_metrics.get('trades', 0)}"
+            )
+
+            store.save_regime_policy(
+                policy_id=(
+                    f"{args.symbol}:"
+                    f"{result.fold.test_start.isoformat()}:"
+                    f"{result.fold.test_end.isoformat()}"
+                ),
+                symbol=args.symbol,
+                train_start=result.fold.train_start,
+                train_end=result.fold.train_end,
+                test_start=result.fold.test_start,
+                test_end=result.fold.test_end,
+                policy=select_regime_policy(
+                    load_outcomes(
+                        result.fold.train_start,
+                        result.fold.train_end,
+                    )
+                ),
             )
 
         summary = summarize_fold_results(results)

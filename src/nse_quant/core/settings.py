@@ -175,6 +175,7 @@ class TradingCalendarSettings(BaseModel):
 
 class ResearchSettings(BaseModel):
     enforce_feature_availability: bool = True
+    enforce_regime_policy: bool = True
     min_history_observations: int = 1
 
 class WalkForwardSettings(BaseModel):

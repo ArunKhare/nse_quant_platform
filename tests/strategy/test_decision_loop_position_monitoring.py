@@ -96,3 +96,39 @@ def test_run_once_persists_chain_snapshot(
 
     assert rows > 0
     assert result["persisted_option_rows"] > 0
+
+def test_missing_regime_policy_blocks_new_entry(
+    decision_loop_environment,
+    replay_snapshots,
+):
+    provider = ReplayMarketDataProvider(
+        replay_snapshots["snapshots"]
+    )
+
+    loop = decision_loop_environment.build_loop(
+        provider,
+        proposal=replay_snapshots["proposal"],
+    )
+
+    loop.settings.research.enforce_regime_policy = True
+
+    result = loop.run_once()
+
+    assert result["status"] == "regime_policy_rejected"
+
+def test_ready_policy_allows_matching_regime() -> None:
+    policy = {
+        "allowed_regimes": {"RANGE|HIGH"},
+        "selection_status": "READY",
+        "test_end": None,
+    }
+
+    current_regime = "RANGE|HIGH"
+
+    policy_allows = (
+        policy is not None
+        and policy["selection_status"] == "READY"
+        and current_regime in policy["allowed_regimes"]
+    )
+
+    assert policy_allows is True

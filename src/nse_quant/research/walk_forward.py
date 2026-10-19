@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import date, timedelta
-from typing import Any, Callable
+from typing import Any
+
+from nse_quant.research.regime_policy import select_regime_policy
 
 
 @dataclass(frozen=True)
@@ -72,22 +75,16 @@ def build_folds(
 def evaluate_fold(
     *,
     fold: WalkForwardFold,
-    load_decisions: Callable[
-        [date, date],
-        list[dict[str, Any]],
-    ],
-    select_parameters: Callable[
-        [list[dict[str, Any]]],
-        dict[str, Any],
-    ],
+    load_decisions: Callable[[date, date], list[dict[str, Any]]],
+    load_outcomes: Callable[[date, date], list[Any]],
+    select_policy: Callable[[list[Any]], Any],
     evaluate_parameters: Callable[
-        [list[dict[str, Any]], dict[str, Any]],
+        [list[dict[str, Any]], Any],
         dict[str, Any],
     ],
     min_train_trades: int,
     min_test_trades: int,
 ) -> FoldResult:
-    """Fit on train decisions, then evaluate unchanged parameters on test."""
     train_decisions = load_decisions(
         fold.train_start,
         fold.train_end,
@@ -97,7 +94,23 @@ def evaluate_fold(
         fold.test_end,
     )
 
-    selected_parameters = select_parameters(train_decisions)
+    train_outcomes = load_outcomes(
+        fold.train_start,
+        fold.train_end,
+    )
+
+    policy = select_policy(train_outcomes)
+
+    if len(train_outcomes) < min_train_trades:
+        policy = select_regime_policy([])
+        policy_status = "INSUFFICIENT_TRAIN_TRADES"
+    else:
+        policy_status = policy.selection_status
+
+    selected_parameters = {
+        "allowed_regimes": sorted(policy.allowed_regimes),
+        "selection_status": policy_status,
+    }
 
     train_metrics = evaluate_parameters(
         train_decisions,
@@ -108,9 +121,7 @@ def evaluate_fold(
         selected_parameters,
     )
 
-    if train_metrics.get("trades", 0) < min_train_trades:
-        selected_parameters = {}
-        train_metrics["selection_status"] = "INSUFFICIENT_TRAIN_TRADES"
+    train_metrics["selection_status"] = policy_status
 
     if test_metrics.get("trades", 0) < min_test_trades:
         test_metrics["evaluation_status"] = "INSUFFICIENT_TEST_TRADES"
@@ -121,7 +132,6 @@ def evaluate_fold(
         test_metrics=test_metrics,
         selected_parameters=selected_parameters,
     )
-
 
 def summarize_fold_results(
     results: list[FoldResult],

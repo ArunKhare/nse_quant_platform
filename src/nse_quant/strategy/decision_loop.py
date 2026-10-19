@@ -13,12 +13,14 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
 from nse_quant.analytics.features import build_features
 from nse_quant.core.models import (
     ChainSnapshot,
+    GateResult,
     LegPosition,
     MarketFeatures,
     OptionQuote,
@@ -295,34 +297,79 @@ class DecisionLoop:
             },
         )
 
-        quote_lookup = self._quote_lookup(snapshot)
-        risk_decision = self.risk.evaluate(
-            proposal,
-            features,
-            quote_lookup,
+        regime_policy_enforced = (
+            self.settings.research.enforce_regime_policy
         )
 
-        self.decisions.save_risk_decision(
-            self.run_id,
-            proposal,
-            risk_decision,
-        )
-
-        if not risk_decision.approved:
-            return self._finish_cycle(
-                status="risk_rejected",
-                features=features,
-                data_quality=data_quality,
-                iv_history=iv_history,
-                proposal=proposal,
-                extra={
-                    "proposal_id": proposal.proposal_id,
-                    "reasons": risk_decision.reasons,
-                    "position_outcomes": position_outcomes,
-                    "persisted_option_rows": persisted_rows,
-                },
+        if regime_policy_enforced:
+            market_regime = self.store.get_market_regime_as_of(
+                symbol=symbol,
+                ts=features.ts,
             )
 
+            current_regime = (
+                market_regime["regime"]
+                if market_regime
+                else "UNKNOWN"
+            )
+
+            regime_policy = self.store.latest_regime_policy(
+                symbol=symbol,
+                as_of=features.ts,
+            )
+
+            allowed_regimes = (
+                regime_policy["allowed_regimes"]
+                if regime_policy
+                else set()
+            )
+
+            policy_allows = (
+                regime_policy is not None
+                and regime_policy["selection_status"] == "READY"
+                and current_regime in allowed_regimes
+            )
+
+            if not policy_allows:
+                self.decisions.save_gate_results(
+                    self.run_id,
+                    proposal,
+                    [
+                        GateResult(
+                            gate="regime_policy",
+                            passed=False,
+                            reason=(
+                                "no_active_policy"
+                                if regime_policy is None
+                                else "regime_not_allowed"
+                            ),
+                            details={
+                                "regime": current_regime,
+                                "allowed_regimes": sorted(
+                                    allowed_regimes
+                                ),
+                                "policy_status": (
+                                    regime_policy["selection_status"]
+                                    if regime_policy
+                                    else None
+                                ),
+                            },
+                        )
+                    ],
+                )
+
+                return self._finish_cycle(
+                    status="regime_policy_rejected",
+                    features=features,
+                    data_quality=data_quality,
+                    iv_history=iv_history,
+                    proposal=proposal,
+                    extra={
+                        "proposal_id": proposal.proposal_id,
+                        "position_outcomes": position_outcomes,
+                        "persisted_option_rows": persisted_rows,
+                    },
+                )
         if (
             self.settings.safety.dry_run
             or not self.settings.safety.trading_enabled
@@ -456,6 +503,11 @@ class DecisionLoop:
                     gate.model_dump(mode="json")
                     for gate in (gates or [])
                 ],
+                "proposal": (
+                    proposal.model_dump(mode="json")
+                    if proposal is not None
+                    else None
+                ),
                 **(extra or {}),
             },
         )

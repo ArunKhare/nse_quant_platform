@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from datetime import date
 from typing import Any
@@ -63,11 +64,8 @@ def load_trade_outcomes(
     outcomes: list[TradeOutcome] = []
 
     for payload_json, regime, _, opened_at, closed_at, pnl in rows:
-        payload = (
-            __import__("json").loads(payload_json)
-            if payload_json
-            else {}
-        )
+        payload = json.loads(payload_json) if payload_json else {}
+
         proposal = payload.get("proposal") or {}
 
         outcomes.append(
