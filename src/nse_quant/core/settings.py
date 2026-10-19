@@ -177,6 +177,28 @@ class ResearchSettings(BaseModel):
     enforce_feature_availability: bool = True
     min_history_observations: int = 1
 
+class WalkForwardSettings(BaseModel):
+    train_days: int = 252
+    test_days: int = 63
+    step_days: int = 63
+    min_train_trades: int = 10
+    min_test_trades: int = 5
+
+    @model_validator(mode="after")
+    def validate_windows(self) -> WalkForwardSettings:
+        if self.train_days <= 0:
+            raise ValueError("train_days must be positive")
+        if self.test_days <= 0:
+            raise ValueError("test_days must be positive")
+        if self.step_days <= 0:
+            raise ValueError("step_days must be positive")
+        if self.step_days > self.test_days:
+            raise ValueError(
+                "step_days must not exceed test_days"
+            )
+
+        return self
+
 def _load_yaml(path: Path) -> dict[str, Any]:
     if not path.exists():
         return {}
@@ -208,6 +230,8 @@ class Settings(BaseSettings):
     secrets: KiteSecrets = Field(default_factory=KiteSecrets)
     trading_calendar: TradingCalendarSettings = Field(default_factory=TradingCalendarSettings)
     research: ResearchSettings = Field(default_factory=ResearchSettings)
+    walk_forward: WalkForwardSettings = Field(default_factory=WalkForwardSettings)
+
     @model_validator(mode="before")
     @classmethod
     def validate_safety_before(cls, data:Any) -> Any:
