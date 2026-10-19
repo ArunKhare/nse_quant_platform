@@ -4,6 +4,10 @@ from pathlib import Path
 from nse_quant.core.models import ChainSnapshot
 
 
+class ReplayExhaustedError(StopIteration):
+    """Raised when a replay has no further snapshots."""
+
+
 class ReplayMarketDataProvider:
     def __init__(
         self,
@@ -34,9 +38,15 @@ class ReplayMarketDataProvider:
         return cls(snapshots)
 
     def get_chain_snapshot(self) -> ChainSnapshot:
+        if self._index >= len(self._snapshots):
+            raise ReplayExhaustedError(
+                "Replay snapshots exhausted"
+            )
+
         snapshot = self._snapshots[self._index]
-
-        if self._index < len(self._snapshots) - 1:
-            self._index += 1
-
+        self._index += 1
         return snapshot
+
+    @property
+    def remaining(self) -> int:
+        return max(0, len(self._snapshots) - self._index)

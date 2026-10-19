@@ -8,9 +8,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from nse_quant.core.settings import get_settings
 from nse_quant.persistence.duckdb_store import DuckDBStore
-
 
 DEFAULT_OUTPUT = Path("data/active_regime_policy.json")
 
@@ -117,7 +115,6 @@ def write_json_atomically(
 
 def main() -> int:
     args = parse_args()
-    settings = get_settings()
     as_of = parse_as_of(args.as_of)
 
     store = DuckDBStore()

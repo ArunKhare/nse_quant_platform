@@ -10,15 +10,16 @@ from typing import Any
 from nse_quant.core.settings import get_settings
 from nse_quant.persistence.duckdb_store import DuckDBStore
 from nse_quant.research.regime_policy import select_regime_policy
+from nse_quant.research.regime_risk_policy import (
+    build_regime_risk_limits,
+)
 from nse_quant.research.trade_outcomes import load_trade_outcomes, summarize_outcomes
 from nse_quant.research.walk_forward import (
     build_folds,
     evaluate_fold,
     summarize_fold_results,
 )
-from nse_quant.research.regime_risk_policy import (
-    build_regime_risk_limits,
-)
+
 
 def parse_date(value: str) -> date:
     return date.fromisoformat(value)

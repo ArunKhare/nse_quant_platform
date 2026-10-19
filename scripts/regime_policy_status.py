@@ -8,8 +8,6 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from nse_quant.persistence.duckdb_store import DuckDBStore
-
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(

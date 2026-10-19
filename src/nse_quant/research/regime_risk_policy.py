@@ -6,7 +6,6 @@ from dataclasses import dataclass
 from typing import Any
 
 from nse_quant.research.regime_policy import RegimePolicy
-from nse_quant.research.trade_outcomes import TradeOutcome
 
 
 @dataclass(frozen=True)

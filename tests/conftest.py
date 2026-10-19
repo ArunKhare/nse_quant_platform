@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
-from nse_quant.core.settings import get_settings
+
 import pandas as pd
 import pytest
 
@@ -24,7 +24,6 @@ from nse_quant.market_data.replay_provider import (
 )
 from nse_quant.persistence.duckdb_store import DuckDBStore
 from nse_quant.strategy.decision_loop import DecisionLoop
-
 
 
 @pytest.fixture

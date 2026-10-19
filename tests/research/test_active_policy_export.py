@@ -1,5 +1,4 @@
 from datetime import UTC, datetime
-from pathlib import Path
 
 from scripts.export_active_policy import build_active_policy
 

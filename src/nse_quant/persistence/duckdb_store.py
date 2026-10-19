@@ -13,6 +13,7 @@ import pandas as pd
 from nse_quant.core.models import ChainSnapshot
 from nse_quant.core.settings import get_settings
 
+
 def _as_json_object(value: Any) -> Any:
     """Normalize DuckDB JSON values that may be strings or parsed objects."""
     if value is None or value == "":
@@ -795,7 +796,7 @@ class DuckDBStore:
                 if isinstance(allowed_regimes, list)
                 else []
             ),
-            "selection_status": row[2],
+            "selection_status": status,
             "test_end": row[3],
             "risk_limits": (
                 risk_limits

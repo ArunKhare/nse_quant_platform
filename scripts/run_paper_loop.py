@@ -17,7 +17,7 @@ from nse_quant.execution.broker import PaperBroker
 from nse_quant.features.feature_gates import SpotFeatureGate
 from nse_quant.integrations.kite_session import get_cached_kite
 from nse_quant.market_data.kite_provider import KiteMarketDataProvider
-from nse_quant.market_data.replay_provider import ReplayMarketDataProvider
+from nse_quant.market_data.replay_provider import ReplayExhaustedError, ReplayMarketDataProvider
 from nse_quant.ops.kill_switch import KillSwitch
 from nse_quant.ops.notifier import Notifier, NullNotifier
 from nse_quant.persistence.duckdb_store import DuckDBStore
@@ -237,6 +237,9 @@ def main() -> int:
             try:
                 result = loop.run_once()
                 print(result)
+            except ReplayExhaustedError:
+                print("Replay exhausted. Paper loop stopped.")
+                break
             except Exception as exc: #noqa:BLE001
                 result = {
                     "status": "loop_error",
