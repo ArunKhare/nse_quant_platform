@@ -13,6 +13,18 @@ import pandas as pd
 from nse_quant.core.models import ChainSnapshot
 from nse_quant.core.settings import get_settings
 
+def _as_json_object(value: Any) -> Any:
+    """Normalize DuckDB JSON values that may be strings or parsed objects."""
+    if value is None or value == "":
+        return {}
+
+    if isinstance(value, (dict, list, set)):
+        return value
+
+    try:
+        return json.loads(value)
+    except (TypeError, json.JSONDecodeError):
+        return {}
 
 class DuckDBStore:
     """Owns the DuckDB connection and schema."""
@@ -338,6 +350,22 @@ class DuckDBStore:
             """
         )
 
+        regime_policy_columns = {
+            row[1]
+            for row in self.conn.execute(
+                """
+                PRAGMA table_info('regime_policies')
+                """
+            ).fetchall()
+        }
+
+        if "risk_limits" not in regime_policy_columns:
+            self.conn.execute(
+                """
+                ALTER TABLE regime_policies
+                ADD COLUMN risk_limits JSON
+                """
+            )
     def write_option_stream(
         self,
         run_id: str,
@@ -700,8 +728,8 @@ class DuckDBStore:
                 json.dumps(sorted(policy.allowed_regimes)),
                 json.dumps(policy.regime_metrics, default=str),
                 policy.selection_status,
-                json.dumps(risk_limits or {}, default=str),
                 datetime.now(UTC),
+                json.dumps(risk_limits or {}, default=str),
             ],
         )
 
@@ -715,6 +743,7 @@ class DuckDBStore:
         row = self.conn.execute(
             """
             SELECT
+                policy_id,
                 allowed_regimes,
                 selection_status,
                 test_end,
@@ -735,6 +764,7 @@ class DuckDBStore:
             row = self.conn.execute(
                 """
                 SELECT
+                    policy_id,
                     allowed_regimes,
                     selection_status,
                     test_end,
@@ -751,9 +781,25 @@ class DuckDBStore:
             if row is None:
                 return None
             status = 'STALE'
+
+        allowed_regimes = _as_json_object(row[1])
+        risk_limits = _as_json_object(row[4])
+
+        if isinstance(allowed_regimes, str):
+            allowed_regimes = _as_json_object(allowed_regimes)
+
         return {
-            "allowed_regimes": set(json.loads(row[0])),
-            "selection_status": status,
-            "test_end": row[2],
-            "risk_limits": json.loads(row[3]) if row[3] else {}
+            "policy_id": row[0],
+            "allowed_regimes": set(
+                allowed_regimes
+                if isinstance(allowed_regimes, list)
+                else []
+            ),
+            "selection_status": row[2],
+            "test_end": row[3],
+            "risk_limits": (
+                risk_limits
+                if isinstance(risk_limits, dict)
+                else {}
+            ),
         }
