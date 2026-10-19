@@ -6,6 +6,7 @@ from nse_quant.core.models import (
     OptionQuote,
     OptionType,
 )
+from nse_quant.core.settings import get_settings
 from nse_quant.execution.broker import PaperBroker
 from nse_quant.persistence.duckdb_store import DuckDBStore
 from nse_quant.strategy.decision_loop import DecisionLoop
@@ -60,12 +61,17 @@ def test_decision_loop_persists_feature_and_decision(
 ):
     store = DuckDBStore(tmp_path / "loop.duckdb")
     seed_spot_features(store)
+    settings= get_settings()
+    settings.research.enforce_feature_availability = False
+    live_snapshot_path = tmp_path / "live_snapshot.json"
     loop = DecisionLoop(
         store=store,
         provider=SyntheticProvider(),
         broker=PaperBroker(),
         run_id="test-run",
+        settings=settings,
         spot_instrument_token_resolver=lambda symbol: 256265,
+        live_snapshot_path=live_snapshot_path,
     )
     try:
         result = loop.run_once()

@@ -298,6 +298,28 @@ class DuckDBStore:
             """
         )
 
+        self.conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS market_regimes (
+                symbol VARCHAR,
+                ts TIMESTAMPTZ,
+                trend_regime VARCHAR,
+                volatility_regime VARCHAR,
+                iv_regime VARCHAR,
+                regime VARCHAR,
+                features JSON,
+                PRIMARY KEY (symbol, ts)
+            )
+            """
+        )
+
+        self.conn.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_market_regimes_symbol_ts
+            ON market_regimes (symbol, ts)
+            """
+        )
+
     def write_option_stream(
         self,
         run_id: str,
@@ -570,3 +592,65 @@ class DuckDBStore:
                 json.dumps(checks, default=str),
             ],
         )
+
+    def write_market_regime(
+        self,
+        *,
+        symbol: str,
+        ts: datetime,
+        trend_regime: str,
+        volatility_regime: str,
+        iv_regime: str,
+        regime: str,
+        features: dict[str, Any],
+    ) -> None:
+
+        self.conn.execute(
+            """
+            INSERT OR REPLACE INTO market_regimes VALUES (
+                ?, ?, ?, ?, ?, ?, ?
+            )
+            """,
+            [
+                symbol,
+                ts,
+                trend_regime,
+                volatility_regime,
+                iv_regime,
+                regime,
+                json.dumps(features, default=str),
+            ],
+        )
+
+    def get_market_regime_as_of(
+        self,
+        symbol: str,
+        ts: datetime,
+    ) -> dict[str, Any] | None:
+        row = self.conn.execute(
+            """
+            SELECT
+                trend_regime,
+                volatility_regime,
+                iv_regime,
+                regime,
+                features
+            FROM market_regimes
+            WHERE symbol = ?
+              AND ts <= ?
+            ORDER BY ts DESC
+            LIMIT 1
+            """,
+            [symbol, ts],
+        ).fetchone()
+
+        if row is None:
+            return None
+
+        return {
+            "trend_regime": row[0],
+            "volatility_regime": row[1],
+            "iv_regime": row[2],
+            "regime": row[3],
+            "features": json.loads(row[4]) if row[4] else {},
+        }

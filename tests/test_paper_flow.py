@@ -6,6 +6,7 @@ from nse_quant.core.models import (
     OptionQuote,
     OptionType,
 )
+from nse_quant.core.settings import get_settings
 from nse_quant.execution.broker import PaperBroker
 from nse_quant.persistence.duckdb_store import DuckDBStore
 from nse_quant.strategy.decision_loop import DecisionLoop
@@ -56,6 +57,7 @@ class SyntheticProvider:
 
 def test_paper_flow_persists_full_lifecycle(tmp_path, seed_spot_features):
     store = DuckDBStore(tmp_path / "paper-flow.duckdb")
+    live_snapshot_path = tmp_path / "live_snapshot.json"
     seed_spot_features(store)
     broker = PaperBroker()
 
@@ -64,7 +66,9 @@ def test_paper_flow_persists_full_lifecycle(tmp_path, seed_spot_features):
         provider=SyntheticProvider(),
         broker=broker,
         run_id="paper-flow-test",
+        settings=get_settings(),
         spot_instrument_token_resolver=lambda symbol: 256265,
+        live_snapshot_path=live_snapshot_path,
 
     )
 
@@ -123,6 +127,7 @@ def test_paper_flow_persists_full_lifecycle(tmp_path, seed_spot_features):
 
 def test_dry_run_does_not_create_paper_order(tmp_path, seed_spot_features):
     store = DuckDBStore(tmp_path / "dry-run.duckdb")
+    live_snapshot_path = tmp_path / "live_snapshot.json"
     seed_spot_features(store)
     broker = PaperBroker()
 
@@ -131,7 +136,9 @@ def test_dry_run_does_not_create_paper_order(tmp_path, seed_spot_features):
         provider=SyntheticProvider(),
         broker=broker,
         run_id="dry-run-test",
+        settings=get_settings(),
         spot_instrument_token_resolver=lambda symbol: 256265,
+        live_snapshot_path=live_snapshot_path,
     )
 
     result = loop.run_once()

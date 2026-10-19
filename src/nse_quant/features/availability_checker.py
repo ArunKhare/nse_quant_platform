@@ -7,10 +7,10 @@ from typing import Any
 
 from nse_quant.features.availability import (
     CORE_1M_REQUIREMENTS,
-    FeatureAvailability,
-    FeatureAvailabilityReport,
     HTF_REQUIREMENTS,
     IV_REQUIREMENTS,
+    FeatureAvailability,
+    FeatureAvailabilityReport,
 )
 
 
@@ -74,9 +74,7 @@ class FeatureAvailabilityChecker:
         elif (
             htf_status == FeatureAvailability.WARMING_UP
             or iv_status == FeatureAvailability.WARMING_UP
-        ):
-            overall_status = FeatureAvailability.WARMING_UP
-        elif (
+        ) or (
             htf_status == FeatureAvailability.UNAVAILABLE
             or iv_status == FeatureAvailability.UNAVAILABLE
         ):

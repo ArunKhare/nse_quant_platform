@@ -31,6 +31,10 @@ from nse_quant.core.models import (
 )
 from nse_quant.core.settings import get_settings
 from nse_quant.execution.broker import PaperBroker
+from nse_quant.features.availability import FeatureAvailability
+from nse_quant.features.availability_checker import (
+    FeatureAvailabilityChecker,
+)
 from nse_quant.features.feature_gates import SpotFeatureGate
 from nse_quant.features.feature_service import SpotFeatureService
 from nse_quant.features.feature_store import FeatureStore
@@ -43,10 +47,7 @@ from nse_quant.persistence.repositories import (
 from nse_quant.risk.risk_engine import RiskEngine
 from nse_quant.strategy.exit_engine import ExitEngine
 from nse_quant.strategy.iron_condor import IronCondorMonitor
-from nse_quant.features.availability import FeatureAvailability
-from nse_quant.features.availability_checker import (
-    FeatureAvailabilityChecker,
-)
+
 
 class DecisionLoop:
     def __init__(
@@ -57,7 +58,8 @@ class DecisionLoop:
         run_id: str,
         settings: Any | None = None,
         spot_instrument_token_resolver: Callable[[str], int] | None = None,
-        feature_gate: SpotFeatureGate | None = None
+        feature_gate: SpotFeatureGate | None = None,
+        live_snapshot_path: Path | None = None,
     ) -> None:
         self.settings = settings or get_settings()
         self.store = store
@@ -79,16 +81,17 @@ class DecisionLoop:
             max_age_seconds=self.settings.runtime.stale_seconds,
         )
         self.feature_gate = feature_gate or SpotFeatureGate(max_age_seconds=self.settings.runtime.stale_seconds,)
-        self.spot_instrument_token_resolver = (
+        self._spot_instrument_token_resolver = (
             spot_instrument_token_resolver
             or self._default_spot_token_resolver
         )
         self.availability_checker = FeatureAvailabilityChecker(store)
+        self._live_snapshot_path = live_snapshot_path
 
     def run_once(self) -> dict[str, Any]:
         symbol = self.settings.market_data.default_symbol
         spot_feature_snapshot = self.feature_service.latest(symbol)
-        provider_token = self.provider.resolve_spot_instrument_token(symbol)
+        provider_token = self._resolve_spot_instrument_token(symbol)
         availability = self.availability_checker.evaluate(
             symbol=symbol,
             instrument_token=provider_token,
@@ -110,10 +113,19 @@ class DecisionLoop:
                 "overall_status": availability.overall_status.value,
                 "observations": availability.observations,
                 "missing": availability.missing,
+                "enforced": (
+                    self.settings.research.enforce_feature_availability
+                ),
             },
         )
 
-        if availability.core_status != FeatureAvailability.READY:
+        availability_enforced = (
+            self.settings.research.enforce_feature_availability
+        )
+
+        if (
+            availability_enforced
+            and availability.core_status != FeatureAvailability.READY):
             return {
                 "status": "feature_availability_rejected",
                 "symbol": symbol,
@@ -122,10 +134,16 @@ class DecisionLoop:
                     "core_status": availability.core_status.value,
                     "htf_status": availability.htf_status.value,
                     "iv_status": availability.iv_status.value,
+                    "overall_status": (
+                        availability.overall_status.value
+                    ),
                 },
             }
 
-        if not availability.can_evaluate_new_entries:
+        if (
+            availability_enforced
+            and not availability.can_evaluate_new_entries
+        ):
             open_positions = self.positions.get_open_strategy_positions()
 
             if not open_positions:
@@ -399,7 +417,7 @@ class DecisionLoop:
 
     def _build_features(self,snapshot: ChainSnapshot,) -> tuple[MarketFeatures, int]:
         iv_history = self.store.latest_iv_history(snapshot.underlying)
-        instrument_token = self.spot_instrument_token_resolver(
+        instrument_token = self._spot_instrument_token_resolver(
             snapshot.underlying
         )
         spot_history = self.store.latest_spot_closes(
@@ -450,7 +468,8 @@ class DecisionLoop:
                 loop_status=status,
                 data_quality=data_quality,
                 iv_history=iv_history,
-            )
+            ),
+            snapshot_path=self._live_snapshot_path,
         )
 
         return {
@@ -603,7 +622,8 @@ class DecisionLoop:
             build_snapshot(
                 kill_switch_active=True,
                 loop_status="kill_switch_active",
-            )
+            ),
+            snapshot_path=self._live_snapshot_path
         )
 
         self.decisions.save_system_event(
@@ -811,7 +831,7 @@ class DecisionLoop:
             snapshot,
         )
 
-        features, iv_history_count = self._build_features(snapshot)
+        features, _iv_history_count = self._build_features(snapshot)
         quality = self.quality_checker.assess(snapshot)
 
         position_outcomes = self._monitor_open_positions(
@@ -827,3 +847,12 @@ class DecisionLoop:
             "position_outcomes": position_outcomes,
             "persisted_option_rows": persisted_rows,
         }
+
+    def _resolve_spot_instrument_token(self, symbol: str) -> int:
+        if self._spot_instrument_token_resolver is None:
+            raise ValueError(
+                "A spot_instrument_token_resolver is required to evaluate "
+                "feature availability"
+            )
+
+        return int(self._spot_instrument_token_resolver(symbol))

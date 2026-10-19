@@ -173,6 +173,10 @@ class TradingCalendarSettings(BaseModel):
         default_factory=list
     )
 
+class ResearchSettings(BaseModel):
+    enforce_feature_availability: bool = True
+    min_history_observations: int = 1
+
 def _load_yaml(path: Path) -> dict[str, Any]:
     if not path.exists():
         return {}
@@ -203,7 +207,7 @@ class Settings(BaseSettings):
     notifier: NotifierSettings = Field(default_factory=NotifierSettings)
     secrets: KiteSecrets = Field(default_factory=KiteSecrets)
     trading_calendar: TradingCalendarSettings = Field(default_factory=TradingCalendarSettings)
-
+    research: ResearchSettings = Field(default_factory=ResearchSettings)
     @model_validator(mode="before")
     @classmethod
     def validate_safety_before(cls, data:Any) -> Any:

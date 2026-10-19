@@ -10,7 +10,6 @@ from nse_quant.integrations.kite_session import get_cached_kite
 from nse_quant.market_data.kite_provider import KiteMarketDataProvider
 from nse_quant.persistence.duckdb_store import DuckDBStore
 
-
 KITE_MAX_RANGE_DAYS = {
     "1m": 60,
     "15m": 200,

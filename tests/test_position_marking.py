@@ -6,6 +6,7 @@ from nse_quant.core.models import (
     OptionQuote,
     OptionType,
 )
+from nse_quant.core.settings import get_settings
 from nse_quant.execution.broker import PaperBroker
 from nse_quant.persistence.duckdb_store import DuckDBStore
 from nse_quant.strategy.decision_loop import DecisionLoop
@@ -55,12 +56,15 @@ class SyntheticProvider:
 
 def test_mid_price_is_used_when_bid_and_ask_are_valid(tmp_path):
     store = DuckDBStore(tmp_path / "marking.duckdb")
+    live_snapshot_path = tmp_path / "live_snapshot.json"
     loop = DecisionLoop(
         store=store,
         provider=SyntheticProvider(),
         broker=PaperBroker(),
         run_id="marking-test",
+        settings=get_settings(),
         spot_instrument_token_resolver=lambda symbol: 256265,
+        live_snapshot_path=live_snapshot_path,
     )
 
     snapshot = loop.provider.get_chain_snapshot()
@@ -73,12 +77,15 @@ def test_mid_price_is_used_when_bid_and_ask_are_valid(tmp_path):
 
 def test_ltp_fallback_when_quotes_invalid(tmp_path):
     store = DuckDBStore(tmp_path / "marking.duckdb")
+    live_snapshot_path = tmp_path / "live_snapshot.json"
     loop = DecisionLoop(
         store=store,
         provider=SyntheticProvider(),
         broker=PaperBroker(),
         run_id="marking-test",
+        settings= get_settings(),
         spot_instrument_token_resolver=lambda symbol: 256265,
+        live_snapshot_path=live_snapshot_path,
     )
 
     snapshot = loop.provider.get_chain_snapshot()

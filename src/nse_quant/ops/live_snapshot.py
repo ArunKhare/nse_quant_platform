@@ -7,31 +7,33 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-SNAPSHOT_PATH = Path("data/live_snapshot.json")
+DEFAULT_SNAPSHOT_PATH  = Path("data/live_snapshot.json")
 
 
-def write_live_snapshot(payload: dict[str, Any]) -> Path:
+def write_live_snapshot(payload: dict[str, Any], *, snapshot_path: Path | None=None) -> Path:
     """Atomically write the latest UI snapshot."""
-    SNAPSHOT_PATH.parent.mkdir(parents=True, exist_ok=True)
+    target = snapshot_path or DEFAULT_SNAPSHOT_PATH
+    target.parent.mkdir(parents=True, exist_ok=True)
 
-    temporary_path = SNAPSHOT_PATH.with_suffix(".json.tmp")
+    temporary_path = target.with_suffix(".json.tmp")
 
     temporary_path.write_text(
         json.dumps(payload, default=str, separators=(",", ":")),
         encoding="utf-8",
     )
 
-    temporary_path.replace(SNAPSHOT_PATH)
-    return SNAPSHOT_PATH
+    temporary_path.replace(target)
+    return target
 
 
-def read_live_snapshot() -> dict[str, Any]:
+def read_live_snapshot(*, snapshot_path: Path | None = None,) -> dict[str, Any]:
     """Read the latest UI snapshot. Returns an empty dict if unavailable."""
-    if not SNAPSHOT_PATH.exists():
+    target = snapshot_path or DEFAULT_SNAPSHOT_PATH
+    if not target.exists():
         return {}
 
     try:
-        return json.loads(SNAPSHOT_PATH.read_text(encoding="utf-8"))
+        return json.loads(target.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
         return {}
 

@@ -168,9 +168,10 @@ def decision_loop_environment(
     test_store,
     monkeypatch,
     seed_spot_features,
+    tmp_path,
 ):
     seed_spot_features(test_store)
-
+    live_snapshot_path = tmp_path / "live_snapshot.json"
     class Environment:
         def build_loop(
             self,
@@ -184,6 +185,7 @@ def decision_loop_environment(
                 run_id="test-run",
                 settings=test_settings,
                 spot_instrument_token_resolver=lambda symbol: 256265,
+                live_snapshot_path=live_snapshot_path,
             )
 
             if proposal is not None:
