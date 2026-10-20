@@ -9,13 +9,13 @@ from __future__ import annotations
 import argparse
 import subprocess
 import sys
-from datetime import UTC, datetime
+from datetime import UTC, datetime, date
 from pathlib import Path
 
 from nse_quant.core.settings import get_settings
 from nse_quant.ops.notifier import Notifier, NullNotifier
 from nse_quant.persistence.duckdb_store import DuckDBStore
-from nse_quant.core.market_calendar import is_trading_day
+from nse_quant.core.market_calendar import is_nse_trading_day
 from nse_quant.research.validate_warehouse import validate_file
 
 def parse_args() -> argparse.Namespace:
@@ -158,10 +158,22 @@ def main() -> int:
     )
 
     notifier = (
-        Notifier()
-        if settings.notifier.enabled
-        else NullNotifier()
-    )
+            Notifier()
+            if settings.notifier.enabled
+            else NullNotifier()
+        )
+
+    trade_day = date.fromisoformat(trade_date)
+
+    if not is_nse_trading_day(trade_day):
+        message = (
+            "NSE Quant EOD skipped: market holiday "
+            f"({trade_date})."
+        )
+
+        print(message)
+        notifier.send(message)
+        return 0
 
     try:
         run_command(

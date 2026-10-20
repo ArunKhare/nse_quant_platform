@@ -589,7 +589,7 @@ class DuckDBStore:
 
         return [float(row[0]) for row in rows if row[0] is not None]
 
-        def export_parquet(self, output_dir: str | Path, date_str: str, underlying: str = "NIFTY", ) -> Path:
+    def export_parquet(self, output_dir: str | Path, date_str: str, underlying: str = "NIFTY", ) -> Path:
         """Export one trade date's option stream to a partitioned Parquet file."""
         parsed_date = date.fromisoformat(date_str)
         normalized_date = parsed_date.isoformat()
