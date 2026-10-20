@@ -1003,3 +1003,31 @@ class DuckDBStore:
             params.append(expiry)
 
         return self.conn.execute(query, params).fetchone()[0]
+
+    def count_aligned_iv_rv_observations(
+        self,
+        *,
+        symbol: str,
+        as_of: datetime,
+    ) -> int:
+        """Count trading dates with both IV and realized-volatility data."""
+        return int(
+            self.conn.execute(
+                """
+                SELECT COUNT(*)
+                FROM (
+                    SELECT
+                        CAST(iv.ts AS DATE) AS trading_date
+                    FROM underlying_iv_observations AS iv
+                    INNER JOIN spot_features AS sf
+                        ON sf.symbol = ?
+                       AND CAST(sf.ts AS DATE) = CAST(iv.ts AS DATE)
+                       AND sf.rv_1m_30 IS NOT NULL
+                    WHERE iv.underlying = ?
+                      AND iv.ts < ?
+                    GROUP BY CAST(iv.ts AS DATE)
+                )
+                """,
+                [symbol, symbol, as_of],
+            ).fetchone()[0]
+        )

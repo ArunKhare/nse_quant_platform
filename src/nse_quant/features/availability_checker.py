@@ -142,14 +142,30 @@ class FeatureAvailabilityChecker:
             ).fetchone()[0]
         )
 
-        return {
-            "iv_observations": iv_observations,
-            "iv_rv_aligned_observations": min(
+        aligned_count = getattr(
+            self._store,
+            "count_aligned_iv_rv_observations",
+            None,
+        )
+
+        if callable(aligned_count):
+            iv_rv_aligned_observations = aligned_count(
+                symbol=symbol,
+                as_of=as_of,
+            )
+        else:
+            iv_rv_aligned_observations = min(
                 iv_observations,
                 self._daily_spot_observation_count(
                     symbol=symbol,
                     as_of=as_of,
                 ),
+            )
+
+        return {
+            "iv_observations": iv_observations,
+            "iv_rv_aligned_observations": int(
+                iv_rv_aligned_observations
             ),
         }
 

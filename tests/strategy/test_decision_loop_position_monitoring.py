@@ -194,4 +194,7 @@ def test_position_closes_on_iv_collapse(
 
     assert outcomes
     assert outcomes[0]["status"] == "closed"
-    assert outcomes[0]["selected_exit_reason"] == "IV_COLLAPSE"
+    assert (
+        outcomes[0]["selected_exit_reason"]
+        == "IV_COLLAPSE"
+    )
