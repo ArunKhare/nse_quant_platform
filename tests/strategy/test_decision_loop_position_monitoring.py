@@ -93,7 +93,10 @@ def test_new_entry_blocked_at_max_open_positions(
     )
 
     first = loop.run_once()
-
+    print(
+    "EXIT SETTINGS:",
+    loop.exit_engine.exit_settings,
+)
     print("FIRST:", first["status"])
     print("FIRST EXIT:", first.get("exit_reason"))
 
@@ -103,14 +106,24 @@ def test_new_entry_blocked_at_max_open_positions(
     assert first["status"] == "paper_filled"
     assert first.get("exit_reason") is None
     assert len(open_after_first) == 1
-
+    print(
+    "SECOND SNAPSHOT:",
+    entry_snapshots["snapshots"][1].quotes[0].iv,
+)
     second = loop.run_once()
-
+    print(
+    "EXIT SETTINGS:",
+    loop.exit_engine.exit_settings,
+)
     print("SECOND:", second["status"])
     print("SECOND OUTCOMES:", second["position_outcomes"])
 
     assert second["status"] == "max_open_positions"
-
+    second_snapshot = entry_snapshots["snapshots"][1]
+    assert any(
+        quote.iv is not None
+        for quote in second_snapshot.quotes
+    )
 
 def test_run_once_persists_chain_snapshot(
     decision_loop_environment,
