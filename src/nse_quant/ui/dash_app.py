@@ -89,6 +89,22 @@ def safety_banner(snapshot: dict[str, Any]) -> html.Div:
     kill_switch_active = bool(snapshot.get("kill_switch_active", False))
     loop_status = snapshot.get("loop_status", "idle")
     quality = snapshot.get("data_quality", {})
+    eligibility = snapshot.get("strategy_eligibility") or {}
+
+    eligibility_passed = eligibility.get("passed")
+    eligibility_reason = eligibility.get("reason")
+
+    if eligibility_passed is True:
+        eligibility_label = "ELIGIBLE"
+        eligibility_color = GREEN
+    elif eligibility_passed is False:
+        eligibility_label = str(
+            eligibility_reason or "REJECTED"
+        ).upper()
+        eligibility_color = RED
+    else:
+        eligibility_label = "UNKNOWN"
+        eligibility_color = AMBER
     trading_color = GREEN if settings.safety.paper_trading else RED
     kill_color = RED if kill_switch_active else GREEN
     loop_color = (
@@ -125,6 +141,11 @@ def safety_banner(snapshot: dict[str, Any]) -> html.Div:
                 loop_color,
             ),
             status_pill(
+                "Strategy eligibility",
+                eligibility_label,
+                eligibility_color,
+            ),
+            status_pill(
                 "Data quality",
                 "OK" if quality.get("is_usable") else "DEGRADED",
                 GREEN if quality.get("is_usable") else AMBER,
@@ -148,6 +169,76 @@ def safety_banner(snapshot: dict[str, Any]) -> html.Div:
         },
     )
 
+def strategy_eligibility_section(
+    snapshot: dict[str, Any],
+) -> html.Div:
+    eligibility = snapshot.get("strategy_eligibility")
+
+    if not eligibility:
+        return empty_state(
+            "No strategy eligibility evaluation available yet."
+        )
+
+    details = eligibility.get("details") or {}
+    reason = eligibility.get("reason", "—")
+    current_regime = details.get("current_regime", "—")
+    regime_source = details.get("regime_source", "—")
+    allowed_regimes = details.get("allowed_regimes") or []
+    iv_rank = details.get("iv_rank")
+
+    regime_list = (
+        html.Ul(
+            [
+                html.Li(str(regime).replace("_", " "))
+                for regime in allowed_regimes
+            ]
+        )
+        if allowed_regimes
+        else empty_state("No allowed regimes configured.")
+    )
+
+    return html.Div(
+        [
+            html.P(
+                [
+                    html.Strong("Decision: "),
+                    "Eligible" if eligibility.get("passed") else "Rejected",
+                ],
+                style={"marginBottom": "8px"},
+            ),
+            html.P(
+                [
+                    html.Strong("Reason: "),
+                    str(reason).replace("_", " "),
+                ],
+                style={"marginBottom": "8px"},
+            ),
+            html.P(
+                [
+                    html.Strong("Current regime: "),
+                    str(current_regime).replace("_", " "),
+                ],
+                style={"marginBottom": "8px"},
+            ),
+            html.P(
+                [
+                    html.Strong("Regime source: "),
+                    str(regime_source).replace("_", " "),
+                ],
+                style={"marginBottom": "12px"},
+            ),
+            html.P(
+                [
+                    html.Strong("IV rank: "),
+                    format_number(iv_rank, 1),
+                ],
+                style={"marginBottom": "12px"},
+            ),
+            html.H3("Allowed regimes"),
+            regime_list,
+        ]
+    )
+
 def data_quality_section(snapshot: dict[str, Any]) -> html.Div:
     quality = snapshot.get("data_quality", {})
 
@@ -156,16 +247,7 @@ def data_quality_section(snapshot: dict[str, Any]) -> html.Div:
 
     if not issues and not warnings:
         return html.Div("Market data quality is healthy.")
-
-    return html.Div(
-        [
-            html.H3("Data-quality issues"),
-            html.Ul([html.Li(issue) for issue in issues]),
-            html.H3("Warnings"),
-            html.Ul([html.Li(warning) for warning in warnings]),
-        ]
-    )
-
+    
 def metric_card(
     label: str,
     value: Any,
@@ -562,6 +644,14 @@ app.layout = html.Div(
                                 "marginLeft": "10px",
                             },
                         ),
+                        html.Div(
+                            id="kill-switch-status",
+                            style={
+                                "marginTop": "8px",
+                                "color": TEXT_MUTED,
+                                "fontSize": "13px",
+                            },
+                        ),
                     ]
                 ),
             ],
@@ -576,6 +666,13 @@ app.layout = html.Div(
         ),
         html.Div(id="safety-banner"),
         html.Div(id="market-metrics"),
+        section_card(
+            "Strategy eligibility",
+            html.Div(
+                id="strategy-eligibility"
+            ),
+            "Latest iron_condor_monitor regime and IV-rank eligibility",
+        ),
         html.Div(id="data-quality"),
         section_card(
             "IV smile",
@@ -620,6 +717,7 @@ app.layout = html.Div(
 @app.callback(
     Output("safety-banner", "children"),
     Output("market-metrics", "children"),
+    Output("strategy-eligibility", "children"),
     Output("data-quality", "children"),
     Output("iv-smile", "figure"),
     Output("market-features", "children"),
@@ -632,6 +730,7 @@ def refresh_dashboard(_n_intervals: int):
     return (
         safety_banner(snapshot),
         market_metric_cards(snapshot),
+        strategy_eligibility_section(snapshot),
         data_quality_section(snapshot),
         iv_smile_figure(snapshot),
         market_features_table(snapshot),

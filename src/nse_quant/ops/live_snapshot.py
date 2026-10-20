@@ -47,6 +47,7 @@ def build_snapshot(
     loop_status: str = "idle",
     data_quality: dict[str, Any] | None = None,
     iv_history: dict[str, Any] | None = None,
+    strategy_eligibility: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     return {
         "updated_at": datetime.now(UTC).isoformat(),
@@ -73,5 +74,6 @@ def build_snapshot(
             "minimum_required": 0,
             "mode": "COLD_START",
         },
+        "strategy_eligibility": strategy_eligibility,
 
     }

@@ -291,7 +291,7 @@ class DecisionLoop:
                 as_of=features.ts,
             )
 
-            effective_regimes, _regime, _source, _policy_status = (
+            effective_regimes, _regime_source, _policy_status = (
                 resolve_effective_regimes(
                     profile,
                     learned_policy=regime_policy,
@@ -597,6 +597,20 @@ class DecisionLoop:
         gates: list[Any] | None = None,
         extra: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
+        eligibility_gate = next(
+            (
+                gate
+                for gate in (gates or [])
+                if getattr(gate, "gate", None) == "strategy_eligibility"
+            ),
+            None,
+        )
+
+        strategy_eligibility = (
+            eligibility_gate.model_dump(mode="json")
+            if eligibility_gate is not None
+            else None
+        )
         self.decisions.save_decision(
             self.run_id,
             status,
@@ -623,6 +637,7 @@ class DecisionLoop:
                 loop_status=status,
                 data_quality=data_quality,
                 iv_history=iv_history,
+                strategy_eligibility=strategy_eligibility,
             ),
             snapshot_path=self._live_snapshot_path,
         )
