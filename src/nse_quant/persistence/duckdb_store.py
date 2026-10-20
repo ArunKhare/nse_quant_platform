@@ -589,22 +589,32 @@ class DuckDBStore:
 
         return [float(row[0]) for row in rows if row[0] is not None]
 
-    def export_parquet(self, output_dir: str | Path, date_str: str) -> Path:
-        """Export one trade date's option stream to a dated Parquet file."""
-        datetime.strptime(date_str, "%Y-%m-%d")
+        def export_parquet(self, output_dir: str | Path, date_str: str, underlying: str = "NIFTY", ) -> Path:
+        """Export one trade date's option stream to a partitioned Parquet file."""
+        parsed_date = date.fromisoformat(date_str)
+        normalized_date = parsed_date.isoformat()
 
-        output = Path(output_dir) / f"option_stream_{date_str}.parquet"
+        warehouse_root = Path(output_dir).resolve()
+        partition_dir = (
+            warehouse_root
+            / f"underlying={underlying}"
+            / f"year={parsed_date.year:04d}"
+            / f"month={parsed_date.month:02d}"
+        )
+
+        output = partition_dir / f"option_stream_{normalized_date}.parquet"
         output.parent.mkdir(parents=True, exist_ok=True)
 
-        output_path = str(output).replace("'", "''")
+        escaped_output_path = str(output).replace("'", "''")
 
         self.conn.execute(
             f"""
             COPY (
                 SELECT *
                 FROM option_stream
-                WHERE CAST(ts AS DATE) = DATE '{date_str}'
-            ) TO '{output_path}' (FORMAT PARQUET)
+                WHERE underlying = '{underlying}'
+                AND CAST(ts AS DATE) = DATE '{normalized_date}'
+            ) TO '{escaped_output_path}' (FORMAT PARQUET)
             """
         )
 
