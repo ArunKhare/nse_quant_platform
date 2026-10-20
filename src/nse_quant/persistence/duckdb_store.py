@@ -1112,3 +1112,83 @@ class DuckDBStore:
             return False
 
         return day.isoformat() not in NSE_HOLIDAYS
+
+    def write_daily_iv_regime(
+        self,
+        *,
+        trade_date: date,
+        underlying: str,
+        iv_level: str,
+        iv_term_regime: str,
+        iv_skew_regime: str,
+        iv_regime: str,
+        metrics: dict[str, Any],
+    ) -> int:
+        """Persist one daily IV regime observation."""
+        self.conn.execute(
+            """
+            INSERT OR REPLACE INTO market_regimes VALUES (
+                ?, ?, ?, ?, ?, ?, ?
+            )
+            """,
+            [
+                underlying,
+                trade_date,
+                "neutral",
+                iv_level,
+                iv_regime,
+                iv_regime,
+                json.dumps(
+                    {
+                        "iv_level": iv_level,
+                        "iv_term_regime": iv_term_regime,
+                        "iv_skew_regime": iv_skew_regime,
+                        **metrics,
+                    },
+                    default=str,
+                ),
+            ],
+        )
+
+        return 1
+
+    def latest_daily_iv_regime(
+        self,
+        *,
+        underlying: str,
+        as_of: date | None = None,
+    ) -> dict[str, Any] | None:
+        """Return the most recent persisted daily IV regime."""
+        as_of = as_of or date.today()
+
+        row = self.conn.execute(
+            """
+            SELECT
+                ts,
+                trend_regime,
+                volatility_regime,
+                iv_regime,
+                features
+            FROM market_regimes
+            WHERE symbol = ?
+              AND CAST(ts AS DATE) <= ?
+            ORDER BY ts DESC
+            LIMIT 1
+            """,
+            [underlying, as_of],
+        ).fetchone()
+
+        if row is None:
+            return None
+
+        return {
+            "trade_date": row[0],
+            "trend_regime": row[1],
+            "volatility_regime": row[2],
+            "iv_regime": row[3],
+            "features": (
+                json.loads(row[4])
+                if row[4]
+                else {}
+            ),
+        }

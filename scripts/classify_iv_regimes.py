@@ -46,6 +46,11 @@ def parse_args() -> argparse.Namespace:
         default="data/research",
     )
 
+    parser.add_argument(
+        "--persist",
+        action="store_true",
+        help="Persist daily IV regimes to market_regimes",
+    )
     return parser.parse_args()
 
 
@@ -101,6 +106,43 @@ def main() -> int:
             daily_report
         )
 
+        if args.persist:
+            persisted = 0
+
+            for _, row in regime_report.iterrows():
+                persisted += store.write_daily_iv_regime(
+                    trade_date=row["trade_date"],
+                    underlying=args.underlying,
+                    iv_level=row["iv_level"],
+                    iv_term_regime=row["iv_term_regime"],
+                    iv_skew_regime=row["iv_skew_regime"],
+                    iv_regime=row["iv_regime"],
+                    metrics={
+                        "median_spot": float(
+                            row["median_spot"]
+                        ),
+                        "median_atm_iv_near": float(
+                            row["median_atm_iv_near"]
+                        ),
+                        "median_atm_iv_next": float(
+                            row["median_atm_iv_next"]
+                        ),
+                        "median_term_structure": float(
+                            row["median_term_structure"]
+                        ),
+                        "median_put_call_skew": float(
+                            row["median_put_call_skew"]
+                        ),
+                        "median_risk_reversal": float(
+                            row["median_risk_reversal"]
+                        ),
+                        "median_butterfly": float(
+                            row["median_butterfly"]
+                        ),
+                    },
+                )
+
+            print(f"Persisted IV regimes: {persisted}")
         output_path = save_regime_report(
             regime_report,
             output_dir=args.output_dir,
