@@ -31,6 +31,8 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
+  "pylint>=3.0.0",
+  "pylint-pydantic>=0.4.0",
   "pytest>=8.3.0",
   "ruff>=0.6.0",
 ]

@@ -2,5 +2,9 @@
     "python.terminal.activateEnvInCurrentTerminal": true,
     "python.analysis.extraPaths": [
         "./src"
+    ],
+    "pylint.args": [
+        "--load-plugins",
+        "pylint_pydantic"
     ]
 }
