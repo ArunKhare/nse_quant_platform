@@ -120,3 +120,4 @@ def test_iv_is_computed_for_atm_call():
 
     assert iv is not None
     assert 0.01 < iv < 5.0
+

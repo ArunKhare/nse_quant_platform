@@ -167,3 +167,31 @@ def test_ready_policy_allows_matching_regime() -> None:
     )
 
     assert policy_allows is True
+
+def test_position_closes_on_iv_collapse(
+    decision_loop_environment,
+    entry_snapshots,
+    _seed_candles,
+    test_store,
+):
+    _seed_candles(test_store, 256265, "NIFTY", 60, "1m")
+    _seed_candles(test_store, 256265, "NIFTY", 60, "15m")
+    _seed_candles(test_store, 256265, "NIFTY", 60, "60m")
+
+    provider = ReplayMarketDataProvider(entry_snapshots["snapshots"])
+    loop = decision_loop_environment.build_loop(
+        provider,
+        proposal=entry_snapshots["proposal"],
+    )
+
+    loop.settings.research.enforce_feature_availability = False
+    loop.settings.research.enforce_regime_policy = False
+
+    loop.run_once()
+    result = loop.run_once()
+
+    outcomes = result["position_outcomes"]
+
+    assert outcomes
+    assert outcomes[0]["status"] == "closed"
+    assert outcomes[0]["selected_exit_reason"] == "IV_COLLAPSE"
