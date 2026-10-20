@@ -47,6 +47,9 @@ from nse_quant.persistence.repositories import (
     PositionRepository,
 )
 from nse_quant.research.regime_policy import RegimePolicy
+from nse_quant.research.regime_policy_evaluation import (
+    resolve_effective_regimes,
+)
 from nse_quant.research.regime_risk_policy import RegimeRiskLimits, build_regime_risk_limits
 from nse_quant.risk.risk_engine import RiskEngine
 from nse_quant.strategy.exit_engine import ExitEngine
@@ -74,8 +77,15 @@ class DecisionLoop:
         self.feature_store = FeatureStore(store.conn)
         self.decisions = DecisionRepository(store.conn)
         self.positions = PositionRepository(store.conn)
-        self.risk = RiskEngine(store.conn, self.settings, self.positions)
-        self.exit_engine = ExitEngine(self.settings)
+        self.risk = RiskEngine(
+            store.conn,
+            self.settings,
+            self.positions,
+            risk_settings=self.settings.get_effective_risk_settings("iron_condor_monitor"),
+        )
+        self.exit_engine = ExitEngine(
+            self.settings.get_effective_exit_settings("iron_condor_monitor")
+            )
         self.strategy = IronCondorMonitor(self.settings)
         self.quality_checker = DataQualityChecker(
             stale_seconds=self.settings.runtime.stale_seconds,
@@ -92,6 +102,7 @@ class DecisionLoop:
         self.availability_checker = FeatureAvailabilityChecker(store)
         self._live_snapshot_path = live_snapshot_path
 
+
     def run_once(self) -> dict[str, Any]:
         symbol = self.settings.market_data.default_symbol
         spot_feature_snapshot = self.feature_service.latest(symbol)
@@ -101,6 +112,7 @@ class DecisionLoop:
             instrument_token=provider_token,
             as_of=datetime.now(UTC),
         )
+
         current_regime = "UNKNOWN"
         regime_policy: dict[str, Any] | None = None
 
@@ -250,9 +262,12 @@ class DecisionLoop:
             ),
         }
 
+        profile = self.settings.get_strategy_profile(
+            "iron_condor_monitor"
+        )
         open_positions = self.positions.get_open_strategy_positions()
-
-        if len(open_positions) >= self.settings.risk.max_open_positions:
+        effective_risk = self.settings.get_effective_risk_settings("iron_condor_monitor")
+        if len(open_positions) >= effective_risk.max_open_positions:
             return self._finish_cycle(
                 status="max_open_positions",
                 features=features,
@@ -264,6 +279,57 @@ class DecisionLoop:
                     "persisted_option_rows": persisted_rows,
                 },
             )
+
+        if self.settings.research.enforce_strategy_eligibility:
+            market_regime = self.store.get_market_regime_as_of(
+                symbol=symbol,
+                ts=features.ts,
+            )
+            current_regime = market_regime["regime"] if market_regime else "UNKNOWN"
+            regime_policy = self.store.latest_regime_policy(
+                symbol=symbol,
+                as_of=features.ts,
+            )
+
+            effective_regimes, _regime, _source, _policy_status = (
+                resolve_effective_regimes(
+                    profile,
+                    learned_policy=regime_policy,
+                )
+            )
+
+            regime_allowed = current_regime in effective_regimes
+
+            profile = self.settings.get_strategy_profile("iron_condor_monitor")
+            eligibility = self._evaluate_strategy_eligibility(
+                profile=profile,
+                features=features,
+                iv_history_count=iv_history_count,
+                current_regime=regime_allowed,
+                regime_policy=regime_policy,
+            )
+
+            self.decisions.save_decision(
+                self.run_id,
+                "strategy_eligibility",
+                None,
+                {"gate": eligibility.model_dump(mode="json")},
+            )
+
+            if not eligibility.passed:
+                return self._finish_cycle(
+                    status="strategy_eligibility_rejected",
+                    features=features,
+                    data_quality=data_quality,
+                    iv_history=iv_history,
+                    gates=[eligibility],
+                    extra={
+                        "strategy_id": "iron_condor_monitor",
+                        "rejection_reason": eligibility.reason,
+                        "position_outcomes": position_outcomes,
+                        "persisted_option_rows": persisted_rows,
+                    },
+                )
 
         proposal, gates = self.strategy.evaluate(
             snapshot,
@@ -377,37 +443,35 @@ class DecisionLoop:
                     },
                 )
 
-                regime_limits = self._apply_regime_limits(
-                    current_regime=current_regime,
-                    regime_policy=regime_policy,
-                )
+            regime_limits = self._apply_regime_limits(
+                current_regime=current_regime,
+                regime_policy=regime_policy,
+            )
 
-                regime_risk_decision = self.risk.apply_regime_limits(
-                    proposal=proposal,
+            regime_risk_decision = self.risk.apply_regime_limits(
+                proposal=proposal,
+                features=features,
+                regime_limits=regime_limits,
+            )
+            self.decisions.save_risk_decision(
+                self.run_id,
+                proposal,
+                regime_risk_decision,
+            )
+            if not regime_risk_decision.approved:
+                return self._finish_cycle(
+                    status="regime_risk_rejected",
                     features=features,
-                    regime_limits=regime_limits,
+                    data_quality=data_quality,
+                    iv_history=iv_history,
+                    proposal=proposal,
+                    extra={
+                        "proposal_id": proposal.proposal_id,
+                        "reasons": regime_risk_decision.reasons,
+                        "position_outcomes": position_outcomes,
+                        "persisted_option_rows": persisted_rows,
+                    },
                 )
-
-                self.decisions.save_risk_decision(
-                    self.run_id,
-                    proposal,
-                    regime_risk_decision,
-                )
-
-                if not regime_risk_decision.approved:
-                    return self._finish_cycle(
-                        status="regime_risk_rejected",
-                        features=features,
-                        data_quality=data_quality,
-                        iv_history=iv_history,
-                        proposal=proposal,
-                        extra={
-                            "proposal_id": proposal.proposal_id,
-                            "reasons": regime_risk_decision.reasons,
-                            "position_outcomes": position_outcomes,
-                            "persisted_option_rows": persisted_rows,
-                        },
-                    )
 
         if (
             self.settings.safety.dry_run
@@ -1004,4 +1068,99 @@ class DecisionLoop:
             ),
             regime_metrics={},
             selection_status=regime_policy["selection_status"],
+        )
+
+    def _evaluate_strategy_eligibility(
+        self,
+        *,
+        profile: Any,
+        features: MarketFeatures,
+        iv_history_count: int,
+        current_regime: str,
+        regime_policy: dict[str, Any] | None,
+    ) -> GateResult:
+        checks = {
+            "strategy_id": "iron_condor_monitor",
+            "profile_enabled": profile.enabled,
+            "underlying_allowed": (
+                self.settings.market_data.default_symbol
+                in profile.underlyings
+            ),
+            "current_regime": current_regime,
+            "iv_history_count": iv_history_count,
+            "iv_rank": features.iv_rank,
+        }
+
+        if not profile.enabled:
+            return GateResult(
+                gate="strategy_eligibility",
+                passed=False,
+                reason="strategy_profile_disabled",
+                details=checks,
+            )
+
+        if (
+            self.settings.market_data.default_symbol
+            not in profile.underlyings
+        ):
+            checks["reason"] = "underlying_not_allowed"
+            return GateResult(
+                gate="strategy_eligibility",
+                passed=False,
+                reason="underlying_not_allowed",
+                details=checks,
+            )
+
+        policy_status = (
+            regime_policy.get("selection_status") if regime_policy else None
+        )
+        policy_regimes = set(
+            regime_policy.get("allowed_regimes") or []
+        ) if regime_policy else set()
+
+        if policy_status == "READY":
+            allowed_regimes = policy_regimes
+            regime_source = "learned_policy"
+        else:
+            allowed_regimes = set(profile.regime_policy.allowed_regimes)
+            regime_source = "configured_profile"
+
+        regime_allowed = current_regime in allowed_regimes
+        checks.update(
+            {
+                "regime_source": regime_source,
+                "allowed_regimes": sorted(allowed_regimes),
+                "policy_status": policy_status,
+                "regime_allowed": regime_allowed,
+            }
+        )
+
+        if not regime_allowed:
+            checks["reason"] = "iv_regime_not_allowed"
+            return GateResult(
+                gate="strategy_eligibility",
+                passed=False,
+                reason="iv_regime_not_allowed",
+                details=checks,
+            )
+
+        if profile.regime_policy.require_iv_rank_available:
+            rank_available = features.iv_rank is not None
+
+            checks["iv_rank_available"] = rank_available
+
+            if not rank_available:
+                checks["reason"] = "iv_rank_unavailable"
+                return GateResult(
+                    gate="strategy_eligibility",
+                    passed=False,
+                    reason="iv_rank_unavailable",
+                    details=checks,
+                )
+
+        return GateResult(
+            gate="strategy_eligibility",
+            passed=True,
+            reason=f"eligible_regime_source={regime_source}",
+            details=checks,
         )

@@ -73,9 +73,10 @@ def test_decision_loop_persists_feature_and_decision(
         spot_instrument_token_resolver=lambda symbol: 256265,
         live_snapshot_path=live_snapshot_path,
     )
+    loop.settings.research.enforce_strategy_eligibility = False
     try:
         result = loop.run_once()
-        assert result["status"] in {"no_proposal", "risk_rejected", "dry_run"}
+        assert result["status"] in {"no_proposal", "risk_rejected", "dry_run",  "strategy_eligibility_rejected",}
 
         feature_count = store.conn.execute(
             "SELECT COUNT(*) FROM feature_snapshots"

@@ -5,8 +5,6 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-import pandas as pd
-
 from nse_quant.core.settings import get_settings
 from nse_quant.research.iron_condor_backtest import (
     IronCondorBacktester,

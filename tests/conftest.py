@@ -207,12 +207,10 @@ def decision_loop_environment(
         def build_loop(
             self,
             provider: ReplayMarketDataProvider,
-            *,
             proposal: TradeProposal | None = None,
+            *,
+            enforce_strategy_eligibility: bool = False,
         ) -> Any:
-            settings = test_settings
-            settings.research.enforce_feature_availability = False
-            settings.research.enforce_regime_policy = False
             loop = DecisionLoop(
                 store=test_store,
                 provider=provider,
@@ -222,6 +220,12 @@ def decision_loop_environment(
                 spot_instrument_token_resolver=lambda symbol: 256265,
                 live_snapshot_path=live_snapshot_path,
             )
+            loop.settings.research.enforce_feature_availability = False
+            loop.settings.research.enforce_regime_policy = False
+            loop.settings.research.enforce_strategy_eligibility = (
+                enforce_strategy_eligibility
+            )
+
 
             if proposal is not None:
                 gates = self._build_gates()

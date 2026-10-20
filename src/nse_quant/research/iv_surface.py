@@ -2,11 +2,9 @@
 
 from __future__ import annotations
 
-from datetime import date
 from pathlib import Path
 
 import pandas as pd
-
 
 REQUIRED_COLUMNS = {
     "ts",

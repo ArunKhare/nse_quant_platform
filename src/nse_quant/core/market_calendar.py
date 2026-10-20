@@ -2,13 +2,9 @@
 
 from __future__ import annotations
 
-from datetime import date, datetime, time
-from zoneinfo import ZoneInfo
+from datetime import date, datetime
 
-IST = ZoneInfo("Asia/Kolkata")
-
-MARKET_OPEN = time(9, 15)
-MARKET_CLOSE = time(15, 40)
+from nse_quant.core.constants import IST, MARKET_CLOSE, MARKET_OPEN
 
 NSE_HOLIDAYS: dict[int, set[date]] = {
     2026: {

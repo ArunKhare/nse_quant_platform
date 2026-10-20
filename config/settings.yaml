@@ -24,7 +24,7 @@ storage:
   dashboard_host: 127.0.0.1
   dashboard_port: 8050
   db_memory_limit: 512MB
-  db_thread: 2
+  db_threads: 2
 
 analytics:
   risk_free_rate: 0.07
@@ -35,11 +35,6 @@ analytics:
   max_expected_move_buffer: 1.15
   min_iv_history_observations: 30
   allow_iv_rank_cold_start: true
-
-strategy:
-  iron_condor_monitor:
-    wing_distance_points: 200
-    min_credit: 20
 
 risk:
   max_lots_per_order: 2
@@ -95,4 +90,39 @@ market_data:
 research:
   enforce_feature_availability: false
   enforce_regime_policy: true
+  enforce_strategy_eligibility: true
   min_history_observations: 1
+
+strategies:
+  iron_condor_monitor:
+    enabled: true
+    strategy_type: iron_condor
+    underlyings:
+      - NIFTY
+
+    wing_distance_points: 200
+    min_credit: 20
+
+    regime_policy:
+      allowed_regimes:
+        - HIGH_IV_CONTANGO_NORMAL_SKEW
+        - HIGH_IV_FLAT_TERM_NORMAL_SKEW
+        - NORMAL_IV_CONTANGO_NORMAL_SKEW
+        - NORMAL_IV_FLAT_TERM_NORMAL_SKEW
+      blocked_regimes:
+        - HIGH_IV_BACKWARDATION_HIGH_PUT_SKEW
+      require_iv_rank_available: true
+
+    risk:
+      max_lots_per_order: 2
+      max_open_positions: 1
+      max_daily_loss: 25000
+      max_notional_exposure: 2000000
+
+    exits:
+      profit_target_pct: 50
+      stop_loss_credit_multiple: 2.0
+      theta_decay_target_pct: 50
+      iv_collapse_pct: 20
+      data_quality_max_age_seconds: 30
+      expected_move_violation_buffer: 1.25

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from datetime import UTC, date, datetime, time, timedelta, timezone
+from datetime import UTC, date, datetime, time
 from pathlib import Path
 from typing import Any
 
@@ -14,10 +14,10 @@ from nse_quant.analytics.implied_volatility import (
     implied_volatility,
     time_to_expiry_years,
 )
+from nse_quant.core.constants import IST
 from nse_quant.core.models import ChainSnapshot
 from nse_quant.core.settings import get_settings
 
-IST = timezone(timedelta(hours=5, minutes=30))
 
 def _as_json_object(value: Any) -> Any:
     """Normalize DuckDB JSON values that may be strings or parsed objects."""
@@ -1104,14 +1104,14 @@ class DuckDBStore:
 
         return [row[0] for row in rows]
 
-    def is_trading_day(day: date | None = None) -> bool:
+    def is_trading_day(self, day: date | None = None) -> bool:
         """Return True when the given IST date is an NSE trading day."""
         day = day or datetime.now(IST).date()
 
         if day.weekday() >= 5:
             return False
 
-        return day.isoformat() not in NSE_HOLIDAYS
+        return day.isoformat()
 
     def write_daily_iv_regime(
         self,

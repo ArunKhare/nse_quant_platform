@@ -4,8 +4,7 @@ from __future__ import annotations
 
 import argparse
 
-import pandas as pd
-
+from nse_quant.persistence.duckdb_store import DuckDBStore
 from nse_quant.research.iv_regimes import (
     classify_iv_regimes,
     save_regime_report,
@@ -14,7 +13,6 @@ from nse_quant.research.iv_surface import (
     build_daily_iv_summary,
     build_iv_surface_report,
 )
-from nse_quant.persistence.duckdb_store import DuckDBStore
 
 
 def parse_args() -> argparse.Namespace:

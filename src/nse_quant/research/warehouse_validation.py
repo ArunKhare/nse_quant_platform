@@ -7,7 +7,6 @@ from typing import Any
 
 import pandas as pd
 
-
 REQUIRED_COLUMNS = {
     "ts",
     "underlying",
@@ -55,7 +54,7 @@ def validate_parquet_file(
         result["issues"].append(f"unreadable: {exc}")
         return result
 
-    result["rows"] = int(len(frame))
+    result["rows"] = len(frame)
 
     missing = REQUIRED_COLUMNS.difference(frame.columns)
 

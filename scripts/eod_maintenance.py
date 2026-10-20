@@ -9,16 +9,17 @@ from __future__ import annotations
 import argparse
 import subprocess
 import sys
-from datetime import UTC, datetime, date
+from datetime import UTC, date, datetime
 from pathlib import Path
 
+from nse_quant.core.market_calendar import is_nse_trading_day
 from nse_quant.core.settings import get_settings
 from nse_quant.ops.notifier import Notifier, NullNotifier
 from nse_quant.persistence.duckdb_store import DuckDBStore
-from nse_quant.core.market_calendar import is_nse_trading_day
 from nse_quant.research.warehouse_validation import (
     validate_parquet_file,
 )
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(

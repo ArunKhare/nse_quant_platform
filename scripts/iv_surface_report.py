@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import argparse
 
-from nse_quant.core.settings import get_settings
 from nse_quant.persistence.duckdb_store import DuckDBStore
 from nse_quant.research.iv_surface import (
     build_daily_iv_summary,
@@ -47,7 +46,6 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
-    settings = get_settings()
 
     store = DuckDBStore()
 

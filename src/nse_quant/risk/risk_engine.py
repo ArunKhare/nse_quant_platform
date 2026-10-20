@@ -26,9 +26,11 @@ class RiskEngine:
         conn: Any,
         settings: Any | None = None,
         position_repository: PositionRepository | None = None,
+        risk_settings: Any | None = None,
     ) -> None:
         self.settings = settings or get_settings()
         self.limits = self.settings.risk
+        self.limits = risk_settings or self.settings.risk
         self.positions = position_repository or PositionRepository(conn)
 
     def evaluate(

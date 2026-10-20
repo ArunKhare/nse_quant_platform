@@ -14,7 +14,7 @@ def test_open_position_is_marked_and_exit_evaluated(
         provider,
         proposal=replay_snapshots["proposal"],
     )
-
+    loop.settings.research.enforce_strategy_eligibility = False
     first = loop.run_once()
     assert first["status"] == "paper_filled"
 
@@ -44,6 +44,7 @@ def test_position_closes_when_exit_triggers(
         proposal=exit_trigger_snapshots["proposal"],
     )
 
+    loop.settings.research.enforce_strategy_eligibility = False
     loop.run_once()
     result = loop.run_once()
 
@@ -75,7 +76,7 @@ def test_new_entry_blocked_at_max_open_positions(
 
     loop.settings.research.enforce_feature_availability = False
     loop.settings.research.enforce_regime_policy = False
-
+    loop.settings.research.enforce_strategy_eligibility = False
     # This test verifies position-capacity enforcement, not exits.
     # Prevent IV_COLLAPSE or any other exit from freeing capacity.
     monkeypatch.setattr(
@@ -147,7 +148,7 @@ def test_missing_regime_policy_blocks_new_entry(
     )
 
     loop.settings.research.enforce_regime_policy = True
-
+    loop.settings.research.enforce_strategy_eligibility = False
     result = loop.run_once()
 
     assert result["status"] == "regime_policy_rejected"
@@ -184,7 +185,7 @@ def test_position_closes_on_iv_collapse(
         provider,
         proposal=entry_snapshots["proposal"],
     )
-
+    loop.settings.research.enforce_strategy_eligibility = False
     loop.settings.research.enforce_feature_availability = False
     loop.settings.research.enforce_regime_policy = False
 

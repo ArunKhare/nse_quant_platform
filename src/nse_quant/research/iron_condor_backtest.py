@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date, time
-from pathlib import Path
 
 import pandas as pd
 
@@ -175,7 +174,9 @@ class IronCondorBacktester:
         self,
         snapshot: pd.DataFrame,
     ) -> dict[str, pd.Series] | None:
-        spot = snapshot["spot"].iloc[0]
+
+        if "spot" not in snapshot.columns:
+            raise ValueError("snapshot must contain a 'spot' column")
 
         puts = snapshot[
             (snapshot["option_type"] == "PE")

@@ -13,7 +13,7 @@ def test_run_once_persists_chain_snapshot(
         provider,
         proposal=replay_snapshots["proposal"],
     )
-
+    loop.settings.research.enforce_strategy_eligibility = False
     loop.run_once()
 
     rows = loop.store.conn.execute(

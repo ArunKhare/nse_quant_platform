@@ -4,12 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date, datetime, time
-from zoneinfo import ZoneInfo
 
-IST = ZoneInfo("Asia/Kolkata")
-
-REGULAR_SESSION_OPEN = time(9, 15)
-REGULAR_SESSION_CLOSE = time(15, 30)
+from nse_quant.core.constants import IST, REGULAR_SESSION_CLOSE, REGULAR_SESSION_OPEN
 
 
 @dataclass(frozen=True)

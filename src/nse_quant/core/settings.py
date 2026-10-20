@@ -59,12 +59,45 @@ class AnalyticsSettings(BaseModel):
             )
 
         return self
-class IronCondorSettings(BaseModel):
-    wing_distance_points: float = 200
-    min_credit: float = 20
 
-class StrategySettings(BaseModel):
-    iron_condor_monitor: IronCondorSettings = Field(default_factory=IronCondorSettings)
+class RegimePolicySettings(BaseModel):
+    allowed_regimes: list[str] = Field(default_factory=list)
+    blocked_regimes: list[str] = Field(default_factory=list)
+    require_iv_rank_available: bool = True
+
+
+class StrategyRiskSettings(BaseModel):
+    max_lots_per_order: int = 2
+    max_open_positions: int = 1
+    max_daily_loss: float = 25_000
+    max_notional_exposure: float = 2_000_000
+
+
+class StrategyExitSettings(BaseModel):
+    profit_target_pct: float = 50.0
+    stop_loss_credit_multiple: float = 2.0
+    theta_decay_target_pct: float = 50.0
+    iv_collapse_pct: float = 20.0
+    data_quality_max_age_seconds: int = 30
+    expected_move_violation_buffer: float = 1.25
+
+
+class StrategyProfileSettings(BaseModel):
+    enabled: bool = False
+    strategy_type: str
+    underlyings: list[str] = Field(default_factory=lambda: ["NIFTY"])
+    regime_policy: RegimePolicySettings = Field(default_factory=RegimePolicySettings)
+    risk: StrategyRiskSettings = Field(default_factory=StrategyRiskSettings)
+    exits: StrategyExitSettings = Field(default_factory=StrategyExitSettings)
+
+class IronCondorProfileSettings(StrategyProfileSettings):
+    strategy_type: str = "iron_condor"
+    wing_distance_points: float = 200.0
+    min_credit: float = 20.0
+
+STRATEGY_PROFILE_TYPES: dict[str, type[StrategyProfileSettings]] = {
+    "iron_condor": IronCondorProfileSettings,
+}
 
 class RiskSettings(BaseModel):
     max_lots_per_order: int = 2
@@ -177,6 +210,7 @@ class TradingCalendarSettings(BaseModel):
 class ResearchSettings(BaseModel):
     enforce_feature_availability: bool = True
     enforce_regime_policy: bool = True
+    enforce_strategy_eligibility: bool = True
     min_history_observations: int = 1
 
 class WalkForwardSettings(BaseModel):
@@ -223,7 +257,6 @@ class Settings(BaseSettings):
     runtime: RuntimeSettings = Field(default_factory=RuntimeSettings)
     storage: StorageSettings = Field(default_factory=StorageSettings)
     analytics: AnalyticsSettings = Field(default_factory=AnalyticsSettings)
-    strategy: StrategySettings = Field(default_factory=StrategySettings)
     risk: RiskSettings = Field(default_factory=RiskSettings)
     exits: ExitSettings = Field(default_factory=ExitSettings)
     paper_execution: PaperExecutionSettings = Field(default_factory=PaperExecutionSettings)
@@ -232,6 +265,7 @@ class Settings(BaseSettings):
     secrets: KiteSecrets = Field(default_factory=KiteSecrets)
     trading_calendar: TradingCalendarSettings = Field(default_factory=TradingCalendarSettings)
     research: ResearchSettings = Field(default_factory=ResearchSettings)
+    strategies: dict[str, IronCondorProfileSettings] = Field(default_factory=dict)
     walk_forward: WalkForwardSettings = Field(default_factory=WalkForwardSettings)
 
     @model_validator(mode="before")
@@ -291,6 +325,135 @@ class Settings(BaseSettings):
                 )
 
         return self
+
+    def get_strategy_profile(self, strategy_id: str,) -> StrategyProfileSettings:
+        profile = self.strategies.get(strategy_id)
+
+        if profile is None:
+            raise ValueError(f"No strategy profile configured: {strategy_id!r}")
+
+        return profile
+
+    def get_effective_risk_settings(self, strategy_id: str) -> RiskSettings:
+        profile = self.get_strategy_profile(strategy_id)
+        effective = self.risk.model_copy(deep=True)
+
+        profile_risk = profile.risk.model_dump(exclude_unset=True)
+
+        for key, value in profile_risk.items():
+            if hasattr(effective, key):
+                setattr(effective, key, value)
+
+        return effective
+
+    def get_effective_exit_settings(self, strategy_id: str) -> ExitSettings:
+        profile = self.get_strategy_profile(strategy_id)
+        effective = self.exits.model_copy(deep=True)
+
+        profile_exits = profile.exits.model_dump(exclude_unset=True)
+
+        for key, value in profile_exits.items():
+            if hasattr(effective, key):
+                setattr(effective, key, value)
+
+        return effective
+
+    @model_validator(mode="after")
+    def validate_strategy_profiles(self) -> Self:
+        for strategy_id, profile in self.strategies.items():
+            expected_type = STRATEGY_PROFILE_TYPES.get(profile.strategy_type)
+
+            if expected_type is None or not isinstance(profile, expected_type):
+                raise ValueError(
+                    f"Strategy {strategy_id!r} has invalid strategy_type "
+                    f"{profile.strategy_type!r}"
+                )
+
+            if (
+                strategy_id in self.safety.allowed_strategies
+                and not profile.enabled
+            ):
+                raise ValueError(
+                    f"Strategy {strategy_id!r} is enabled in "
+                    "safety.allowed_strategies but its profile is disabled"
+                )
+
+            overlap = (
+                set(profile.regime_policy.allowed_regimes)
+                & set(profile.regime_policy.blocked_regimes)
+            )
+
+            if overlap:
+                raise ValueError(
+                    f"Strategy {strategy_id!r} has overlapping allowed "
+                    f"and blocked regimes: {sorted(overlap)}"
+                )
+
+        return self
+
+    @model_validator(mode="before")
+    @classmethod
+    def normalize_strategy_profiles(cls, data: Any) -> Any:
+        if not isinstance(data, dict):
+            return data
+
+        strategies = data.get("strategies")
+        if not isinstance(strategies, dict):
+            return data
+
+        normalized: dict[str, Any] = {}
+        for strategy_id, profile in strategies.items():
+            if isinstance(profile, StrategyProfileSettings):
+                normalized[strategy_id] = profile
+                continue
+
+            if not isinstance(profile, dict):
+                raise TypeError(f"strategies.{strategy_id} must be a mapping")
+
+            strategy_type = profile.get("strategy_type")
+            profile_type = STRATEGY_PROFILE_TYPES.get(strategy_type)
+
+            if profile_type is None:
+                raise ValueError(
+                    f"Unknown strategy_type {strategy_type!r} "
+                    f"for strategy {strategy_id!r}"
+                )
+
+            normalized[strategy_id] = profile_type(**profile)
+
+        data["strategies"] = normalized
+        return data
+
+def get_effective_risk_settings(
+    self,
+    strategy_id: str,
+) -> RiskSettings:
+    profile = self.get_strategy_profile(strategy_id)
+    effective = self.risk.model_copy(deep=True)
+
+    profile_risk = profile.risk.model_dump(exclude_unset=True)
+
+    for key, value in profile_risk.items():
+        if hasattr(effective, key):
+            setattr(effective, key, value)
+
+    return effective
+
+
+def get_effective_exit_settings(
+    self,
+    strategy_id: str,
+) -> ExitSettings:
+    profile = self.get_strategy_profile(strategy_id)
+    effective = self.exits.model_copy(deep=True)
+
+    profile_exits = profile.exits.model_dump(exclude_unset=True)
+
+    for key, value in profile_exits.items():
+        if hasattr(effective, key):
+            setattr(effective, key, value)
+
+    return effective
 
 def load_settings(path: str | Path | None = None) -> Settings:
     # Read the YAML file dictionary

@@ -3,16 +3,17 @@
 from __future__ import annotations
 
 import argparse
-from datetime import datetime, time, timedelta, timezone
+from nse_quant.setting import get_settings
 
 from nse_quant.analytics.implied_volatility import (
     implied_volatility,
     time_to_expiry_years,
 )
+from nse_quant.core.constants import IST
 from nse_quant.persistence.duckdb_store import DuckDBStore
 
-RISK_FREE_RATE = 0.065
-IST = timezone(timedelta(hours=5, minutes=30))
+RISK_FREE_RATE = get_settings().analytics.risk_free_rate
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(

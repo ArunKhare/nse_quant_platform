@@ -17,7 +17,7 @@ from nse_quant.core.models import (
     OrderSide,
     TradeProposal,
 )
-from nse_quant.core.settings import get_settings
+from nse_quant.core.settings import IronCondorProfileSettings, get_settings
 from nse_quant.strategy.gates import GateEvaluator
 
 
@@ -26,8 +26,18 @@ class IronCondorMonitor:
 
     def __init__(self, settings: Any | None = None) -> None:
         self.settings = settings or get_settings()
-        self.config = self.settings.strategy.iron_condor_monitor
+        self.profile = self.settings.get_strategy_profile(self.strategy_name)
+        if not isinstance(self.profile, IronCondorProfileSettings):
+            raise TypeError(
+                f"{self.strategy_name} must use IronCondorProfileSettings"
+            )
+
+        self.config = self.profile
         self.gates = GateEvaluator(self.settings)
+        self.risk_settings = settings.get_effective_risk_settings(
+            "iron_condor_monitor"
+        )
+        self.exit_settings = settings.get_effective_exit_settings("iron_condor_monitor")
 
     def evaluate(
         self,

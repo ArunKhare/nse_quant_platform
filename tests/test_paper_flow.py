@@ -71,7 +71,7 @@ def test_paper_flow_persists_full_lifecycle(tmp_path, seed_spot_features):
         live_snapshot_path=live_snapshot_path,
 
     )
-
+    loop.settings.research.enforce_strategy_eligibility = False
     result = loop.run_once()
 
     assert result["status"] in {
@@ -140,7 +140,7 @@ def test_dry_run_does_not_create_paper_order(tmp_path, seed_spot_features):
         spot_instrument_token_resolver=lambda symbol: 256265,
         live_snapshot_path=live_snapshot_path,
     )
-
+    loop.settings.research.enforce_strategy_eligibility = False
     result = loop.run_once()
 
     if result["status"] == "dry_run":

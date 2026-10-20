@@ -19,7 +19,17 @@ from nse_quant.core.settings import get_settings
 
 class ExitEngine:
     def __init__(self, settings: Any | None = None) -> None:
-        self.settings = settings or get_settings()
+        if settings is None:
+            settings = get_settings()
+
+        if hasattr(settings, "theta_decay_target_pct"):
+            # A resolved ExitSettings object was supplied.
+            self.settings = settings
+            self.exit_settings = settings
+        else:
+            # Full Settings object was supplied.
+            self.settings = settings
+            self.exit_settings = settings.exits
 
     def evaluate(
         self,
@@ -62,7 +72,7 @@ class ExitEngine:
             ):
                 triggered.append(ExitReason.TARGET_PROFIT)
 
-        exit_settings = self.settings.exits
+        exit_settings = self.exit_settings
         entry_price = strategy_position.entry_price
 
         if entry_price > 0 and current_price is not None:
