@@ -18,6 +18,9 @@ from nse_quant.features.feature_gates import SpotFeatureGate
 from nse_quant.integrations.kite_session import get_cached_kite
 from nse_quant.market_data.kite_provider import KiteMarketDataProvider
 from nse_quant.market_data.replay_provider import ReplayExhaustedError, ReplayMarketDataProvider
+from nse_quant.market_data.spot_candle_aggregator import (
+    SpotCandleAggregator,
+)
 from nse_quant.ops.kill_switch import KillSwitch
 from nse_quant.ops.notifier import Notifier, NullNotifier
 from nse_quant.persistence.duckdb_store import DuckDBStore
@@ -160,6 +163,7 @@ def main() -> int:
     notifier = Notifier() if settings.notifier.enabled else NullNotifier()
     run_id = uuid4().hex
     decision= DecisionRepository(store.conn)
+    candle_aggregator = SpotCandleAggregator()
 
     loop = DecisionLoop(
         store=store,
@@ -195,6 +199,8 @@ def main() -> int:
         loop.feature_gate._max_age_seconds,
     )
 
+    spot_token: int | None = None
+
     try:
         if (
             isinstance(provider, KiteMarketDataProvider)
@@ -202,8 +208,8 @@ def main() -> int:
             and warmup_to is not None
         ):
             for symbol in symbols:
-                instrument_token = provider.resolve_spot_instrument_token(
-                    symbol
+                spot_token = provider.resolve_spot_instrument_token(
+                    primary_symbol
                 )
 
                 for interval in intervals:
@@ -221,7 +227,7 @@ def main() -> int:
                     rows = store.write_spot_candles(
                         candles=candles,
                         symbol=symbol,
-                        instrument_token=instrument_token,
+                        instrument_token=spot_token,
                         interval=interval,
                     )
                     print(
@@ -251,6 +257,38 @@ def main() -> int:
                     "NSE Market is closed. "
                     "Out-of-hours strategy testing enabled."
                 )
+
+            if isinstance(provider, KiteMarketDataProvider) and spot_token:
+                try:
+                    spot_price = provider.get_spot()
+
+                    completed_candle = candle_aggregator.add_tick(
+                        ts=datetime.now(UTC),
+                        price=spot_price,
+                        volume=0,
+                        oi=None,
+                    )
+
+                    if completed_candle is not None:
+                        store.write_spot_candles(
+                            candles=[
+                                {
+                                    "date": completed_candle.ts,
+                                    "open": completed_candle.open,
+                                    "high": completed_candle.high,
+                                    "low": completed_candle.low,
+                                    "close": completed_candle.close,
+                                    "volume": completed_candle.volume,
+                                    "oi": completed_candle.oi,
+                                }
+                            ],
+                            symbol=primary_symbol,
+                            instrument_token=spot_token,
+                            interval="1m",
+                        )
+                except Exception as exc:  # noqa: BLE001
+                    print(f"Spot candle capture error: {exc}")
+
             try:
                 result = loop.run_once()
                 print(result)
@@ -280,7 +318,30 @@ def main() -> int:
                 )
 
             time.sleep(settings.runtime.loop_interval_seconds)
+            
+        final_candle = candle_aggregator.flush()
 
+        if (
+            final_candle is not None
+            and isinstance(provider, KiteMarketDataProvider)
+            and spot_token
+        ):
+            store.write_spot_candles(
+                candles=[
+                    {
+                        "date": final_candle.ts,
+                        "open": final_candle.open,
+                        "high": final_candle.high,
+                        "low": final_candle.low,
+                        "close": final_candle.close,
+                        "volume": final_candle.volume,
+                        "oi": final_candle.oi,
+                    }
+                ],
+                symbol=primary_symbol,
+                instrument_token=spot_token,
+                interval="1m",
+            )
     except KeyboardInterrupt:
         print("Paper loop interrupted.")
 

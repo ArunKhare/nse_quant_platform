@@ -616,32 +616,37 @@ class DuckDBStore:
         instrument_token: int,
         interval: str,
     ) -> int:
-        rows = [
-            (
-                instrument_token,
-                symbol,
-                interval,
-                candle["date"],
-                candle["open"],
-                candle["high"],
-                candle["low"],
-                candle["close"],
-                candle["volume"],
-                candle.get("oi"),
+        for candle in candles:
+            self.conn.execute(
+                """
+                INSERT OR REPLACE INTO spot_candles (
+                    instrument_token,
+                    symbol,
+                    interval,
+                    ts,
+                    open,
+                    high,
+                    low,
+                    close,
+                    volume,
+                    oi
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                [
+                    instrument_token,
+                    symbol,
+                    interval,
+                    candle["date"],
+                    candle["open"],
+                    candle["high"],
+                    candle["low"],
+                    candle["close"],
+                    candle["volume"],
+                    candle.get("oi"),
+                ],
             )
-            for candle in candles
-        ]
 
-        self.conn.executemany(
-            """
-            INSERT OR REPLACE INTO spot_candles VALUES (
-                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
-            )
-            """,
-            rows,
-        )
-
-        return len(rows)
+        return len(candles)
 
     def latest_spot_closes(
         self,
