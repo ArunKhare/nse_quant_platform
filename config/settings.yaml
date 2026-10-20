@@ -59,6 +59,10 @@ exits:
   data_quality_max_age_seconds: 30
   expected_move_violation_buffer: 1.25
 
+paper_execution:
+  fill_slippage_pct: 0
+  allow_partial_fills: true
+
 notifier:
   enabled: true
   telegram:
@@ -87,3 +91,8 @@ market_data:
       kite_interval: 60minute
     day:
       kite_interval: day
+
+research:
+  enforce_feature_availability: false
+  enforce_regime_policy: true
+  min_history_observations: 1

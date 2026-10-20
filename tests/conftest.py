@@ -36,6 +36,37 @@ def test_settings():
     settings.runtime.allow_out_of_hours_testing = True
     return settings
 
+@pytest.fixture
+def _seed_candles():
+    def seed(
+        store: DuckDBStore,
+        token: int,
+        symbol: str,
+        count: int,
+        interval: str,
+    ) -> None:
+        base_ts = datetime.now(UTC) - timedelta(minutes=count + 1)
+        candles = [
+            {
+                "date": base_ts + timedelta(minutes=i),
+                "open": 23000.0,
+                "high": 23010.0,
+                "low": 22990.0,
+                "close": 23000.0,
+                "volume": 1000,
+                "oi": 0,
+            }
+            for i in range(count)
+        ]
+
+        store.write_spot_candles(
+            candles=candles,
+            symbol=symbol,
+            instrument_token=token,
+            interval=interval,
+        )
+
+    return seed
 
 @pytest.fixture
 def seed_spot_features():
@@ -179,7 +210,7 @@ def decision_loop_environment(
             *,
             proposal: TradeProposal | None = None,
         ) -> Any:
-            settings = get_settings()
+            settings = test_settings
             settings.research.enforce_feature_availability = False
             settings.research.enforce_regime_policy = False
             loop = DecisionLoop(
@@ -242,7 +273,7 @@ def test_proposal(expiry, instrument_factory) -> TradeProposal:
         expiry=expiry,
         entry_limit_price=20.0,
         thesis="Test iron condor proposal",
-        stop_loss_price=1000,
+        stop_loss_price=500,
         metadata={},
         legs=[
             Leg(
@@ -256,7 +287,7 @@ def test_proposal(expiry, instrument_factory) -> TradeProposal:
             )
             for option_type, side, token in [
                 (OptionType.CE, OrderSide.BUY, 1001),
-                (OptionType.PE, OrderSide.SELL, 1002),
+                (OptionType.PE, OrderSide.SELL, 1050),
             ]
         ],
     )

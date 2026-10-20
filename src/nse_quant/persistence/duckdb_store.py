@@ -3,16 +3,21 @@
 from __future__ import annotations
 
 import json
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, time, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
 import duckdb
 import pandas as pd
 
+from nse_quant.analytics.implied_volatility import (
+    implied_volatility,
+    time_to_expiry_years,
+)
 from nse_quant.core.models import ChainSnapshot
 from nse_quant.core.settings import get_settings
 
+IST = timezone(timedelta(hours=5, minutes=30))
 
 def _as_json_object(value: Any) -> Any:
     """Normalize DuckDB JSON values that may be strings or parsed objects."""
@@ -67,6 +72,20 @@ class DuckDBStore:
                 quote_status VARCHAR,
                 payload_json JSON,
                 PRIMARY KEY (run_id, ts, instrument_token)
+            )
+            """
+        )
+
+        self.conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS underlying_iv_observations (
+                ts TIMESTAMPTZ NOT NULL,
+                underlying VARCHAR NOT NULL,
+                expiry DATE NOT NULL,
+                iv DOUBLE NOT NULL,
+                spot DOUBLE,
+                source VARCHAR NOT NULL,
+                PRIMARY KEY (ts, underlying, expiry)
             )
             """
         )
@@ -381,6 +400,38 @@ class DuckDBStore:
             """
         self.conn.execute(IV_OBSERVATIONS_SQL)
 
+    def _compute_option_iv(
+        self,
+        *,
+        ts: datetime,
+        spot: float | None,
+        expiry: date,
+        strike: float,
+        option_type: str,
+        ltp: float | None,
+    ) -> float | None:
+        settings = get_settings()
+
+        if spot is None or ltp is None or ltp <= 0:
+            return None
+
+        expiry_dt = datetime.combine(
+            expiry,
+            time(15, 30),
+            tzinfo=IST,
+        )
+
+        return implied_volatility(
+            option_price=ltp,
+            spot=spot,
+            strike=strike,
+            time_to_expiry_years=time_to_expiry_years(
+                as_of=ts,
+                expiry=expiry_dt,
+            ),
+            risk_free_rate=settings.market_data.risk_free_rate,
+            option_type=option_type,
+        )
     def write_option_stream(
         self,
         run_id: str,
@@ -393,6 +444,21 @@ class DuckDBStore:
         for quote in snapshot.quotes:
             instrument = quote.instrument
             tick = ticks.get(instrument.instrument_token, {})
+
+            ltp = tick.get("ltp", quote.ltp)
+
+            iv = quote.iv
+
+            if iv is None:
+                iv = self._compute_option_iv(
+                    ts=snapshot.ts,
+                    spot=snapshot.spot,
+                    expiry=snapshot.expiry,
+                    strike=instrument.strike,
+                    option_type=instrument.option_type.value,
+                    ltp=ltp,
+                )
+
             rows.append(
                 (
                     run_id,
@@ -405,12 +471,12 @@ class DuckDBStore:
                     instrument.instrument_token,
                     instrument.lot_size,
                     snapshot.spot,
-                    tick.get("ltp", quote.ltp),
+                    ltp,
                     tick.get("bid", quote.bid),
                     tick.get("ask", quote.ask),
                     tick.get("volume", quote.volume),
                     tick.get("oi", quote.oi),
-                    quote.iv,
+                    iv,
                     quote.delta,
                     quote.gamma,
                     quote.vega,
@@ -426,8 +492,61 @@ class DuckDBStore:
                 f"INSERT OR REPLACE INTO option_stream VALUES ({placeholders})",
                 rows,
             )
-
+        if rows:
+            self._write_atm_iv_observation(
+                run_id=run_id,
+                snapshot=snapshot,
+                rows=rows,
+            )
         return len(rows)
+
+    def _write_atm_iv_observation(
+        self,
+        *,
+        run_id: str,
+        snapshot: ChainSnapshot,
+        rows: list[tuple[Any, ...]],
+    ) -> None:
+        valid_ivs = [
+            (row[4], row[15])
+            for row in rows
+            if row[15] is not None
+        ]
+
+        if not valid_ivs or snapshot.spot is None:
+            return
+
+        atm_strike = min(
+            valid_ivs,
+            key=lambda item: abs(item[0] - snapshot.spot),
+        )[0]
+
+        atm_ivs = [
+            iv
+            for strike, iv in valid_ivs
+            if strike == atm_strike
+        ]
+
+        if not atm_ivs:
+            return
+
+        atm_iv = sum(atm_ivs) / len(atm_ivs)
+
+        self.conn.execute(
+            """
+            INSERT OR REPLACE INTO underlying_iv_observations VALUES (
+                ?, ?, ?, ?, ?, ?
+            )
+            """,
+            [
+                snapshot.ts,
+                snapshot.underlying,
+                snapshot.expiry,
+                atm_iv,
+                snapshot.spot,
+                "atm_average_live",
+            ],
+        )
 
     def latest_iv_history(self, underlying: str, limit: int | None = None) -> list[float]:
         settings = get_settings()

@@ -1,7 +1,8 @@
+from types import SimpleNamespace
+
 from nse_quant.market_data.replay_provider import (
     ReplayMarketDataProvider,
 )
-
 
 def test_open_position_is_marked_and_exit_evaluated(
     decision_loop_environment,
@@ -54,31 +55,65 @@ def test_position_closes_when_exit_triggers(
 
     assert closed
     assert closed[0]["selected_exit_reason"] is not None
-
 def test_new_entry_blocked_at_max_open_positions(
     decision_loop_environment,
     entry_snapshots,
+    _seed_candles,
+    test_store,
+    monkeypatch,
 ):
+    _seed_candles(test_store, 256265, "NIFTY", 60, "1m")
+    _seed_candles(test_store, 256265, "NIFTY", 60, "15m")
+    _seed_candles(test_store, 256265, "NIFTY", 60, "60m")
+
     provider = ReplayMarketDataProvider(entry_snapshots["snapshots"])
     loop = decision_loop_environment.build_loop(
         provider,
         proposal=entry_snapshots["proposal"],
     )
 
+    loop.settings.research.enforce_feature_availability = False
+    loop.settings.research.enforce_regime_policy = False
+
+    # This test verifies position-capacity enforcement, not exits.
+    # Prevent IV_COLLAPSE or any other exit from freeing capacity.
+    monkeypatch.setattr(
+        loop.exit_engine,
+        "evaluate",
+        lambda *args, **kwargs: SimpleNamespace(
+            selected_reason=None,
+        ),
+    )
+    monkeypatch.setattr(
+        loop.positions,
+        "save_exit_evaluation",
+        lambda *_args, **_kwargs: None,
+    )
+
     first = loop.run_once()
+
+    print("FIRST:", first["status"])
+    print("FIRST EXIT:", first.get("exit_reason"))
+
+    open_after_first = loop.positions.get_open_strategy_positions()
+    print("OPEN AFTER FIRST:", len(open_after_first))
+
     assert first["status"] == "paper_filled"
+    assert first.get("exit_reason") is None
+    assert len(open_after_first) == 1
 
     second = loop.run_once()
+
+    print("SECOND:", second["status"])
+    print("SECOND OUTCOMES:", second["position_outcomes"])
+
     assert second["status"] == "max_open_positions"
+
 
 def test_run_once_persists_chain_snapshot(
     decision_loop_environment,
     replay_snapshots,
 ):
-    from nse_quant.market_data.replay_provider import (
-        ReplayMarketDataProvider,
-    )
-
     provider = ReplayMarketDataProvider(
         replay_snapshots["snapshots"]
     )

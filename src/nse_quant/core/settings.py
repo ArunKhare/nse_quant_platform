@@ -98,6 +98,7 @@ class CandleIntervalSettings(BaseModel):
 
 class MarketDataSettings(BaseModel):
     default_symbol: str = "NIFTY"
+    risk_free_rate: float = 0.065
 
     index_symbols: list[str] = Field(
         default_factory=lambda: [
