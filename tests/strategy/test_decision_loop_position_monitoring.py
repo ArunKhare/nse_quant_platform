@@ -4,6 +4,7 @@ from nse_quant.market_data.replay_provider import (
     ReplayMarketDataProvider,
 )
 
+
 def test_open_position_is_marked_and_exit_evaluated(
     decision_loop_environment,
     replay_snapshots,
@@ -198,3 +199,4 @@ def test_position_closes_on_iv_collapse(
         outcomes[0]["selected_exit_reason"]
         == "IV_COLLAPSE"
     )
+

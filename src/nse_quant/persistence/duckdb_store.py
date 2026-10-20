@@ -421,7 +421,7 @@ class DuckDBStore:
             tzinfo=IST,
         )
 
-        return implied_volatility(
+        iv = implied_volatility(
             option_price=ltp,
             spot=spot,
             strike=strike,
@@ -432,6 +432,11 @@ class DuckDBStore:
             risk_free_rate=settings.market_data.risk_free_rate,
             option_type=option_type,
         )
+
+        if iv is None or not 0.001 <= iv <= 5.0:
+            return None
+        return iv
+    
     def write_option_stream(
         self,
         run_id: str,
