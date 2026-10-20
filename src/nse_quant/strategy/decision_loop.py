@@ -41,6 +41,7 @@ from nse_quant.features.feature_gates import SpotFeatureGate
 from nse_quant.features.feature_service import SpotFeatureService
 from nse_quant.features.feature_store import FeatureStore
 from nse_quant.ops.data_quality import DataQualityChecker, DataQualityReport
+from nse_quant.ops.eligibility_alerts import EligibilityAlertManager
 from nse_quant.ops.live_snapshot import build_snapshot, write_live_snapshot
 from nse_quant.persistence.repositories import (
     DecisionRepository,
@@ -101,7 +102,7 @@ class DecisionLoop:
         )
         self.availability_checker = FeatureAvailabilityChecker(store)
         self._live_snapshot_path = live_snapshot_path
-
+        self.eligibility_alerts = EligibilityAlertManager(self.decisions)
 
     def run_once(self) -> dict[str, Any]:
         symbol = self.settings.market_data.default_symbol
@@ -316,6 +317,11 @@ class DecisionLoop:
                 {"gate": eligibility.model_dump(mode="json")},
             )
 
+            self.eligibility_alerts.evaluate(
+                        run_id=self.run_id,
+                        eligibility=eligibility.model_dump(mode="json"),
+                        notify=self._send_eligibility_alert,
+                    )
             if not eligibility.passed:
                 return self._finish_cycle(
                     status="strategy_eligibility_rejected",
@@ -1179,3 +1185,9 @@ class DecisionLoop:
             reason=f"eligible_regime_source={regime_source}",
             details=checks,
         )
+    def _send_eligibility_alert(self) -> None:
+        if not self.settings.notifier.enabled:
+            return
+
+        if not self.settings.notifier.telegram.enabled:
+            return
