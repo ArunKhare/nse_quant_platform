@@ -1103,3 +1103,12 @@ class DuckDBStore:
         ).fetchall()
 
         return [row[0] for row in rows]
+
+    def is_trading_day(day: date | None = None) -> bool:
+        """Return True when the given IST date is an NSE trading day."""
+        day = day or datetime.now(IST).date()
+
+        if day.weekday() >= 5:
+            return False
+
+        return day.isoformat() not in NSE_HOLIDAYS

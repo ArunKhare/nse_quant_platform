@@ -15,7 +15,8 @@ from pathlib import Path
 from nse_quant.core.settings import get_settings
 from nse_quant.ops.notifier import Notifier, NullNotifier
 from nse_quant.persistence.duckdb_store import DuckDBStore
-
+from nse_quant.core.market_calendar import is_trading_day
+from nse_quant.research.validate_warehouse import validate_file
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
@@ -189,6 +190,19 @@ def main() -> int:
                     output_dir=export_dir,
                     date_str=trade_date,
                 )
+
+            if parquet_path is not None:
+                validation = validate_file(
+                    parquet_path,
+                    underlying=symbol,
+                    min_snapshots=100,
+                )
+
+                if validation["status"] != "ok":
+                    summary += (
+                        "\nWarehouse warning: "
+                        + ", ".join(validation["issues"])
+                    )
 
             summary = build_summary(
                 symbol=symbol,
