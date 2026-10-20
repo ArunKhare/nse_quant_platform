@@ -1,4 +1,3 @@
-
 def test_write_option_stream_computes_iv(
     test_store,
     snapshot_factory,
@@ -9,7 +8,6 @@ def test_write_option_stream_computes_iv(
         put_price=115.0,
     )
 
-    # Ensure incoming quotes have no IV, as with raw Kite ticks.
     for quote in snapshot.quotes:
         quote.iv = None
 
@@ -31,7 +29,9 @@ def test_write_option_stream_computes_iv(
     assert len(rows) == 2
     assert all(row[0] is not None for row in rows)
 
-    iv_count = test_store.count_underlying_iv_observations(
-        underlying="NIFTY"
+    assert (
+        test_store.count_underlying_iv_observations(
+            underlying="NIFTY"
+        )
+        == 1
     )
-    assert iv_count == 1
