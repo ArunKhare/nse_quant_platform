@@ -400,6 +400,17 @@ class DuckDBStore:
             """
         self.conn.execute(IV_OBSERVATIONS_SQL)
 
+        DAILY_IV= """
+            CREATE TABLE IF NOT EXISTS daily_rv_observations (
+                symbol VARCHAR NOT NULL,
+                trading_date DATE NOT NULL,
+                rv DOUBLE NOT NULL,
+                observation_count BIGINT NOT NULL,
+                PRIMARY KEY (symbol, trading_date)
+            )
+            """
+        self.conn.execute(DAILY_IV)
+
     def _compute_option_iv(
         self,
         *,
@@ -436,7 +447,7 @@ class DuckDBStore:
         if iv is None or not 0.001 <= iv <= 5.0:
             return None
         return iv
-    
+
     def write_option_stream(
         self,
         run_id: str,
@@ -1024,10 +1035,9 @@ class DuckDBStore:
                     SELECT
                         CAST(iv.ts AS DATE) AS trading_date
                     FROM underlying_iv_observations AS iv
-                    INNER JOIN spot_features AS sf
-                        ON sf.symbol = ?
-                       AND CAST(sf.ts AS DATE) = CAST(iv.ts AS DATE)
-                       AND sf.rv_1m_30 IS NOT NULL
+                    INNER JOIN daily_rv_observations AS rv
+                        ON rv.symbol = ?
+                       AND rv.trading_date = CAST(iv.ts AS DATE)
                     WHERE iv.underlying = ?
                       AND iv.ts < ?
                     GROUP BY CAST(iv.ts AS DATE)
@@ -1036,3 +1046,41 @@ class DuckDBStore:
                 [symbol, symbol, as_of],
             ).fetchone()[0]
         )
+
+    def write_daily_rv_observation(
+        self,
+        *,
+        symbol: str,
+        trading_date: date,
+        rv: float,
+        observation_count: int,
+    ) -> int:
+
+        self.conn.execute(
+            """
+            INSERT OR REPLACE INTO daily_rv_observations VALUES (
+                ?, ?, ?, ?
+            )
+            """,
+            [symbol, trading_date, rv, observation_count],
+        )
+        return 1
+
+    def get_daily_rv_dates(
+        self,
+        *,
+        symbol: str,
+        as_of: datetime,
+    ) -> list[date]:
+        rows = self.conn.execute(
+            """
+            SELECT trading_date
+            FROM daily_rv_observations
+            WHERE symbol = ?
+              AND trading_date < ?
+            ORDER BY trading_date
+            """,
+            [symbol, as_of.date()],
+        ).fetchall()
+
+        return [row[0] for row in rows]
