@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any
 
@@ -367,6 +367,20 @@ class DuckDBStore:
                 ADD COLUMN risk_limits JSON
                 """
             )
+
+        IV_OBSERVATIONS_SQL = """
+            CREATE TABLE IF NOT EXISTS underlying_iv_observations (
+                ts TIMESTAMPTZ NOT NULL,
+                underlying VARCHAR NOT NULL,
+                expiry DATE NOT NULL,
+                iv DOUBLE NOT NULL,
+                spot DOUBLE,
+                source VARCHAR NOT NULL,
+                PRIMARY KEY (ts, underlying, expiry)
+            )
+            """
+        self.conn.execute(IV_OBSERVATIONS_SQL)
+
     def write_option_stream(
         self,
         run_id: str,
@@ -804,3 +818,69 @@ class DuckDBStore:
                 else {}
             ),
         }
+
+    def write_underlying_iv_observation(
+        self,
+        *,
+        ts: datetime,
+        underlying: str,
+        expiry: date,
+        iv: float,
+        spot: float | None,
+        source: str = "atm_average",
+    ) -> int:
+        """Insert or replace one underlying-level IV observation."""
+        self.conn.execute(
+            """
+            INSERT OR REPLACE INTO underlying_iv_observations
+                (ts, underlying, expiry, iv, spot, source)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            [ts, underlying, expiry, iv, spot, source],
+        )
+        return 1
+
+    def get_underlying_iv_observations(
+        self,
+        *,
+        underlying: str,
+        expiry: date | None = None,
+        limit: int | None = None,
+    ) -> list[tuple[datetime, float, float | None]]:
+        query = """
+            SELECT ts, iv, spot
+            FROM underlying_iv_observations
+            WHERE underlying = ?
+        """
+        params: list[Any] = [underlying]
+
+        if expiry is not None:
+            query += " AND expiry = ?"
+            params.append(expiry)
+
+        query += " ORDER BY ts"
+
+        if limit is not None:
+            query += " LIMIT ?"
+            params.append(limit)
+
+        return self.conn.execute(query, params).fetchall()
+
+    def count_underlying_iv_observations(
+        self,
+        *,
+        underlying: str,
+        expiry: date | None = None,
+    ) -> int:
+        query = """
+            SELECT COUNT(*)
+            FROM underlying_iv_observations
+            WHERE underlying = ?
+        """
+        params: list[Any] = [underlying]
+
+        if expiry is not None:
+            query += " AND expiry = ?"
+            params.append(expiry)
+
+        return self.conn.execute(query, params).fetchone()[0]
