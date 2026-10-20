@@ -12,6 +12,8 @@ class ReplayMarketDataProvider:
     def __init__(
         self,
         snapshots: list[ChainSnapshot],
+        *,
+        spot_instrument_tokens: dict[str, int] | None = None,
     ) -> None:
         if not snapshots:
             raise ValueError(
@@ -20,22 +22,7 @@ class ReplayMarketDataProvider:
 
         self._snapshots = snapshots
         self._index = 0
-
-    @classmethod
-    def from_json(
-        cls,
-        path: str | Path,
-    ) -> "ReplayMarketDataProvider":
-        payload = json.loads(
-            Path(path).read_text(encoding="utf-8")
-        )
-
-        snapshots = [
-            ChainSnapshot.model_validate(item)
-            for item in payload["snapshots"]
-        ]
-
-        return cls(snapshots)
+        self._spot_instrument_tokens = spot_instrument_tokens or {}
 
     def get_chain_snapshot(self) -> ChainSnapshot:
         if self._index >= len(self._snapshots):
@@ -47,6 +34,49 @@ class ReplayMarketDataProvider:
         self._index += 1
         return snapshot
 
+    def resolve_spot_instrument_token(
+        self,
+        symbol: str,
+    ) -> int:
+        token = self._spot_instrument_tokens.get(symbol)
+
+        if token is None:
+            raise ValueError(
+                f"No spot instrument token configured for replay "
+                f"symbol '{symbol}'"
+            )
+
+        return token
+
     @property
     def remaining(self) -> int:
         return max(0, len(self._snapshots) - self._index)
+
+    @classmethod
+    def from_json(
+        cls,
+        path: str | Path,
+        *,
+        spot_instrument_tokens: dict[str, int] | None = None,
+    ) -> "ReplayMarketDataProvider":
+        payload = json.loads(
+            Path(path).read_text(encoding="utf-8")
+        )
+
+        snapshots = [
+            ChainSnapshot.model_validate(item)
+            for item in payload["snapshots"]
+        ]
+
+        underlying = payload.get("underlying")
+        embedded_token = payload.get("spot_instrument_token")
+
+        tokens = dict(spot_instrument_tokens or {})
+
+        if underlying and embedded_token is not None:
+            tokens.setdefault(underlying, int(embedded_token))
+
+        return cls(
+            snapshots,
+            spot_instrument_tokens=tokens,
+        )

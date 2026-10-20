@@ -16,6 +16,7 @@ from nse_quant.core.models import (
     OptionQuote,
     OptionType,
 )
+from nse_quant.core.settings import get_settings
 
 logger = logging.getLogger(__name__)
 
@@ -138,7 +139,7 @@ class ReplayExporter:
         print(f"DEBUG range: {len(rows)} rows, from={from_dt!r}, to={to_dt!r}")
         if rows:
             print("DEBUG first:", rows[0])
-            
+
         return self._write_replay(
             underlying=underlying,
             rows=rows,
@@ -225,10 +226,33 @@ class ReplayExporter:
         output.parent.mkdir(parents=True, exist_ok=True)
         output.write_text(
             json.dumps(
-                {"underlying": underlying, "snapshots": snapshots},
+                {
+                    "underlying": underlying,
+                    "spot_instrument_token": self._resolve_spot_token(
+                        underlying
+                    ),
+                    "snapshots": snapshots,
+                },
                 default=str,
                 separators=(",", ":"),
             ),
             encoding="utf-8",
         )
         return output
+
+    # def _resolve_spot_token(self, underlying: str) -> int | None:
+    #     row = self.store.conn.execute(
+    #         """
+    #         SELECT instrument_token
+    #         FROM spot_instruments
+    #         WHERE symbol = ?
+    #         LIMIT 1
+    #         """,
+    #         [underlying],
+    #     ).fetchone()
+
+    #     return row[0] if row else None
+
+    def _resolve_spot_token(self, underlying: str) -> int | None:
+        settings = get_settings()
+        return settings.market_data.index_instrument_tokens.get(underlying)

@@ -83,6 +83,16 @@ def parse_args() -> argparse.Namespace:
             "testing. Never use for live decision-making."
         ),
     )
+
+    parser.add_argument(
+        "--spot-token",
+        type=int,
+        default=None,
+        help=(
+            "Spot instrument token used in replay mode; required "
+            "when --replay-file is supplied"
+        ),
+    )
     return parser.parse_args()
 
 
@@ -97,7 +107,14 @@ def main() -> int:
             "Live trading is blocked in v0.3.0. Set TRADING_ENABLED=false."
         )
     if args.replay_file:
-        provider = ReplayMarketDataProvider.from_json(args.replay_file)
+        provider = ReplayMarketDataProvider.from_json(
+            args.replay_file,
+            spot_instrument_tokens=(
+                {settings.market_data.default_symbol: args.spot_token}
+                if args.spot_token is not None
+                else None
+            ),
+        )
     else:
         kite = get_cached_kite(settings=settings)
         provider = KiteMarketDataProvider(kite)
