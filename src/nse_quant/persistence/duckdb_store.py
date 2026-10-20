@@ -591,32 +591,21 @@ class DuckDBStore:
 
     def export_parquet(self, output_dir: str | Path, date_str: str) -> Path:
         """Export one trade date's option stream to a dated Parquet file."""
-        # Reject malformed dates before they can reach SQL or the filesystem.
-        parsed_date = date.fromisoformat(date_str)
-        normalized_date = parsed_date.isoformat()
+        datetime.strptime(date_str, "%Y-%m-%d")
 
-        output_dir_path = Path(output_dir).resolve()
-        output = output_dir_path / f"option_stream_{normalized_date}.parquet"
-
-        # Defensive check: the final file must remain inside the requested export dir.
-        if output.parent != output_dir_path:
-            raise ValueError(f"Unsafe Parquet export path: {output}")
-
+        output = Path(output_dir) / f"option_stream_{date_str}.parquet"
         output.parent.mkdir(parents=True, exist_ok=True)
 
-        # DuckDB COPY TO does not support a prepared-statement parameter for the
-        # destination path. Embed it as an escaped SQL string literal instead.
-        escaped_output_path = str(output).replace("'", "''")
+        output_path = str(output).replace("'", "''")
 
         self.conn.execute(
             f"""
             COPY (
                 SELECT *
                 FROM option_stream
-                WHERE CAST(ts AS DATE) = ?
-            ) TO '{escaped_output_path}' (FORMAT PARQUET)
-            """,
-            [normalized_date],
+                WHERE CAST(ts AS DATE) = DATE '{date_str}'
+            ) TO '{output_path}' (FORMAT PARQUET)
+            """
         )
 
         return output

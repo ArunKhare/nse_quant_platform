@@ -146,6 +146,7 @@ def main() -> int:
     args = parse_args()
     settings = get_settings(args.config)
 
+    export_dir = args.export_dir or settings.storage.parquet_dir
     symbol = args.symbol or settings.market_data.default_symbol
 
     trade_date = (
@@ -185,7 +186,7 @@ def main() -> int:
 
             if not args.skip_export:
                 parquet_path = store.export_parquet(
-                    output_dir=args.export_dir,
+                    output_dir=export_dir,
                     date_str=trade_date,
                 )
 
