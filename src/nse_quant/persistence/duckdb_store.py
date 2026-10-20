@@ -592,16 +592,17 @@ class DuckDBStore:
     def export_parquet(self, output_dir: str | Path, date_str: str) -> Path:
         output = Path(output_dir) / f"option_stream_{date_str}.parquet"
         output.parent.mkdir(parents=True, exist_ok=True)
+        output_path = str(output).replace("'", "''")
+        datetime.strptime(date_str, "%Y-%m-%d")
 
         self.conn.execute(
-            """
+            f"""
             COPY (
                 SELECT *
                 FROM option_stream
-                WHERE CAST(ts AS DATE) = ?
-            ) TO ? (FORMAT PARQUET)
-            """,
-            [date_str, str(output)],
+                WHERE CAST(ts AS DATE) = DATE '{date_str}'
+            ) TO '{output_path}' (FORMAT PARQUET)
+            """
         )
 
         return output
