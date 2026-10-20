@@ -1,0 +1,129 @@
+"""Classify daily IV regimes from IV surface research data."""
+
+from __future__ import annotations
+
+import argparse
+
+import pandas as pd
+
+from nse_quant.research.iv_regimes import (
+    classify_iv_regimes,
+    save_regime_report,
+)
+from nse_quant.research.iv_surface import (
+    build_daily_iv_summary,
+    build_iv_surface_report,
+)
+from nse_quant.persistence.duckdb_store import DuckDBStore
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Classify daily IV regimes"
+    )
+
+    parser.add_argument(
+        "--underlying",
+        default="NIFTY",
+    )
+
+    parser.add_argument(
+        "--from",
+        dest="from_date",
+        required=True,
+        help="Start date, YYYY-MM-DD",
+    )
+
+    parser.add_argument(
+        "--to",
+        dest="to_date",
+        required=True,
+        help="End date, YYYY-MM-DD",
+    )
+
+    parser.add_argument(
+        "--output-dir",
+        default="data/research",
+    )
+
+    return parser.parse_args()
+
+
+def main() -> int:
+    args = parse_args()
+
+    store = DuckDBStore()
+
+    try:
+        frame = store.conn.execute(
+            """
+            SELECT
+                ts,
+                underlying,
+                expiry,
+                strike,
+                option_type,
+                ltp,
+                spot,
+                iv,
+                delta
+            FROM option_stream
+            WHERE underlying = ?
+              AND CAST(ts AS DATE) BETWEEN ? AND ?
+              AND iv IS NOT NULL
+              AND delta IS NOT NULL
+            ORDER BY ts
+            """,
+            [args.underlying, args.from_date, args.to_date],
+        ).fetchdf()
+
+        if frame.empty:
+            print("No eligible option-stream data found.")
+            return 1
+
+        snapshot_report = build_iv_surface_report(
+            frame,
+            underlying=args.underlying,
+        )
+
+        if snapshot_report.empty:
+            print(
+                "Not enough multi-expiry snapshots to classify "
+                "IV regimes."
+            )
+            return 1
+
+        daily_report = build_daily_iv_summary(
+            snapshot_report
+        )
+
+        regime_report = classify_iv_regimes(
+            daily_report
+        )
+
+        output_path = save_regime_report(
+            regime_report,
+            output_dir=args.output_dir,
+            underlying=args.underlying,
+        )
+
+        print(
+            {
+                "days": len(regime_report),
+                "regimes": (
+                    regime_report["iv_regime"]
+                    .value_counts()
+                    .to_dict()
+                ),
+                "report": str(output_path),
+            }
+        )
+
+        return 0
+
+    finally:
+        store.conn.close()
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
