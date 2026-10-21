@@ -1065,7 +1065,8 @@ class DuckDBStore:
             query += " AND expiry = ?"
             params.append(expiry)
 
-        return self.conn.execute(query, params).fetchone()[0]
+        row = self.conn.execute(query, params).fetchone()
+        return row[0] if row is not None else 0
 
     def count_aligned_iv_rv_observations(
         self,
@@ -1074,25 +1075,24 @@ class DuckDBStore:
         as_of: datetime,
     ) -> int:
         """Count trading dates with both IV and realized-volatility data."""
-        return int(
-            self.conn.execute(
-                """
-                SELECT COUNT(*)
-                FROM (
-                    SELECT
-                        CAST(iv.ts AS DATE) AS trading_date
-                    FROM underlying_iv_observations AS iv
-                    INNER JOIN daily_rv_observations AS rv
-                        ON rv.symbol = ?
-                       AND rv.trading_date = CAST(iv.ts AS DATE)
-                    WHERE iv.underlying = ?
-                      AND iv.ts < ?
-                    GROUP BY CAST(iv.ts AS DATE)
-                )
-                """,
-                [symbol, symbol, as_of],
-            ).fetchone()[0]
-        )
+        row = self.conn.execute(
+            """
+            SELECT COUNT(*)
+            FROM (
+                SELECT
+                    CAST(iv.ts AS DATE) AS trading_date
+                FROM underlying_iv_observations AS iv
+                INNER JOIN daily_rv_observations AS rv
+                    ON rv.symbol = ?
+                   AND rv.trading_date = CAST(iv.ts AS DATE)
+                WHERE iv.underlying = ?
+                  AND iv.ts < ?
+                GROUP BY CAST(iv.ts AS DATE)
+            )
+            """,
+            [symbol, symbol, as_of],
+        ).fetchone()
+        return int(row[0]) if row is not None else 0
 
     def write_daily_rv_observation(
         self,
@@ -1135,7 +1135,7 @@ class DuckDBStore:
     def is_trading_day(self, day: date | None = None) -> bool:
         """Return True when the given IST date is an NSE trading day."""
         day = day or datetime.now(IST).date()
-        
+
         return day.weekday() >= 5
 
     def write_daily_iv_regime(

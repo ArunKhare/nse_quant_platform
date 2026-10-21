@@ -72,17 +72,22 @@ def evaluate_backtest_readiness(
     conn = duckdb.connect()
 
     try:
-        complete_option_days = conn.execute(
+        complete_option_days_row = conn.execute(
             """
             SELECT COUNT(DISTINCT CAST(ts AS DATE))
             FROM read_parquet(?)
             WHERE underlying = ?
             """,
             [warehouse_glob, underlying],
-            ).fetchone()[0]
+        ).fetchone()
+        complete_option_days = (
+            complete_option_days_row[0]
+            if complete_option_days_row is not None
+            else 0
+        )
 
 
-        iv_rv_aligned_days =conn.execute(
+        iv_rv_aligned_days_row = conn.execute(
             """
             WITH option_days AS (
                 SELECT
@@ -98,18 +103,24 @@ def evaluate_backtest_readiness(
             WHERE observation_count > 0
             """,
             [warehouse_glob, underlying],
-        ).fetchone()[0]
+        ).fetchone()
+        iv_rv_aligned_days = (
+            iv_rv_aligned_days_row[0]
+            if iv_rv_aligned_days_row is not None
+            else 0
+        )
 
         regime_days = 0
         if regime_files:
-            regime_days = conn.execute(
+            regime_days_row = conn.execute(
                 """
                 SELECT COUNT(DISTINCT CAST(ts AS DATE))
                 FROM read_parquet(?)
                 WHERE symbol = ?
                 """,
                 [regime_glob, underlying],
-            ).fetchone()[0]
+            ).fetchone()
+            regime_days = regime_days_row[0] if regime_days_row is not None else 0
     finally:
         conn.close()
 

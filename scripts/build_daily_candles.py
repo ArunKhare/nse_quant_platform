@@ -81,7 +81,7 @@ def main() -> int:
             ],
         )
 
-        daily_count = store.conn.execute(
+        daily_count_row = store.conn.execute(
             """
             SELECT COUNT(*)
             FROM spot_candles
@@ -94,7 +94,8 @@ def main() -> int:
                 args.start_date,
                 args.end_date,
             ],
-        ).fetchone()[0]
+        ).fetchone()
+        daily_count = daily_count_row[0] if daily_count_row is not None else 0
 
         print(
             f"{args.symbol}: built {daily_count} daily candles "

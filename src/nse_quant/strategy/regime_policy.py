@@ -126,18 +126,11 @@ def evaluate_regime_policy(
         reasons.append("IV rank unavailable")
 
     allowed = all(
-        checks.get(
-            "regime_available",
-            False,
-        ),
-        checks.get(
-            "regime_not_blocked",
-            False,
-        ),
-        checks.get(
-            "regime_allowed",
-            False,
-        ),
+        (
+            checks.get("regime_available", False),
+            checks.get("regime_not_blocked", False),
+            checks.get("regime_allowed", False),
+        )
     )
 
     if policy.require_iv_rank_available:
