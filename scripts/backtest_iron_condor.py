@@ -5,6 +5,8 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
+import pandas as pd
+
 from nse_quant.core.settings import get_settings
 from nse_quant.research.iron_condor_backtest import (
     IronCondorBacktester,
@@ -78,6 +80,24 @@ def parse_args() -> argparse.Namespace:
         default="data/backtests",
     )
 
+    parser.add_argument(
+        "--contracts",
+        type=int,
+        default=1,
+    )
+
+    parser.add_argument(
+        "--slippage-per-leg",
+        type=float,
+        default=0.50,
+    )
+
+    parser.add_argument(
+        "--brokerage-per-lot",
+        type=float,
+        default=20.0,
+    )
+
     return parser.parse_args()
 
 
@@ -107,6 +127,9 @@ def main() -> int:
         short_delta=args.short_delta,
         wing_width=args.wing_width,
         lot_size=args.lot_size,
+        contracts=args.contracts,
+        slippage_per_leg=args.slippage_per_leg,
+        brokerage_per_lot=args.brokerage_per_lot,
         profit_target_pct=args.profit_target,
         stop_loss_multiple=args.stop_multiple,
     )
@@ -117,7 +140,62 @@ def main() -> int:
     )
 
     trades = backtester.run()
+    print(backtester.diagnostics.as_dict())
     trades_frame = trades_to_frame(trades)
+
+    rv_regimes_path = Path(
+        "data/research/milestone2/rv_regimes_NIFTY.csv"
+    )
+
+    iv_regimes_path = Path(
+        "data/research/milestone2/iv_regimes_NIFTY.csv"
+    )
+
+    if rv_regimes_path.exists():
+        rv_regimes = pd.read_csv(rv_regimes_path)
+
+        rv_regimes["trade_date"] = pd.to_datetime(
+            rv_regimes["trade_date"]
+        ).dt.date
+
+        trades_frame["trade_date"] = pd.to_datetime(
+            trades_frame["exit_ts"],
+            utc=True,
+        ).dt.date
+
+        trades_frame = trades_frame.merge(
+            rv_regimes[
+                [
+                    "trade_date",
+                    "realized_volatility",
+                    "rv_percentile",
+                    "rv_regime",
+                ]
+            ],
+            on="trade_date",
+            how="left",
+        )
+
+    if iv_regimes_path.exists():
+        iv_regimes = pd.read_csv(iv_regimes_path)
+
+        iv_regimes["trade_date"] = pd.to_datetime(
+            iv_regimes["trade_date"]
+        ).dt.date
+
+        trades_frame = trades_frame.merge(
+            iv_regimes[
+                [
+                    "trade_date",
+                    "iv_level",
+                    "iv_term_regime",
+                    "iv_skew_regime",
+                    "iv_regime",
+                ]
+            ],
+            on="trade_date",
+            how="left",
+        )
 
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -128,6 +206,39 @@ def main() -> int:
     )
 
     trades_frame.to_csv(trades_path, index=False)
+
+    if not trades_frame.empty:
+        trades_frame["trade_date"] = pd.to_datetime(
+            trades_frame["exit_ts"],
+            utc=True,
+        ).dt.date
+
+        daily = (
+            trades_frame.groupby("trade_date", as_index=False)
+            .agg(
+                pnl=("pnl", "sum"),
+                trades=("pnl", "count"),
+            )
+        )
+
+        daily["capital_base"] = 100000.0
+        daily["daily_return"] = (
+            daily["pnl"] / daily["capital_base"]
+        )
+
+        returns_path = (
+            output_dir
+            / f"iron_condor_daily_returns_{args.underlying}_{args.start}_{args.end}.csv"
+        )
+
+        daily.to_csv(returns_path, index=False)
+
+        print(
+            {
+                "daily_returns_file": str(returns_path),
+                "trading_days": len(daily),
+            }
+        )
 
     total_pnl = (
         trades_frame["pnl"].sum()

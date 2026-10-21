@@ -84,6 +84,11 @@ def validate_parquet_file(
             [underlying],
         ).fetchone()
 
+        if stats is None:
+            result["status"] = "invalid"
+            result["issues"].append("statistics_query_returned_no_result")
+            return result
+
         row_count, snapshot_count, iv_rows, unexpected = stats
 
         result["rows"] = int(row_count)
@@ -116,7 +121,7 @@ def validate_parquet_file(
                 f"low_iv_coverage: {iv_coverage:.2%}"
             )
 
-        duplicate_rows = conn.execute(
+        duplicate_result = conn.execute(
             f"""
             SELECT count(*)
             FROM (
@@ -137,7 +142,8 @@ def validate_parquet_file(
             )
             WHERE row_number > 1
             """
-        ).fetchone()[0]
+        ).fetchone()
+        duplicate_rows = duplicate_result[0] if duplicate_result else 0
 
         if duplicate_rows:
             result["status"] = "warning"

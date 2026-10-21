@@ -22,6 +22,10 @@ from nse_quant.strategy.gates import GateEvaluator
 
 
 class IronCondorMonitor:
+    """Evaluate market conditions and produce iron-condor proposals."""
+
+    # This strategy exposes evaluate() as its single public operation.
+    # pylint: disable=too-few-public-methods
     strategy_name = "iron_condor_monitor"
 
     def __init__(self, settings: Any | None = None) -> None:
@@ -34,10 +38,10 @@ class IronCondorMonitor:
 
         self.config = self.profile
         self.gates = GateEvaluator(self.settings)
-        self.risk_settings = settings.get_effective_risk_settings(
+        self.risk_settings = self.settings.get_effective_risk_settings(
             "iron_condor_monitor"
         )
-        self.exit_settings = settings.get_effective_exit_settings("iron_condor_monitor")
+        self.exit_settings = self.settings.get_effective_exit_settings("iron_condor_monitor")
 
     def evaluate(
         self,

@@ -17,7 +17,7 @@ from nse_quant.analytics.implied_volatility import (
 from nse_quant.core.constants import IST
 from nse_quant.core.models import ChainSnapshot
 from nse_quant.core.settings import get_settings
-
+from nse_quant.research.capture_quality import 
 
 def _as_json_object(value: Any) -> Any:
     """Normalize DuckDB JSON values that may be strings or parsed objects."""
