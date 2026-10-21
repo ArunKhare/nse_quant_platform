@@ -1,6 +1,6 @@
 from nse_quant.persistence.duckdb_store import DuckDBStore
 
-store = DuckDBStore()
+store = DuckDBStore(read_only=True)
 
 print("Distinct underlying values:")
 print(

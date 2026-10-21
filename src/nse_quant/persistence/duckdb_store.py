@@ -35,15 +35,16 @@ def _as_json_object(value: Any) -> Any:
 class DuckDBStore:
     """Owns the DuckDB connection and schema."""
 
-    def __init__(self, path: str | Path | None = None) -> None:
+    def __init__(self, path: str | Path | None = None,*, read_only:bool = False) -> None:
         settings = get_settings()
         self.path = Path(path or settings.storage.db_path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
 
-        self.conn = duckdb.connect(str(self.path))
+        self.conn = duckdb.connect(str(self.path), read_only=read_only,)
         self.conn.execute(  f"SET memory_limit = '{settings.storage.db_memory_limit}'")
         self.conn.execute(f"SET threads = {settings.storage.db_threads}")
-        self._create_schema()
+        if not read_only:
+            self._create_schema()
 
     def _create_schema(self) -> None:
         self.conn.execute(
@@ -1134,11 +1135,8 @@ class DuckDBStore:
     def is_trading_day(self, day: date | None = None) -> bool:
         """Return True when the given IST date is an NSE trading day."""
         day = day or datetime.now(IST).date()
-
-        if day.weekday() >= 5:
-            return False
-
-        return day.isoformat()
+        
+        return day.weekday() >= 5
 
     def write_daily_iv_regime(
         self,

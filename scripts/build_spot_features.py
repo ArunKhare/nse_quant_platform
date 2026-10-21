@@ -48,7 +48,19 @@ def main() -> int:
     from_ts = (
         pd.Timestamp(args.from_ts) if args.from_ts else None
     )
-    to_ts = pd.Timestamp(args.to_ts) if args.to_ts else None
+    to_ts = (
+        pd.Timestamp(args.to_ts) if args.to_ts else None
+    )
+
+    if from_ts is not None and from_ts.hour == 0 and from_ts.minute == 0:
+        from_ts = from_ts.tz_localize("Asia/Kolkata")
+
+    if to_ts is not None and to_ts.hour == 0 and to_ts.minute == 0:
+        to_ts = (
+            to_ts
+            + pd.Timedelta(days=1)
+            - pd.Timedelta(seconds=1)
+        ).tz_localize("Asia/Kolkata")
 
     store = DuckDBStore()
 

@@ -117,7 +117,7 @@ def main() -> int:
     args = parse_args()
     as_of = parse_as_of(args.as_of)
 
-    store = DuckDBStore()
+    store = DuckDBStore(read_only=True)
 
     try:
         policy = store.latest_regime_policy(

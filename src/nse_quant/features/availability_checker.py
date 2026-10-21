@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any
+from typing import Any, cast
 
 from nse_quant.features.availability import (
     CORE_1M_REQUIREMENTS,
@@ -149,9 +149,14 @@ class FeatureAvailabilityChecker:
         )
 
         if callable(aligned_count):
-            iv_rv_aligned_observations = aligned_count(
-                symbol=symbol,
-                as_of=as_of,
+            iv_rv_aligned_observations = int(
+                cast(
+                    Any,
+                    aligned_count(
+                        symbol=symbol,
+                        as_of=as_of,
+                    ),
+                )
             )
         else:
             iv_rv_aligned_observations = min(

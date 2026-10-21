@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from itertools import pairwise
 from pathlib import Path
 
 import pandas as pd
@@ -58,43 +59,57 @@ def build_iv_surface_report(
         if len(expiries) < 2:
             continue
 
-        near_expiry = expiries[0]
-        next_expiry = expiries[1]
-
-        near = snapshot[snapshot["expiry"] == near_expiry]
-        next_expiry_frame = snapshot[
+        for near_expiry, next_expiry in pairwise(expiries):
+            near = snapshot[snapshot["expiry"] == near_expiry]
+            next_expiry_frame = snapshot[
             snapshot["expiry"] == next_expiry
-        ]
+            ]
 
-        spot = float(near["spot"].iloc[0])
+            spot = float(near["spot"].iloc[0])
 
-        near_atm = _atm_iv(near, spot)
-        next_atm = _atm_iv(next_expiry_frame, spot)
+            near_atm = _atm_iv(near, spot)
+            next_atm = _atm_iv(next_expiry_frame, spot)
 
-        if near_atm is None or next_atm is None:
-            continue
+            if near_atm is None or next_atm is None:
+                continue
 
-        put_skew = _skew(near, spot)
-        risk_reversal = _risk_reversal(near)
-        butterfly = _butterfly(near)
-
-        reports.append(
-            {
-                "ts": ts,
-                "trade_date": ts.date(),
-                "underlying": underlying,
-                "spot": spot,
-                "near_expiry": near_expiry,
-                "next_expiry": next_expiry,
-                "atm_iv_near": near_atm,
-                "atm_iv_next": next_atm,
-                "term_structure": next_atm - near_atm,
-                "put_call_skew": put_skew,
-                "risk_reversal_25d": risk_reversal,
-                "butterfly_25d": butterfly,
-            }
+            reports.append(
+                {
+                    "ts": ts,
+                    "trade_date": ts.date(),
+                    "underlying": underlying,
+                    "spot": spot,
+                    "near_expiry": near_expiry,
+                    "next_expiry": next_expiry,
+                    "tenor_pair": (
+                        f"{near_expiry}_to_{next_expiry}"
+                    ),
+                    "atm_iv_near": near_atm,
+                    "atm_iv_next": next_atm,
+                    "term_structure": next_atm - near_atm,
+                    "put_call_skew": _skew(near, spot),
+                    "risk_reversal_25d":  _risk_reversal(near),
+                    "butterfly_25d": _butterfly(near),
+                }
+            )
+    if not reports:
+        return pd.DataFrame(
+            columns=[
+                "ts",
+                "trade_date",
+                "underlying",
+                "spot",
+                "near_expiry",
+                "next_expiry",
+                "tenor_pair",
+                "atm_iv_near",
+                "atm_iv_next",
+                "term_structure",
+                "put_call_skew",
+                "risk_reversal_25d",
+                "butterfly_25d",
+            ]
         )
-
     return pd.DataFrame(reports).sort_values("ts")
 
 
@@ -265,3 +280,162 @@ def save_reports(
     daily_report.to_csv(daily_path, index=False)
 
     return snapshot_path, daily_path
+
+def build_single_expiry_iv_report(
+    frame: pd.DataFrame,
+    *,
+    underlying: str,
+) -> pd.DataFrame:
+    """Build ATM IV, skew, risk reversal, and butterfly metrics."""
+
+    if frame.empty:
+        return pd.DataFrame()
+
+    required = {
+        "ts",
+        "underlying",
+        "expiry",
+        "strike",
+        "option_type",
+        "ltp",
+        "spot",
+        "iv",
+        "delta",
+    }
+
+    missing = required.difference(frame.columns)
+
+    if missing:
+        raise ValueError(
+            f"Missing required columns: {sorted(missing)}"
+        )
+
+    frame = frame.copy()
+    frame["ts"] = pd.to_datetime(frame["ts"], utc=True)
+    frame["expiry"] = pd.to_datetime(
+        frame["expiry"]
+    ).dt.date
+
+    frame = frame[
+        (frame["underlying"] == underlying)
+        & frame["iv"].notna()
+        & (frame["ltp"] > 0)
+    ].copy()
+
+    frame["time_to_expiry"] = frame.apply(
+        lambda row: _time_to_expiry_years(
+            row["ts"],
+            row["expiry"],
+        ),
+        axis=1,
+    )
+
+    frame["delta"] = frame.apply(
+        lambda row: (
+            row["delta"]
+            if pd.notna(row["delta"])
+            else black_scholes_delta(
+                spot=row["spot"],
+                strike=row["strike"],
+                iv=row["iv"],
+                time_to_expiry=row["time_to_expiry"],
+                option_type=row["option_type"],
+            )
+        ),
+        axis=1,
+    )
+
+    frame = frame[frame["delta"].notna()]
+
+    reports: list[dict[str, object]] = []
+
+    for ts, snapshot in frame.groupby("ts"):
+        spot = float(snapshot["spot"].iloc[0])
+        expiry = snapshot["expiry"].iloc[0]
+
+        atm_iv = _atm_iv(snapshot, spot)
+        skew = _skew(snapshot, spot)
+        risk_reversal = _risk_reversal(snapshot)
+        butterfly = _butterfly(snapshot)
+
+        reports.append(
+            {
+                "ts": ts,
+                "trade_date": ts.date(),
+                "underlying": underlying,
+                "expiry": expiry,
+                "spot": spot,
+                "atm_iv": atm_iv,
+                "put_call_skew": skew,
+                "risk_reversal_25d": risk_reversal,
+                "butterfly_25d": butterfly,
+            }
+        )
+
+    return pd.DataFrame(reports).sort_values("ts")
+
+
+import numpy as np
+from scipy.stats import norm
+
+RISK_FREE_RATE = 0.065
+
+
+def _time_to_expiry_years(
+    ts: pd.Timestamp,
+    expiry: object,
+) -> float:
+    expiry_ts = pd.Timestamp(expiry)
+
+    expiry_time = (
+        expiry_ts
+        + pd.Timedelta(hours=15, minutes=30)
+    )
+
+    expiry_time = expiry_time.tz_localize(
+        "Asia/Kolkata"
+    )
+
+    observation_time = pd.Timestamp(ts).tz_convert(
+        "Asia/Kolkata"
+    )
+
+    seconds = (
+        expiry_time - observation_time
+    ).total_seconds()
+
+    return max(
+        seconds / (365.0 * 24.0 * 60.0 * 60.0),
+        1e-8,
+    )
+
+
+def black_scholes_delta(
+    *,
+    spot: float,
+    strike: float,
+    iv: float,
+    time_to_expiry: float,
+    option_type: str,
+    risk_free_rate: float = RISK_FREE_RATE,
+) -> float:
+    if spot <= 0 or strike <= 0 or iv <= 0:
+        return float("nan")
+
+    d1 = (
+        np.log(spot / strike)
+        + (
+            risk_free_rate
+            + 0.5 * iv * iv
+        ) * time_to_expiry
+    ) / (
+        iv * np.sqrt(time_to_expiry)
+    )
+
+    if option_type == "CE":
+        return float(norm.cdf(d1))
+
+    if option_type == "PE":
+        return float(norm.cdf(d1) - 1.0)
+
+    return float("nan")

@@ -76,10 +76,10 @@ def main() -> int:
     snapshots = load_replay_snapshots(replay_file)
 
     provider = ReplayMarketDataProvider(snapshots)
-    store = DuckDBStore(database_path)
+    store = DuckDBStore(database_path, read_only=True)
     broker = PaperBroker()
 
-   
+
     loop = DecisionLoop(
         store=store,
         provider=provider,
@@ -128,20 +128,30 @@ def main() -> int:
                 f"proposal_id={result.get('proposal_id')}"
             )
 
-        closed_trades = store.conn.execute(
+        closed_trades_row = store.conn.execute(
             """
             SELECT COUNT(*)
             FROM post_trade_reviews
             """
-        ).fetchone()[0]
+        ).fetchone()
+        closed_trades = (
+            closed_trades_row[0]
+            if closed_trades_row is not None
+            else 0
+        )
 
-        open_trades = store.conn.execute(
+        open_trades_row = store.conn.execute(
             """
             SELECT COUNT(*)
             FROM strategy_positions
             WHERE status = 'OPEN'
             """
-        ).fetchone()[0]
+        ).fetchone()
+        open_trades = (
+            open_trades_row[0]
+            if open_trades_row is not None
+            else 0
+        )
 
         print("\nReplay complete")
         print(f"cycles={cycle_count}")

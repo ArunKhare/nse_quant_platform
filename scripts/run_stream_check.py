@@ -5,17 +5,15 @@ from __future__ import annotations
 import argparse
 import sys
 import time
-from importlib import import_module
 from pathlib import Path
 from uuid import uuid4
 
 # Make the repository root importable when this script is run directly.
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from src.nse_quant.integrations.kite_auth import get_authenticated_kite
-from src.nse_quant.market_data.kite_provider import KiteMarketDataProvider
-
-DuckDBStore = import_module("src.nse_quant.persistence.duckdb_store").DuckDBStore
+from nse_quant.integrations.kite_auth import get_authenticated_kite
+from nse_quant.market_data.kite_provider import KiteMarketDataProvider
+from nse_quant.persistence.duckdb_store import DuckDBStore
 
 
 def parse_args() -> argparse.Namespace:

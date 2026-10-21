@@ -69,7 +69,7 @@ def main() -> int:
             "Use either --minutes or --from/--to, not both"
         )
 
-    store = DuckDBStore()
+    store = DuckDBStore(read_only=True)
     exporter = ReplayExporter(store)
 
     try:

@@ -35,7 +35,7 @@ def main() -> int:
     )
     to_ts = datetime.fromisoformat(args.to_ts) if args.to_ts else None
 
-    store = DuckDBStore()
+    store = DuckDBStore(read_only=True)
     repository = DecisionAnalyticsRepository(store=store)
 
     try:

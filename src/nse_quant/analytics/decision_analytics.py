@@ -88,7 +88,7 @@ class DecisionAnalyticsRepository:
 
         return self.store.conn.execute(query, params).fetchdf()
 
-        def funnel(
+    def funnel(
             self,
             run_id: str | None = None,
             from_ts: datetime | None = None,

@@ -47,6 +47,7 @@ class AnalyticsSettings(BaseModel):
     max_expected_move_buffer: float = 1.15
     min_iv_history_observations: int = 30
     allow_iv_rank_cold_start: bool = True
+    expiries_per_snapshot: int = 2
 
     @model_validator(mode="after")
     def validate_analytics(self) -> Self:
@@ -210,7 +211,7 @@ class BacktestReadinessSettings(BaseModel):
     min_complete_days: int = 20
     min_iv_rv_aligned_days: int = 10
     min_regime_days: int = 10
-    
+
 class ResearchSettings(BaseModel):
     enforce_feature_availability: bool = True
     enforce_regime_policy: bool = True
@@ -418,6 +419,12 @@ class Settings(BaseSettings):
                 raise TypeError(f"strategies.{strategy_id} must be a mapping")
 
             strategy_type = profile.get("strategy_type")
+            if not isinstance(strategy_type, str):
+                raise TypeError(
+                    f"Unknown strategy_type {strategy_type!r} "
+                    f"for strategy {strategy_id!r}"
+                )
+
             profile_type = STRATEGY_PROFILE_TYPES.get(strategy_type)
 
             if profile_type is None:

@@ -11,7 +11,7 @@ from nse_quant.persistence.duckdb_store import DuckDBStore
 
 
 def main() -> int:
-    store = DuckDBStore()
+    store = DuckDBStore(read_only=True)
     checker = FeatureAvailabilityChecker(store)
 
     report = checker.evaluate(

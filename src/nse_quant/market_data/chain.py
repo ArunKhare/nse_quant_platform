@@ -29,3 +29,105 @@ def build_snapshot(underlying:str,spot:float,expiry:date,instruments:list[Instru
         t=ticks.get(i.instrument_token,{})
         quotes.append(OptionQuote(instrument_token=i.instrument_token,instrument=i,ltp=t.get("ltp"),bid=t.get("bid"),ask=t.get("ask"),volume=t.get("volume"),oi=t.get("oi"),exchange_ts=t.get("exchange_ts"),trade_ts=t.get("trade_ts"),received_at=t.get("received_at",now)))
     return ChainSnapshot(underlying=underlying,spot=spot,expiry=expiry,quotes=quotes,ts=now)
+
+def discover_chain_multi_expiry(
+    instruments: Iterable[dict[str, Any]],
+    underlying: str,
+    spot: float,
+    expiries_requested: int,
+    strikes_per_side: int = 10,
+) -> list[tuple[date, list[Instrument]]]:
+    rows = [
+        row
+        for row in instruments
+        if row.get("name") == underlying
+        and row.get("instrument_type") in {CE, PE}
+    ]
+
+    if not rows:
+        raise ValueError(
+            f"No NFO options for {underlying}"
+        )
+
+    def as_date(value: Any) -> date:
+        if isinstance(value, date):
+            return value
+
+        return datetime.strptime(
+            str(value), "%Y-%m-%d"
+        ).date()
+
+    expiries = sorted(
+        {
+            as_date(row["expiry"])
+            for row in rows
+            if as_date(row["expiry"]) >= date.today()
+        }
+    )
+
+    selected_expiries = expiries[:expiries_requested]
+
+    if len(selected_expiries) < expiries_requested:
+        raise ValueError(
+             f"Requested {expiries_requested} expiries, "
+            f"but only {len(selected_expiries)} are available"
+        )
+
+    results: list[tuple[date, list[Instrument]]] = []
+
+    for expiry in selected_expiries:
+        expiry_rows = [
+            row
+            for row in rows
+            if as_date(row["expiry"]) == expiry
+        ]
+
+        strikes = sorted(
+            {
+                float(row["strike"])
+                for row in expiry_rows
+            }
+        )
+
+        atm = min(
+            strikes,
+            key=lambda strike: abs(strike - spot),
+        )
+
+        index = strikes.index(atm)
+
+        window = set(
+            strikes[
+                max(
+                    0,
+                    index - strikes_per_side,
+                ):
+                index
+                + strikes_per_side
+                + 1
+            ]
+        )
+
+        instruments_for_expiry = [
+            Instrument(
+                tradingsymbol=row["tradingsymbol"],
+                instrument_token=int(
+                    row["instrument_token"]
+                ),
+                underlying=underlying,
+                expiry=expiry,
+                strike=float(row["strike"]),
+                option_type=OptionType(
+                    row["instrument_type"]
+                ),
+                lot_size=int(row["lot_size"]),
+            )
+            for row in expiry_rows
+            if float(row["strike"]) in window
+        ]
+
+        results.append(
+            (expiry, instruments_for_expiry)
+        )
+
+    return results

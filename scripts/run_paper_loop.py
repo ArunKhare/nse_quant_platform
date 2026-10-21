@@ -8,8 +8,10 @@ the persistent kill switch.
 from __future__ import annotations
 
 import argparse
+import json
 import time
 from datetime import UTC, datetime
+from pathlib import Path
 from uuid import uuid4
 
 from nse_quant.core.market_calendar import is_market_open_now
@@ -338,6 +340,23 @@ def main() -> int:
                         symbol=primary_symbol,
                         instrument_token=spot_token,
                         as_of=now,
+                    )
+
+                    status_path = Path("logs/live_status.json")
+                    status_path.parent.mkdir(parents=True, exist_ok=True)
+
+                    status_path.write_text(
+                        json.dumps(
+                            {
+                                "updated_at": now.isoformat(),
+                                "symbol": primary_symbol,
+                                "latest_candle": candle_minute.isoformat(),
+                                "latest_close": spot_price,
+                                "candles_written_today": rows_written,
+                            },
+                            indent=2,
+                        ),
+                        encoding="utf-8",
                     )
 
                 except Exception: # noqa:BLE001

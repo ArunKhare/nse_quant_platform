@@ -6,9 +6,9 @@ from typing import Any
 
 import pandas as pd
 
-from nse_quant.core.models import Instrument, OptionType
+from nse_quant.core.models import ChainSnapshot, Instrument, OptionType
 from nse_quant.core.settings import get_settings
-from nse_quant.market_data.chain import build_snapshot, discover_chain
+from nse_quant.market_data import chain
 
 
 class InstrumentResolutionError(ValueError):
@@ -21,7 +21,7 @@ class KiteMarketDataProvider:
         self.underlying=underlying or self.settings.universe.underlying
         self._instruments:list[dict[str, Any]] | None = None
         # self._index_instruments: list[dict[str, Any]] | None = None
-        self._instrument_cache: dict[str, dict[str, Any]] = {}
+        self._instrument_cache: dict[str, list[dict[str, Any]]] = {}
 
     def _is_index(self, symbol: str) -> bool:
         if self.settings is None:
@@ -166,7 +166,7 @@ class KiteMarketDataProvider:
 
         spot = self.get_spot()
 
-        expiry_date, option_instruments = discover_chain(
+        expiry_date, option_instruments = chain.discover_chain(
             candidate_instruments,
             self.underlying,
             spot,
@@ -203,13 +203,94 @@ class KiteMarketDataProvider:
                 "received_at": received_at,
             }
 
-        return build_snapshot(
+        return chain.build_snapshot(
             self.underlying,
             spot,
             expiry_date,
             option_instruments,
             ticks,
         )
+
+    def get_chain_snapshots(self) -> list[ChainSnapshot]:
+        settings = self.settings
+
+        expiry_count = (
+            settings.analytics.expiries_per_snapshot
+        )
+
+        raw_instruments = self._load_nfo_instruments()
+
+        candidate_instruments = [
+            row
+            for row in raw_instruments
+            if row.get("instrument_type") in {"CE", "PE"}
+            and row.get("name") == self.underlying
+        ]
+
+        spot = self.get_spot()
+
+        chains = chain.discover_chain_multi_expiry(
+            instruments=candidate_instruments,
+            underlying=self.underlying,
+            spot=spot,
+            expiries_requested=expiry_count,
+            strikes_per_side=(
+                self.settings.universe.strikes_per_side
+            ),
+        )
+
+        snapshot_ts = datetime.now(UTC)
+        snapshots: list[ChainSnapshot] = []
+
+        for expiry, option_instruments in chains:
+            raw = self.kite.quote(
+                [
+                    f"NFO:{instrument.tradingsymbol}"
+                    for instrument in option_instruments
+                ]
+            )
+
+            ticks: dict[int, dict[str, Any]] = {}
+
+            for instrument in option_instruments:
+                quote = raw.get(
+                    f"NFO:{instrument.tradingsymbol}",
+                    {},
+                )
+
+                depth = quote.get("depth") or {}
+
+                ticks[instrument.instrument_token] = {
+                    "ltp": quote.get("last_price"),
+                    "bid": (
+                        depth.get("buy") or [{}]
+                    )[0].get("price"),
+                    "ask": (
+                        depth.get("sell") or [{}]
+                    )[0].get("price"),
+                    "volume": quote.get("volume"),
+                    "oi": quote.get("oi"),
+                    "exchange_ts": quote.get(
+                        "exchange_timestamp"
+                    ),
+                    "trade_ts": quote.get(
+                        "last_trade_time"
+                    ),
+                    "received_at":  snapshot_ts,
+                }
+
+            snapshots.append(
+                chain.build_snapshot(
+                    self.underlying,
+                    spot,
+                    expiry,
+                    option_instruments,
+                    ticks,
+                )
+            )
+
+        return snapshots
+
     def get_historical_candles(
             self,
             symbol: str,

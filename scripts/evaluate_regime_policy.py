@@ -46,7 +46,7 @@ def parse_args() -> argparse.Namespace:
 def main() -> int:
     args = parse_args()
     settings = get_settings()
-    store = DuckDBStore()
+    store = DuckDBStore(read_only=True)
 
     try:
         evaluation, _outcomes = evaluate_regime_policy(

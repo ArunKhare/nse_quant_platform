@@ -33,7 +33,7 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
-    store = DuckDBStore()
+    store = DuckDBStore(read_only=True)
 
     try:
         decisions = store.conn.execute(

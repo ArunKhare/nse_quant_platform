@@ -5,13 +5,12 @@ from __future__ import annotations
 import argparse
 from datetime import datetime, time
 
-from nse_quant.setting import get_settings
-
 from nse_quant.analytics.implied_volatility import (
     implied_volatility,
     time_to_expiry_years,
 )
 from nse_quant.core.constants import IST
+from nse_quant.core.settings import get_settings
 from nse_quant.persistence.duckdb_store import DuckDBStore
 
 RISK_FREE_RATE = get_settings().analytics.risk_free_rate
