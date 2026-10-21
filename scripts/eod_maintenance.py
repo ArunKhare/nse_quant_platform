@@ -141,6 +141,23 @@ def get_observation_counts(
         "iv_rv_aligned_days": int(aligned),
     }
 
+def get_option_stream_count_for_date(
+    store: DuckDBStore,
+    *,
+    underlying: str,
+    trading_date: date,
+) -> int:
+    count = store.conn.execute(
+        """
+        SELECT COUNT(*)
+        FROM option_stream
+        WHERE underlying = ?
+          AND CAST(ts AS DATE) = ?
+        """,
+        [underlying, trading_date],
+    ).fetchone()[0]
+
+    return int(count)
 
 def build_summary(
     *,
@@ -148,6 +165,7 @@ def build_summary(
     trade_date: str,
     counts: dict[str, int],
     parquet_path: Path | None,
+    regime_path: Path | None,
     validation_issues: list[str] | None = None,
 ) -> str:
     lines = [
@@ -170,8 +188,23 @@ def build_summary(
             "Warehouse validation: FAILED — "
             + ", ".join(validation_issues)
         )
-
+    if regime_path is not None:
+        lines.append(f"Regime export: {regime_path}")
     return "\n".join(lines)
+
+def build_regime_export_path(
+    *,
+    export_dir: Path,
+    underlying: str,
+    trading_date: date,
+) -> Path:
+    return (
+        export_dir
+        / f"underlying={underlying}"
+        / f"year={trading_date.year}"
+        / f"month={trading_date.month:02d}"
+        / f"market_regime_{trading_date.isoformat()}.parquet"
+    )
 
 
 def main() -> int:
@@ -223,6 +256,36 @@ def main() -> int:
                 store=store,
                 symbol=symbol,
             )
+            option_stream_count = get_option_stream_count_for_date(
+                store=store,
+                underlying=symbol,
+                trading_date=trade_day,
+            )
+
+            if option_stream_count == 0:
+                message = (
+                    "NSE Quant EOD skipped export: no option-stream "
+                    f"observations for {symbol} on {trade_date}."
+                )
+
+                print(message)
+                notifier.send(message)
+
+                summary = build_summary(
+                    symbol=symbol,
+                    trade_date=trade_date,
+                    counts=counts,
+                    parquet_path=None,
+                    regime_path=None,
+                    validation_issues=[
+                        "no_option_stream_observations_for_trade_date"
+                    ],
+                )
+
+                print(summary)
+                notifier.send(summary)
+
+                return 0
 
             parquet_path: Path | None = None
             validation_issues: list[str] = []
@@ -256,13 +319,32 @@ def main() -> int:
                         validation.get("issues", [])
                     )
 
+            regime_path: Path | None = None
+
+            if not args.skip_export:
+                regime_path = build_regime_export_path(
+                    export_dir=export_dir,
+                    underlying=symbol,
+                    trading_date=trade_day,
+                )
+
+                regime_path.parent.mkdir(parents=True, exist_ok=True)
+
+                store.export_market_regime_parquet(
+                    output_path=regime_path,
+                    underlying=symbol,
+                    date_str=trade_date,
+                )
+
             summary = build_summary(
                 symbol=symbol,
                 trade_date=trade_date,
                 counts=counts,
                 parquet_path=parquet_path,
+                regime_path=regime_path,
                 validation_issues=validation_issues,
             )
+
 
             print(summary)
             notifier.send(summary)

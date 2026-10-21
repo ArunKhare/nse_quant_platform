@@ -25,6 +25,7 @@ class BacktestReadinessReport:
 def evaluate_backtest_readiness(
     *,
     warehouse_glob: str,
+    regime_glob: str,
     underlying: str,
     min_complete_days: int,
     min_iv_rv_aligned_days: int,
@@ -47,6 +48,26 @@ def evaluate_backtest_readiness(
                     f"warehouse_empty: no Parquet files matched {warehouse_glob}"
                 ],
             )
+    option_files = glob(warehouse_glob)
+    regime_files = glob(regime_glob)
+
+    if not option_files:
+        return BacktestReadinessReport(
+            underlying=underlying,
+            warehouse_glob=warehouse_glob,
+            complete_option_days=0,
+            iv_rv_aligned_days=0,
+            regime_days=0,
+            min_complete_days=min_complete_days,
+            min_iv_rv_aligned_days=min_iv_rv_aligned_days,
+            min_regime_days=min_regime_days,
+            ready=False,
+            blockers=[
+                (
+                    f"warehouse_empty: no option-stream Parquet files matched {warehouse_glob}"
+                )
+            ],
+        )
 
     conn = duckdb.connect()
 
@@ -80,6 +101,15 @@ def evaluate_backtest_readiness(
         ).fetchone()[0]
 
         regime_days = 0
+        if regime_files:
+            regime_days = conn.execute(
+                """
+                SELECT COUNT(DISTINCT CAST(ts AS DATE))
+                FROM read_parquet(?)
+                WHERE symbol = ?
+                """,
+                [regime_glob, underlying],
+            ).fetchone()[0]
     finally:
         conn.close()
 

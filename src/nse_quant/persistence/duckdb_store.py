@@ -596,6 +596,8 @@ class DuckDBStore:
         underlying: str,
         date_str: str,
     ) -> Path:
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+
         self.conn.execute(
             f"""
             COPY (
@@ -613,6 +615,41 @@ class DuckDBStore:
     def close(self) -> None:
         self.conn.close()
 
+    def export_market_regime_parquet(
+        self,
+        *,
+        output_path: Path,
+        underlying: str,
+        date_str: str,
+    ) -> Path:
+        """Export one day's latest market regime to Parquet."""
+
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+
+        self.conn.execute(
+            f"""
+            COPY (
+                SELECT
+                    symbol,
+                    ts,
+                    trend_regime,
+                    volatility_regime,
+                    iv_regime,
+                    regime,
+                    features
+                FROM market_regimes
+                WHERE symbol = ?
+                AND CAST(ts AS DATE) = ?
+                QUALIFY row_number() OVER (
+                    PARTITION BY symbol
+                    ORDER BY ts DESC
+                ) = 1
+            ) TO '{output_path.as_posix()}' (FORMAT PARQUET)
+            """,
+            [underlying, date_str],
+        )
+
+        return output_path
     def write_spot_candles(
         self,
         candles: list[dict[str, Any]],
@@ -1182,3 +1219,262 @@ class DuckDBStore:
                 else {}
             ),
         }
+
+    def refresh_latest_spot_feature(
+        self,
+        *,
+        symbol: str,
+        instrument_token: int,
+        as_of: datetime,
+    ) -> None:
+        """Refresh the latest spot feature snapshot from recent 1m candles."""
+
+        rows = self.conn.execute(
+            """
+            SELECT
+                ts,
+                open,
+                high,
+                low,
+                close,
+                volume
+            FROM spot_candles
+            WHERE symbol = ?
+              AND instrument_token = ?
+              AND interval = '1m'
+            ORDER BY ts DESC
+            LIMIT 60
+            """,
+            [symbol, instrument_token],
+        ).fetchall()
+
+        if not rows:
+            return
+
+        rows = list(reversed(rows))
+
+        latest_ts = rows[-1][0]
+        latest_close = rows[-1][4]
+        latest_volume = rows[-1][5]
+
+        closes = [float(row[4]) for row in rows]
+        highs = [float(row[2]) for row in rows]
+        lows = [float(row[3]) for row in rows]
+        volumes = [float(row[5] or 0) for row in rows]
+
+        return_1m = None
+        rv_1m_30 = None
+        atr_1m_14 = None
+        vwap_1m = None
+        vwap_distance_1m = None
+        volume_zscore_1m_30 = None
+        trend_15m = None
+        atr_15m_14 = None
+        range_position_15m = None
+        trend_60m = None
+        atr_60m_14 = None
+        range_position_60m = None
+
+        if len(closes) >= 2 and closes[-2]:
+            return_1m = (
+                closes[-1] / closes[-2]
+            ) - 1
+
+        if len(closes) >= 3:
+            returns = [
+                (closes[index] / closes[index - 1]) - 1
+                for index in range(1, len(closes))
+                if closes[index - 1]
+            ]
+
+            if len(returns) >= 2:
+                mean_return = sum(returns) / len(returns)
+
+                variance = sum(
+                    (value - mean_return) ** 2
+                    for value in returns
+                ) / (len(returns) - 1)
+
+                rv_1m_30 = (variance ** 0.5) * (
+                    (252 * 375) ** 0.5
+                )
+
+        if len(rows) >= 2:
+            true_ranges = []
+
+            for index in range(1, len(rows)):
+                high = highs[index]
+                low = lows[index]
+                previous_close = closes[index - 1]
+
+                true_ranges.append(
+                    max(
+                        high - low,
+                        abs(high - previous_close),
+                        abs(low - previous_close),
+                    )
+                )
+
+            recent_true_ranges = true_ranges[-14:]
+
+            if recent_true_ranges:
+                atr_1m_14 = (
+                    sum(recent_true_ranges)
+                    / len(recent_true_ranges)
+                )
+
+        if latest_volume > 0:
+            weighted_prices = []
+
+            for index in range(len(rows)):
+                typical_price = (
+                    highs[index]
+                    + lows[index]
+                    + closes[index]
+                ) / 3
+
+                weighted_prices.append(
+                    typical_price * volumes[index]
+                )
+
+            total_volume = sum(volumes)
+
+            if total_volume > 0:
+                vwap_1m = (
+                    sum(weighted_prices) / total_volume
+                )
+
+                vwap_distance_1m = (
+                    latest_close - vwap_1m
+                ) / vwap_1m
+
+        if len(volumes) >= 2:
+            recent_volumes = volumes[-30:]
+
+            mean_volume = (
+                sum(recent_volumes) / len(recent_volumes)
+            )
+
+            if mean_volume > 0:
+                variance = sum(
+                    (value - mean_volume) ** 2
+                    for value in recent_volumes
+                ) / len(recent_volumes)
+
+                std_volume = variance ** 0.5
+
+                if std_volume > 0:
+                    volume_zscore_1m_30 = (
+                        (latest_volume - mean_volume)
+                        / std_volume
+                    )
+
+        if len(closes) >= 16:
+            trend_15m = closes[-1] - closes[-16]
+
+            recent_rows = rows[-15:]
+
+            recent_highs = [float(row[2]) for row in recent_rows]
+            recent_lows = [float(row[3]) for row in recent_rows]
+
+            high_low_range = max(recent_highs) - min(recent_lows)
+
+            if high_low_range > 0:
+                range_position_15m = (
+                    latest_close - min(recent_lows)
+                ) / high_low_range
+
+            true_ranges = []
+
+            for index in range(1, len(recent_rows)):
+                high = recent_highs[index]
+                low = recent_lows[index]
+                previous_close = closes[-len(recent_rows) + index - 1]
+
+                true_ranges.append(
+                    max(
+                        high - low,
+                        abs(high - previous_close),
+                        abs(low - previous_close),
+                    )
+                )
+
+            if true_ranges:
+                atr_15m_14 = (
+                    sum(true_ranges) / len(true_ranges)
+                )
+
+        if len(closes) >= 61:
+            trend_60m = closes[-1] - closes[-61]
+
+            recent_rows = rows[-60:]
+
+            recent_highs = [float(row[2]) for row in recent_rows]
+            recent_lows = [float(row[3]) for row in recent_rows]
+
+            high_low_range = max(recent_highs) - min(recent_lows)
+
+            if high_low_range > 0:
+                range_position_60m = (
+                    latest_close - min(recent_lows)
+                ) / high_low_range
+
+            true_ranges = []
+
+            for index in range(1, len(recent_rows)):
+                high = recent_highs[index]
+                low = recent_lows[index]
+                previous_close = closes[-len(recent_rows) + index - 1]
+
+                true_ranges.append(
+                    max(
+                        high - low,
+                        abs(high - previous_close),
+                        abs(low - previous_close),
+                    )
+                )
+
+            if true_ranges:
+                atr_60m_14 = (
+                    sum(true_ranges) / len(true_ranges)
+                )
+
+        self.conn.execute(
+            """
+            INSERT OR REPLACE INTO spot_features (
+                symbol,
+                ts,
+                close,
+                return_1m,
+                rv_1m_30,
+                atr_1m_14,
+                vwap_1m,
+                vwap_distance_1m,
+                volume_zscore_1m_30,
+                trend_15m,
+                atr_15m_14,
+                range_position_15m,
+                trend_60m,
+                atr_60m_14,
+                range_position_60m
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            [
+                symbol,
+                latest_ts,
+                latest_close,
+                return_1m,
+                rv_1m_30,
+                atr_1m_14,
+                vwap_1m,
+                vwap_distance_1m,
+                volume_zscore_1m_30,
+                trend_15m,
+                atr_15m_14,
+                range_position_15m,
+                trend_60m,
+                atr_60m_14,
+                range_position_60m,
+            ],
+        )

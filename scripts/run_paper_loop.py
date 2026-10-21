@@ -4,6 +4,7 @@ This script never enables live trading. It uses PaperBroker only and respects
 the persistent kill switch.
 """
 
+
 from __future__ import annotations
 
 import argparse
@@ -17,9 +18,9 @@ from nse_quant.execution.broker import PaperBroker
 from nse_quant.features.feature_gates import SpotFeatureGate
 from nse_quant.integrations.kite_session import get_cached_kite
 from nse_quant.market_data.kite_provider import KiteMarketDataProvider
-from nse_quant.market_data.replay_provider import ReplayExhaustedError, ReplayMarketDataProvider
-from nse_quant.market_data.spot_candle_aggregator import (
-    SpotCandleAggregator,
+from nse_quant.market_data.replay_provider import (
+    ReplayExhaustedError,
+    ReplayMarketDataProvider,
 )
 from nse_quant.ops.kill_switch import KillSwitch
 from nse_quant.ops.notifier import Notifier, NullNotifier
@@ -50,8 +51,8 @@ def parse_args() -> argparse.Namespace:
         "--replay-file",
         default=None,
         help=(
-                "Run against a saved chain-snapshot replay JSON "
-                "instead of live Kite data"
+            "Run against a saved chain-snapshot replay JSON "
+            "instead of live Kite data"
         ),
     )
     parser.add_argument(
@@ -86,7 +87,6 @@ def parse_args() -> argparse.Namespace:
             "testing. Never use for live decision-making."
         ),
     )
-
     parser.add_argument(
         "--spot-token",
         type=int,
@@ -105,10 +105,12 @@ def main() -> int:
 
     if args.allow_out_of_hours:
         settings.runtime.allow_out_of_hours_testing = True
+
     if settings.safety.trading_enabled:
         raise RuntimeError(
             "Live trading is blocked in v0.3.0. Set TRADING_ENABLED=false."
         )
+
     if args.replay_file:
         provider = ReplayMarketDataProvider.from_json(
             args.replay_file,
@@ -118,16 +120,34 @@ def main() -> int:
                 else None
             ),
         )
+
+        spot_token: int | None = args.spot_token
+
     else:
         kite = get_cached_kite(settings=settings)
         provider = KiteMarketDataProvider(kite)
 
+        provider.underlying = settings.market_data.default_symbol
+
+        spot_token = provider.resolve_spot_instrument_token(
+            settings.market_data.default_symbol
+        )
+
+        print(
+            "Live spot token:",
+            settings.market_data.default_symbol,
+            spot_token,
+        )
+
     stale_seconds = int(
         getattr(settings.runtime, "stale_seconds", 50 * 60 * 60)
     )
+
     feature_gate = SpotFeatureGate(
         max_age_seconds=(
-            stale_seconds if not args.allow_stale_features else 7 * 24 * 60 * 60
+            stale_seconds
+            if not args.allow_stale_features
+            else 7 * 24 * 60 * 60
         ),
         index_symbols=tuple(settings.market_data.index_symbols),
     )
@@ -137,6 +157,7 @@ def main() -> int:
         if args.warmup_from
         else None
     )
+
     warmup_to = (
         datetime.fromisoformat(args.warmup_to)
         if args.warmup_to
@@ -162,8 +183,7 @@ def main() -> int:
     kill_switch = KillSwitch()
     notifier = Notifier() if settings.notifier.enabled else NullNotifier()
     run_id = uuid4().hex
-    decision= DecisionRepository(store.conn)
-    candle_aggregator = SpotCandleAggregator()
+    decision = DecisionRepository(store.conn)
 
     loop = DecisionLoop(
         store=store,
@@ -171,10 +191,9 @@ def main() -> int:
         broker=broker,
         run_id=run_id,
         settings=settings,
-        feature_gate=feature_gate
+        feature_gate=feature_gate,
     )
 
-    # symbols = args.symbol or [settings.market_data.default_symbol]
     symbols: list[str] = (
         args.symbol
         if args.symbol
@@ -182,24 +201,25 @@ def main() -> int:
     )
 
     primary_symbol = symbols[0]
+
     feature_snapshot = loop.feature_service.latest(primary_symbol)
 
     if feature_snapshot is not None:
         feature_age = (
             datetime.now(UTC) - feature_snapshot.ts.tz_convert(UTC)
         )
+
         print(
             "Latest feature:",
             feature_snapshot.ts,
             "age_seconds:",
             feature_age.total_seconds(),
         )
+
     print(
         "Gate max age seconds:",
         loop.feature_gate._max_age_seconds,
     )
-
-    spot_token: int | None = None
 
     try:
         if (
@@ -208,9 +228,10 @@ def main() -> int:
             and warmup_to is not None
         ):
             for symbol in symbols:
-                spot_token = provider.resolve_spot_instrument_token(
-                    primary_symbol
-                )
+                if spot_token is None:
+                    spot_token = provider.resolve_spot_instrument_token(
+                        primary_symbol
+                    )
 
                 for interval in intervals:
                     candles = provider.get_historical_candles(
@@ -230,10 +251,12 @@ def main() -> int:
                         instrument_token=spot_token,
                         interval=interval,
                     )
+
                     print(
                         f"{symbol} {interval}: "
                         f"fetched={len(candles)} persisted={rows}"
                     )
+
         elif warmup_from is None:
             print(
                 "Skipping historical warm-up; supply --warmup-from and "
@@ -242,106 +265,122 @@ def main() -> int:
             )
 
         end_time = time.monotonic() + args.seconds
+
         while time.monotonic() < end_time:
             if kill_switch.is_active():
                 loop.handle_kill_switch()
                 print("Kill switch active. Paper loop stopped.")
-                notifier.send("NSE Quant: kill switch active; loop stopped.")
+                notifier.send(
+                    "NSE Quant: kill switch active; loop stopped."
+                )
                 break
-            if not is_market_open_now() and not settings.runtime.allow_out_of_hours_testing:
+
+            if (
+                not is_market_open_now()
+                and not settings.runtime.allow_out_of_hours_testing
+            ):
                 print("NSE Market is closed. Waiting...")
-                time.sleep(settings.runtime.market_closed_wait_seconds)
+                time.sleep(
+                    settings.runtime.market_closed_wait_seconds
+                )
                 continue
-            if not is_market_open_now() and settings.runtime.allow_out_of_hours_testing:
+
+            if (
+                not is_market_open_now()
+                and settings.runtime.allow_out_of_hours_testing
+            ):
                 print(
                     "NSE Market is closed. "
                     "Out-of-hours strategy testing enabled."
                 )
 
-            if isinstance(provider, KiteMarketDataProvider) and spot_token:
+            if (
+                isinstance(provider, KiteMarketDataProvider)
+                and spot_token
+            ):
                 try:
-                    spot_price = provider.get_spot()
+                    now = datetime.now(UTC)
 
-                    completed_candle = candle_aggregator.add_tick(
-                        ts=datetime.now(UTC),
-                        price=spot_price,
-                        volume=0,
-                        oi=None,
+                    candle_minute = now.replace(
+                        second=0,
+                        microsecond=0,
                     )
 
-                    if completed_candle is not None:
-                        store.write_spot_candles(
-                            candles=[
-                                {
-                                    "date": completed_candle.ts,
-                                    "open": completed_candle.open,
-                                    "high": completed_candle.high,
-                                    "low": completed_candle.low,
-                                    "close": completed_candle.close,
-                                    "volume": completed_candle.volume,
-                                    "oi": completed_candle.oi,
-                                }
-                            ],
-                            symbol=primary_symbol,
-                            instrument_token=spot_token,
-                            interval="1m",
-                        )
-                except Exception as exc:  # noqa: BLE001
-                    print(f"Spot candle capture error: {exc}")
+                    spot_price = provider.get_spot()
+
+                    rows_written = store.write_spot_candles(
+                        candles=[
+                            {
+                                "date": candle_minute,
+                                "open": spot_price,
+                                "high": spot_price,
+                                "low": spot_price,
+                                "close": spot_price,
+                                "volume": 0,
+                                "oi": None,
+                            }
+                        ],
+                        symbol=primary_symbol,
+                        instrument_token=spot_token,
+                        interval="1m",
+                    )
+
+                    print(
+                        "Persisted 1m candle:",
+                        candle_minute,
+                        "close:",
+                        spot_price,
+                        "rows:",
+                        rows_written,
+                    )
+
+                    store.refresh_latest_spot_feature(
+                        symbol=primary_symbol,
+                        instrument_token=spot_token,
+                        as_of=now,
+                    )
+
+                except Exception: # noqa:BLE001
+                    import traceback
+
+                    print("Spot candle capture failed:")
+                    traceback.print_exc()
 
             try:
                 result = loop.run_once()
                 print(result)
+
             except ReplayExhaustedError:
                 print("Replay exhausted. Paper loop stopped.")
                 break
-            except Exception as exc: #noqa:BLE001
+
+            except Exception as exc:  # noqa: BLE001
                 result = {
                     "status": "loop_error",
                     "error": str(exc),
                 }
+
                 print(result)
                 notifier.send(f"NSE Quant loop error: {exc}")
+
                 decision.save_system_event(
                     run_id,
-                    event_type='loop_error',
+                    event_type="loop_error",
                     payload={
                         "error": str(exc),
-                        "error_type": type(exc).__name__
-                        },
-                    )
+                        "error_type": type(exc).__name__,
+                    },
+                )
 
             if result.get("status") in {"risk_rejected", "dry_run"}:
                 reasons = ", ".join(result.get("reasons", []))
+
                 notifier.send(
                     f"NSE Quant: {result.get('status')} {reasons}".strip()
                 )
 
             time.sleep(settings.runtime.loop_interval_seconds)
-            
-        final_candle = candle_aggregator.flush()
 
-        if (
-            final_candle is not None
-            and isinstance(provider, KiteMarketDataProvider)
-            and spot_token
-        ):
-            store.write_spot_candles(
-                candles=[
-                    {
-                        "date": final_candle.ts,
-                        "open": final_candle.open,
-                        "high": final_candle.high,
-                        "low": final_candle.low,
-                        "close": final_candle.close,
-                        "volume": final_candle.volume,
-                        "oi": final_candle.oi,
-                    }
-                ],
-                symbol=primary_symbol,
-                instrument_token=spot_token,
-                interval="1m",
-            )
     except KeyboardInterrupt:
         print("Paper loop interrupted.")
 

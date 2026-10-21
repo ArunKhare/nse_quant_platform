@@ -7,10 +7,7 @@ import json
 from pathlib import Path
 
 from nse_quant.core.settings import get_settings
-from nse_quant.research.backtest_readiness import (
-    evaluate_backtest_readiness,
-    write_report,
-)
+from nse_quant.research.backtest_readiness import evaluate_backtest_readiness, write_report
 
 
 def parse_args() -> argparse.Namespace:
@@ -32,6 +29,13 @@ def parse_args() -> argparse.Namespace:
         default="data/research/backtest_readiness.json",
     )
 
+    parser.add_argument(
+        "--regime-glob",
+        default=(
+            "data/exports/underlying=NIFTY/"
+            "year=*/month=*/market_regime_*.parquet"
+        ),
+    )
     return parser.parse_args()
 
 
@@ -42,6 +46,7 @@ def main() -> int:
 
     report = evaluate_backtest_readiness(
         warehouse_glob=args.warehouse_glob,
+        regime_glob=args.regime_glob,
         underlying=args.underlying,
         min_complete_days=readiness.min_complete_days,
         min_iv_rv_aligned_days=readiness.min_iv_rv_aligned_days,
