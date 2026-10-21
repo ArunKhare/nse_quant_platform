@@ -206,12 +206,19 @@ class TradingCalendarSettings(BaseModel):
     special_sessions: list[SpecialSessionSettings] = Field(
         default_factory=list
     )
-
+class BacktestReadinessSettings(BaseModel):
+    min_complete_days: int = 20
+    min_iv_rv_aligned_days: int = 10
+    min_regime_days: int = 10
+    
 class ResearchSettings(BaseModel):
     enforce_feature_availability: bool = True
     enforce_regime_policy: bool = True
     enforce_strategy_eligibility: bool = True
     min_history_observations: int = 1
+    backtest_readiness: BacktestReadinessSettings = Field(
+        default_factory=BacktestReadinessSettings
+    )
 
 class WalkForwardSettings(BaseModel):
     train_days: int = 252

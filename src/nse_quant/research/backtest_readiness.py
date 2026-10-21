@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import asdict, dataclass
+from glob import glob
 from pathlib import Path
 
 import duckdb
@@ -10,7 +11,7 @@ import duckdb
 @dataclass(frozen=True)
 class BacktestReadinessReport:
     underlying: str
-    warehouse_path: str
+    warehouse_glob: str
     complete_option_days: int
     iv_rv_aligned_days: int
     regime_days: int
@@ -29,27 +30,64 @@ def evaluate_backtest_readiness(
     min_iv_rv_aligned_days: int,
     min_regime_days: int,
 ) -> BacktestReadinessReport:
+    matching_files = glob(warehouse_glob)
+
+    if not matching_files:
+        return BacktestReadinessReport(
+                underlying=underlying,
+                warehouse_glob=warehouse_glob,
+                complete_option_days=0,
+                iv_rv_aligned_days=0,
+                regime_days=0,
+                min_complete_days=min_complete_days,
+                min_iv_rv_aligned_days=min_iv_rv_aligned_days,
+                min_regime_days=min_regime_days,
+                ready=False,
+                blockers=[
+                    f"warehouse_empty: no Parquet files matched {warehouse_glob}"
+                ],
+            )
+
     conn = duckdb.connect()
 
-    option_days = conn.execute(
-        """
-        SELECT COUNT(DISTINCT CAST(ts AS DATE))
-        FROM read_parquet(?)
-        WHERE underlying = ?
-        """,
-        [warehouse_glob, underlying],
-    ).fetchone()[0]
+    try:
+        complete_option_days = conn.execute(
+            """
+            SELECT COUNT(DISTINCT CAST(ts AS DATE))
+            FROM read_parquet(?)
+            WHERE underlying = ?
+            """,
+            [warehouse_glob, underlying],
+            ).fetchone()[0]
 
-    # Extend these queries after confirming the exact Parquet schema
-    # and the location of daily RV/regime data.
-    iv_rv_aligned_days = 0
-    regime_days = 0
+
+        iv_rv_aligned_days =conn.execute(
+            """
+            WITH option_days AS (
+                SELECT
+                    CAST(ts AS DATE) AS trading_date,
+                    COUNT(*) AS observation_count
+                FROM read_parquet(?)
+                WHERE underlying = ?
+                  AND iv IS NOT NULL
+                GROUP BY CAST(ts AS DATE)
+            )
+            SELECT COUNT(*)
+            FROM option_days
+            WHERE observation_count > 0
+            """,
+            [warehouse_glob, underlying],
+        ).fetchone()[0]
+
+        regime_days = 0
+    finally:
+        conn.close()
 
     blockers: list[str] = []
 
-    if option_days < min_complete_days:
+    if complete_option_days < min_complete_days:
         blockers.append(
-            f"complete_option_days={option_days} "
+            f"complete_option_days={complete_option_days} "
             f"< {min_complete_days}"
         )
 
@@ -66,8 +104,8 @@ def evaluate_backtest_readiness(
 
     report = BacktestReadinessReport(
         underlying=underlying,
-        warehouse_path=warehouse_glob,
-        complete_option_days=option_days,
+        warehouse_glob=warehouse_glob,
+        complete_option_days=complete_option_days,
         iv_rv_aligned_days=iv_rv_aligned_days,
         regime_days=regime_days,
         min_complete_days=min_complete_days,
@@ -76,9 +114,7 @@ def evaluate_backtest_readiness(
         ready=not blockers,
         blockers=blockers,
     )
-
     return report
-
 
 def write_report(
     report: BacktestReadinessReport,

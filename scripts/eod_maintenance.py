@@ -11,6 +11,7 @@ import subprocess
 import sys
 from datetime import UTC, date, datetime
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 from nse_quant.core.market_calendar import is_nse_trading_day
 from nse_quant.core.settings import get_settings
@@ -19,6 +20,8 @@ from nse_quant.persistence.duckdb_store import DuckDBStore
 from nse_quant.research.warehouse_validation import (
     validate_parquet_file,
 )
+
+IST = ZoneInfo("Asia/Kolkata")
 
 
 def parse_args() -> argparse.Namespace:
@@ -47,8 +50,9 @@ def parse_args() -> argparse.Namespace:
 
     parser.add_argument(
         "--export-dir",
-        default="data/exports",
-        help="Directory for daily Parquet exports",
+        type=Path,
+        default=Path("data/exports"),
+        help="Base directory for daily Parquet exports",
     )
 
     parser.add_argument(
@@ -64,6 +68,23 @@ def parse_args() -> argparse.Namespace:
     )
 
     return parser.parse_args()
+
+
+def build_export_path(
+    *,
+    export_dir: Path,
+    underlying: str,
+    trading_date: date,
+) -> Path:
+    """Build the Hive-partitioned Parquet warehouse path."""
+
+    return (
+        export_dir
+        / f"underlying={underlying}"
+        / f"year={trading_date.year}"
+        / f"month={trading_date.month:02d}"
+        / f"option_stream_{trading_date.isoformat()}.parquet"
+    )
 
 
 def run_command(command: list[str]) -> None:
@@ -105,7 +126,7 @@ def get_observation_counts(
         FROM (
             SELECT DISTINCT CAST(iv.ts AS DATE) AS trade_date
             FROM underlying_iv_observations iv
-            INNER JOIN daily_rv_observations  rv
+            INNER JOIN daily_rv_observations rv
                 ON rv.symbol = ?
                 AND CAST(rv.trading_date AS DATE) = CAST(iv.ts AS DATE)
             WHERE iv.underlying = ?
@@ -127,6 +148,7 @@ def build_summary(
     trade_date: str,
     counts: dict[str, int],
     parquet_path: Path | None,
+    validation_issues: list[str] | None = None,
 ) -> str:
     lines = [
         "NSE Quant EOD summary",
@@ -143,6 +165,12 @@ def build_summary(
     if parquet_path is not None:
         lines.append(f"Parquet export: {parquet_path}")
 
+    if validation_issues:
+        lines.append(
+            "Warehouse validation: FAILED — "
+            + ", ".join(validation_issues)
+        )
+
     return "\n".join(lines)
 
 
@@ -150,21 +178,19 @@ def main() -> int:
     args = parse_args()
     settings = get_settings(args.config)
 
-    export_dir = args.export_dir or settings.storage.parquet_dir
+    export_dir = args.export_dir
     symbol = args.symbol or settings.market_data.default_symbol
 
     trade_date = (
         args.trade_date
-        or datetime.now(UTC).astimezone(
-            settings.market_data.ist_timezone
-        ).date().isoformat()
+        or datetime.now(UTC).astimezone(IST).date().isoformat()
     )
 
     notifier = (
-            Notifier()
-            if settings.notifier.enabled
-            else NullNotifier()
-        )
+        Notifier()
+        if settings.notifier.enabled
+        else NullNotifier()
+    )
 
     trade_day = date.fromisoformat(trade_date)
 
@@ -199,38 +225,43 @@ def main() -> int:
             )
 
             parquet_path: Path | None = None
+            validation_issues: list[str] = []
 
             if not args.skip_export:
+                output_path = build_export_path(
+                    export_dir=export_dir,
+                    underlying=symbol,
+                    trading_date=trade_day,
+                )
+
+                output_path.parent.mkdir(
+                    parents=True,
+                    exist_ok=True,
+                )
+
                 parquet_path = store.export_parquet(
-                    output_dir=export_dir,
+                    output_path=output_path,
+                    underlying=symbol,
                     date_str=trade_date,
                 )
 
             if parquet_path is not None:
-                    validation = validate_parquet_file(
-                        parquet_path,
-                        underlying=symbol,
+                validation = validate_parquet_file(
+                    parquet_path,
+                    underlying=symbol,
+                )
+
+                if validation["status"] != "ok":
+                    validation_issues = list(
+                        validation.get("issues", [])
                     )
-
-                    if validation["status"] != "ok":
-                        summary = build_summary(
-                            symbol=symbol,
-                            trade_date=trade_date,
-                            counts=counts,
-                            parquet_path=parquet_path,
-                        )
-
-                        summary += (
-                            "\nWarehouse validation: "
-                            f"{validation['status']} — "
-                            + ", ".join(validation["issues"])
-                        )
 
             summary = build_summary(
                 symbol=symbol,
                 trade_date=trade_date,
                 counts=counts,
                 parquet_path=parquet_path,
+                validation_issues=validation_issues,
             )
 
             print(summary)

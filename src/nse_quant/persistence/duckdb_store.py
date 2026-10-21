@@ -589,36 +589,26 @@ class DuckDBStore:
 
         return [float(row[0]) for row in rows if row[0] is not None]
 
-    def export_parquet(self, output_dir: str | Path, date_str: str, underlying: str = "NIFTY", ) -> Path:
-        """Export one trade date's option stream to a partitioned Parquet file."""
-        parsed_date = date.fromisoformat(date_str)
-        normalized_date = parsed_date.isoformat()
-
-        warehouse_root = Path(output_dir).resolve()
-        partition_dir = (
-            warehouse_root
-            / f"underlying={underlying}"
-            / f"year={parsed_date.year:04d}"
-            / f"month={parsed_date.month:02d}"
-        )
-
-        output = partition_dir / f"option_stream_{normalized_date}.parquet"
-        output.parent.mkdir(parents=True, exist_ok=True)
-
-        escaped_output_path = str(output).replace("'", "''")
-
+    def export_parquet(
+        self,
+        *,
+        output_path: Path,
+        underlying: str,
+        date_str: str,
+    ) -> Path:
         self.conn.execute(
             f"""
             COPY (
                 SELECT *
                 FROM option_stream
-                WHERE underlying = '{underlying}'
-                AND CAST(ts AS DATE) = DATE '{normalized_date}'
-            ) TO '{escaped_output_path}' (FORMAT PARQUET)
-            """
+                WHERE underlying = ?
+                AND CAST(ts AS DATE) = ?
+            ) TO '{output_path.as_posix()}' (FORMAT PARQUET)
+            """,
+            [underlying, date_str],
         )
 
-        return output
+        return output_path
 
     def close(self) -> None:
         self.conn.close()

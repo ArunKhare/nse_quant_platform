@@ -93,6 +93,11 @@ research:
   enforce_strategy_eligibility: true
   min_history_observations: 1
 
+backtest_readiness:
+    min_complete_days: 20
+    min_iv_rv_aligned_days: 10
+    min_regime_days: 10
+
 strategies:
   iron_condor_monitor:
     enabled: true
