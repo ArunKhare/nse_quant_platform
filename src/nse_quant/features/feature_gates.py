@@ -112,6 +112,9 @@ class SpotFeatureGate:
         if checks["vwap_distance_applicable"]:
             required_checks.add("vwap_distance_acceptable")
 
+        if self._require_trend_alignment:
+            required_checks.add("trend_aligned")
+
         passed = all(
             value
             for key, value in checks.items()

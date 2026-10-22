@@ -64,11 +64,11 @@ class IvRegimeGate:
             gate="iv_regime",
             passed=passed,
             reason=(
-                f"mode={mode}",
-                f"iv_history_count={iv_history_count}",
-                f"iv_rank={iv_rank}",
-                f"iv_rv_spread={spread}",
-                f"expected_move_points: {expected_move}",
+                f"mode={mode}; "
+                f"iv_history_count={iv_history_count}; "
+                f"iv_rank={iv_rank}; "
+                f"iv_rv_spread={spread}; "
+                f"expected_move_points: {expected_move}"
             ),
             details={
                 "mode": mode,
