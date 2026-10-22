@@ -34,3 +34,5 @@
 - Stocks
 - Directional defined-risk debit/credit spreads.
 - Multi-leg strategy library.
+
+- [Future Implementation Configuration](docs/FUTURE_IMPLEMENTATION.md)
