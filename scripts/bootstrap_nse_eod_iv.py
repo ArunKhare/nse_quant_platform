@@ -240,7 +240,7 @@ def main() -> int:
               AND CAST(ts AS DATE) BETWEEN ? AND ?
             ORDER BY ts
             """,
-            [args.underlying, args.start_date, args.end_date],
+            [args.underlying, start_date, end_date],
         ).fetchall()
 
         if not spot_row:

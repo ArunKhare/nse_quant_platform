@@ -44,6 +44,7 @@ from nse_quant.ops.data_quality import DataQualityChecker, DataQualityReport
 from nse_quant.ops.eligibility_alerts import EligibilityAlertManager
 from nse_quant.ops.kill_switch import KillSwitch
 from nse_quant.ops.live_snapshot import build_snapshot, write_live_snapshot
+from nse_quant.ops.notifier import Notifier
 from nse_quant.persistence.repositories import (
     DecisionRepository,
     PositionRepository,
@@ -56,7 +57,7 @@ from nse_quant.research.regime_risk_policy import RegimeRiskLimits, build_regime
 from nse_quant.risk.risk_engine import RiskEngine
 from nse_quant.strategy.exit_engine import ExitEngine
 from nse_quant.strategy.iron_condor import IronCondorMonitor
-from nse_quant.ops.notifier import Notifier
+
 
 class DecisionLoop:
     def __init__(
@@ -223,11 +224,10 @@ class DecisionLoop:
         features, iv_history_count = self._build_features(snapshot)
 
         # Diagnostics
-        expected_move_inputs = (
-            self.build_expected_move_diagnostics(
-                snapshot=snapshot,
-                features=features,
-            )
+        expected_move_inputs = self.build_expected_move_diagnostics(
+            snapshot=snapshot,
+            features=features,
+        )
 
         features.diagnostics["expected_move_inputs"] = (
             expected_move_inputs
