@@ -36,7 +36,7 @@ analytics:
   min_iv_history_observations: 30
   allow_iv_rank_cold_start: true
   expiries_per_snapshot: 2
-  
+
 risk:
   max_lots_per_order: 2
   max_open_positions: 3
@@ -132,3 +132,11 @@ strategies:
       iv_collapse_pct: 20
       data_quality_max_age_seconds: 30
       expected_move_violation_buffer: 1.25
+
+evidence:
+  enabled: true
+  plugins:
+    multi_timeframe:
+      enabled: true
+      timeframes: [1m, 15m, 60m]
+
