@@ -167,8 +167,20 @@ class FeatureAvailabilityChecker:
                 ),
             )
 
+        iv_days_row = self._store.conn.execute(
+            """
+            SELECT COUNT(DISTINCT CAST(ts AS DATE))
+            FROM option_stream
+            WHERE underlying = ?
+              AND ts < ?
+              AND iv IS NOT NULL
+            """,
+            [symbol, as_of],
+        ).fetchone()
+
         return {
             "iv_observations": iv_observations,
+            "iv_days": int(iv_days_row[0]),
             "iv_rv_aligned_observations": int(
                 iv_rv_aligned_observations
             ),

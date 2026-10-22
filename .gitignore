@@ -225,3 +225,4 @@ data/*
 .pylintrc
 
 logs/live_status.json
+logs/live_status.json
