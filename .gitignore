@@ -224,5 +224,4 @@ data/*
 .local/*
 .pylintrc
 
-logs/live_status.json
-logs/live_status.json
+logs/*
