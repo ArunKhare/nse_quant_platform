@@ -412,6 +412,20 @@ class DuckDBStore:
             """
         self.conn.execute(DAILY_IV)
 
+        DECISION_EVIDENCE = """
+            CREATE TABLE IF NOT EXISTS decision_evidence (
+                evidence_id TEXT PRIMARY KEY,
+                run_id TEXT NOT NULL,
+                ts TIMESTAMP NOT NULL,
+                symbol TEXT NOT NULL,
+                plugin TEXT NOT NULL,
+                available BOOLEAN NOT NULL,
+                payload_json TEXT NOT NULL
+            )
+            """
+        self.conn.execute(DECISION_EVIDENCE)
+
+
     def _compute_option_iv(
         self,
         *,
@@ -1475,3 +1489,63 @@ class DuckDBStore:
                 range_position_60m,
             ],
         )
+    def write_decision_evidence(
+        self,
+        *,
+        run_id: str,
+        ts: Any,
+        symbol: str,
+        evidence: dict[str, Any],
+    ) -> None:
+        import json
+        from uuid import uuid4
+
+        self.conn.execute(
+            """
+            INSERT OR REPLACE INTO decision_evidence VALUES (
+                ?, ?, ?, ?, ?, ?, ?
+            )
+            """,
+            [
+                str(uuid4()),
+                run_id,
+                ts,
+                symbol,
+                "multi_timeframe",
+                bool(evidence.get("available", False)),
+                json.dumps(evidence, default=str),
+            ],
+        )
+
+    def latest_spot_candles(
+        self,
+        *,
+        symbol: str,
+        instrument_token: int,
+        interval: str,
+        limit: int,
+    ) -> list[dict[str, Any]]:
+        rows = self.conn.execute(
+            """
+            SELECT date, open, high, low, close, volume
+            FROM spot_candles
+            WHERE symbol = ?
+            AND instrument_token = ?
+            AND interval = ?
+            ORDER BY date DESC
+            LIMIT ?
+            """,
+            [symbol, instrument_token, interval, limit],
+        ).fetchall()
+
+        return [
+            {
+                "date": row[0],
+                "open": row[1],
+                "high": row[2],
+                "low": row[3],
+                "close": row[4],
+                "volume": row[5],
+            }
+            for row in reversed(rows)
+        ]

@@ -13,6 +13,7 @@ import time
 from datetime import UTC, datetime
 from pathlib import Path
 from uuid import uuid4
+import traceback
 
 from nse_quant.core.market_calendar import is_market_open_now
 from nse_quant.core.settings import get_settings
@@ -299,6 +300,7 @@ def main() -> int:
             if (
                 isinstance(provider, KiteMarketDataProvider)
                 and spot_token
+                and is_market_open_now()
             ):
                 try:
                     now = datetime.now(UTC)
@@ -360,8 +362,6 @@ def main() -> int:
                     )
 
                 except Exception: # noqa:BLE001
-                    import traceback
-
                     print("Spot candle capture failed:")
                     traceback.print_exc()
 
@@ -374,9 +374,12 @@ def main() -> int:
                 break
 
             except Exception as exc:  # noqa: BLE001
+                traceback.print_exc()
+
                 result = {
                     "status": "loop_error",
                     "error": str(exc),
+                    "error_type": type(exc).__name__,
                 }
 
                 print(result)

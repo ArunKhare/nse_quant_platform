@@ -31,7 +31,7 @@ from nse_quant.core.models import (
     StrategyPositionStatus,
     TradeProposal,
 )
-
+from nse_quant.core.settings import IronCondorProfileSettings, get_settings
 from nse_quant.execution.broker import PaperBroker
 from nse_quant.features.availability import FeatureAvailability
 from nse_quant.features.availability_checker import (
@@ -42,6 +42,7 @@ from nse_quant.features.feature_service import SpotFeatureService
 from nse_quant.features.feature_store import FeatureStore
 from nse_quant.ops.data_quality import DataQualityChecker, DataQualityReport
 from nse_quant.ops.eligibility_alerts import EligibilityAlertManager
+from nse_quant.ops.kill_switch import KillSwitch
 from nse_quant.ops.live_snapshot import build_snapshot, write_live_snapshot
 from nse_quant.persistence.repositories import (
     DecisionRepository,
@@ -55,8 +56,7 @@ from nse_quant.research.regime_risk_policy import RegimeRiskLimits, build_regime
 from nse_quant.risk.risk_engine import RiskEngine
 from nse_quant.strategy.exit_engine import ExitEngine
 from nse_quant.strategy.iron_condor import IronCondorMonitor
-from nse_quant.core.settings import IronCondorProfileSettings, get_settings
-from nse_quant.ops.kill_switch import KillSwitch
+from nse_quant.ops.notifier import Notifier
 
 class DecisionLoop:
     def __init__(
@@ -221,8 +221,19 @@ class DecisionLoop:
         )
 
         features, iv_history_count = self._build_features(snapshot)
-        quality: DataQualityReport = self.quality_checker.assess(snapshot)
 
+        # Diagnostics
+        expected_move_inputs = (
+            self.build_expected_move_diagnostics(
+                snapshot=snapshot,
+                features=features,
+            )
+        
+        features.diagnostics["expected_move_inputs"] = (
+            expected_move_inputs
+        )
+
+        quality: DataQualityReport = self.quality_checker.assess(snapshot)
         position_outcomes = self._monitor_open_positions(
             snapshot=snapshot,
             features=features,
@@ -499,7 +510,6 @@ class DecisionLoop:
 
         if (
             self.settings.safety.dry_run
-            or not self.settings.safety.trading_enabled
         ):
             self.decisions.save_decision(
                 self.run_id,
@@ -1044,6 +1054,7 @@ class DecisionLoop:
         features, _iv_history_count = self._build_features(snapshot)
         quality = self.quality_checker.assess(snapshot)
 
+
         position_outcomes = self._monitor_open_positions(
             snapshot=snapshot,
             features=features,
@@ -1190,9 +1201,88 @@ class DecisionLoop:
             details=checks,
         )
 
-    def _send_eligibility_alert(self) -> None:
+    def _send_eligibility_alert(self, message: str) -> None:
         if not self.settings.notifier.enabled:
             return
 
         if not self.settings.notifier.telegram.enabled:
             return
+        notifier = Notifier()
+        notifier.send(message)
+
+    @staticmethod
+    def build_expected_move_diagnostics(
+        snapshot: ChainSnapshot,
+        features: MarketFeatures,
+        now: datetime | None = None,
+    ) -> dict[str, Any]:
+        """Build diagnostics explaining the expected-move calculation."""
+
+        now = now or datetime.now(UTC)
+
+        if not snapshot.quotes:
+            return {
+                "spot": snapshot.spot,
+                "atm_strike": None,
+                "atm_iv": None,
+                "nearest_expiry": None,
+                "dte_days": None,
+                "expected_move_points": features.expected_move_points,
+                "implied_annualised_iv_from_expected_move": None,
+                "error": "no_option_quotes",
+            }
+
+        atm_strike = min(
+            (
+                quote.instrument.strike
+                for quote in snapshot.quotes
+            ),
+            key=lambda strike: abs(strike - snapshot.spot),
+        )
+
+        atm_ivs = [
+            quote.iv
+            for quote in snapshot.quotes
+            if quote.instrument.strike == atm_strike
+            and quote.iv is not None
+        ]
+
+        atm_iv = (
+            sum(atm_ivs) / len(atm_ivs)
+            if atm_ivs
+            else None
+        )
+
+        nearest_expiry = min(
+            quote.instrument.expiry
+            for quote in snapshot.quotes
+        )
+
+        dte_days = max(
+            (nearest_expiry - now.date()).days,
+            0,
+        )
+
+        implied_iv = None
+
+        if (
+            features.expected_move_points
+            and snapshot.spot
+            and dte_days > 0
+        ):
+            implied_iv = (
+                features.expected_move_points
+                / snapshot.spot
+                / (dte_days / 365) ** 0.5
+                * 100
+            )
+
+        return {
+            "spot": snapshot.spot,
+            "atm_strike": atm_strike,
+            "atm_iv": atm_iv,
+            "nearest_expiry": nearest_expiry.isoformat(),
+            "dte_days": dte_days,
+            "expected_move_points": features.expected_move_points,
+            "implied_annualised_iv_from_expected_move": implied_iv,
+        }

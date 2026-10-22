@@ -55,7 +55,7 @@ def main() -> int:
         daily["returns"] = daily["close"].pct_change()
         daily["realized_volatility"] = (
             daily["returns"]
-            .rolling(20, min_periods=21)
+            .rolling(20, min_periods=20)
             .std(ddof=1)
             * (252 ** 0.5)
         )
@@ -67,19 +67,48 @@ def main() -> int:
         iv_history = store.conn.execute(
             """
             SELECT
-                CAST(ts AS DATE) AS trading_date,
+                trading_date,
                 AVG(iv) AS atm_iv
-            FROM option_stream
-            WHERE underlying = ?
-              AND iv IS NOT NULL
-              AND CAST(ts AS DATE) <= ?
+            FROM (
+                SELECT
+                    CAST(ts AS DATE) AS trading_date,
+                    iv
+                FROM option_stream
+                WHERE underlying = ?
+                  AND iv IS NOT NULL
+                  AND CAST(ts AS DATE) <= ?
+
+                UNION ALL
+
+                SELECT
+                    CAST(ts AS DATE) AS trading_date,
+                    iv
+                FROM underlying_iv_observations
+                WHERE underlying = ?
+                  AND iv IS NOT NULL
+                  AND CAST(ts AS DATE) <= ?
+            )
             GROUP BY trading_date
             ORDER BY trading_date
             """,
-            [args.symbol, args.to_ts],
+            [
+                args.symbol,
+                args.to_ts,
+                args.symbol,
+                args.to_ts,
+            ],
         ).fetchdf()
 
+        print(
+            f"IV history days={len(iv_history)}, "
+            f"last_date={iv_history['trading_date'].iloc[-1]}"
+        )
         iv_percentiles: dict[object, float] = {}
+
+        iv_history["trading_date"] = pd.to_datetime(
+            iv_history["trading_date"]
+
+        ).dt.date
 
         if not iv_history.empty:
             iv_history["iv_rank"] = (
@@ -100,6 +129,13 @@ def main() -> int:
                 for row in iv_history.itertuples()
                 if pd.notna(row.iv_rank)
             }
+
+        print(
+            "IV rank available dates:",
+            len(iv_percentiles),
+            "last:",
+            max(iv_percentiles) if iv_percentiles else None,
+        )
 
         atr = store.conn.execute(
             """

@@ -8,6 +8,8 @@ from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
+import duckdb
+
 from nse_quant.core.settings import (
     IronCondorProfileSettings,
     Settings,
@@ -54,12 +56,20 @@ def evaluate_regime_policy(
             f"{strategy_id!r} must use IronCondorProfileSettings"
         )
 
-    outcomes = load_trade_outcomes(
-        settings.storage.db_path,
-        symbol=symbol,
-        start_date=date.fromisoformat(start_date),
-        end_date=date.fromisoformat(end_date),
+    conn = duckdb.connect(
+        str(settings.storage.db_path),
+        read_only=True,
     )
+
+    try:
+        outcomes = load_trade_outcomes(
+            conn,
+            symbol=symbol,
+            start_date=date.fromisoformat(start_date),
+            end_date=date.fromisoformat(end_date),
+        )
+    finally:
+        conn.close()
 
     learned = select_regime_policy(
         outcomes,

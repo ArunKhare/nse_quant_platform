@@ -53,7 +53,18 @@ def main() -> int:
 
         store.conn.execute(
             """
-            INSERT INTO spot_candles
+            INSERT INTO spot_candles (
+                symbol,
+                instrument_token,
+                ts,
+                interval,
+                open,
+                high,
+                low,
+                close,
+                volume,
+                oi
+            )
             SELECT
                 symbol,
                 instrument_token,
@@ -74,12 +85,8 @@ def main() -> int:
                 instrument_token,
                 date_trunc('day', ts)
             """,
-            [
-                args.symbol,
-                args.start_date,
-                args.end_date,
-            ],
-        )
+            [args.symbol, args.start_date, args.end_date],
+            )
 
         daily_count_row = store.conn.execute(
             """

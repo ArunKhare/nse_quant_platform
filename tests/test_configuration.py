@@ -5,6 +5,7 @@ import yaml
 
 from nse_quant.core.settings import Settings, get_settings
 
+
 def test_yaml_load(tmp_path: Path):
     settings = get_settings()
     strategy_profile = settings.get_strategy_profile("iron_condor_monitor")

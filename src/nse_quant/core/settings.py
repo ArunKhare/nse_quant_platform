@@ -243,6 +243,18 @@ class WalkForwardSettings(BaseModel):
 
         return self
 
+class MultiTimeframeEvidenceSettings(BaseModel):
+    enabled: bool = True
+    timeframes: list[str] = Field(
+        default_factory=lambda: ["1m", "15m", "60m"]
+    )
+
+class EvidenceSettings(BaseModel):
+    enabled: bool = False
+    plugins: dict[str, MultiTimeframeEvidenceSettings] = Field(
+         default_factory=lambda: ["1m", "15m", "60m"]
+    )
+    
 def _load_yaml(path: Path) -> dict[str, Any]:
     if not path.exists():
         return {}
@@ -275,6 +287,7 @@ class Settings(BaseSettings):
     research: ResearchSettings = Field(default_factory=ResearchSettings)
     strategies: dict[str, IronCondorProfileSettings] = Field(default_factory=dict)
     walk_forward: WalkForwardSettings = Field(default_factory=WalkForwardSettings)
+    evidence: EvidenceSettings = Field(default_factory=EvidenceSettings)
 
     @model_validator(mode="before")
     @classmethod

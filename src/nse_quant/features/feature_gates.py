@@ -99,12 +99,14 @@ class SpotFeatureGate:
             )
             if not checks["trend_aligned"]:
                 reasons.append("multi_timeframe_trend_misaligned")
+        else:
+            checks["trend_aligned"] = True
+            reasons.append("multi_timeframe_trend_context_unavailable")
 
         required_checks = {
             "feature_snapshot_available",
             "feature_snapshot_fresh",
             "realized_vol_in_range",
-            "trend_aligned",
         }
 
         if checks["vwap_distance_applicable"]:

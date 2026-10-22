@@ -31,11 +31,11 @@ class IvRegimeGate:
     def __init__(self, settings: Any | None = None) -> None:
         self.settings = settings or get_settings()
 
-    def evaluate(
-        self,
-        features: MarketFeatures,
-        iv_history_count: int | None = None,
-    ) -> GateResult:
+    def evaluate(self,features: MarketFeatures,iv_history_count: int | None = None,) -> GateResult:
+        expected_move = features.expected_move_points
+        buffer = self.settings.analytics.max_expected_move_buffer
+        diagnostics = features.diagnostics.get("expected_move_inputs", {})
+        
         analytics = self.settings.analytics
         iv_rank = features.iv_rank
         spread = features.iv_rv_spread
