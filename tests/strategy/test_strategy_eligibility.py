@@ -30,11 +30,12 @@ def test_eligibility_rejects_unknown_regime(decision_loop_environment):
         features=make_features(iv_rank=50),
         iv_history_count=50,
         current_regime="UNKNOWN",
+        regime_allowed=False,
         regime_policy=None,
     )
 
     assert gate.passed is False
-    assert gate.reason == "iv_regime_not_allowed"
+    assert gate.reason == "IV regime not allowed: UNKNOWN"
 
 
 def test_eligibility_rejects_missing_iv_rank(
@@ -56,8 +57,9 @@ def test_eligibility_rejects_missing_iv_rank(
         features=make_features(iv_rank=None),
         iv_history_count=50,
         current_regime=allowed_regime,
+        regime_allowed=True,
         regime_policy=None,
     )
 
     assert gate.passed is False
-    assert gate.reason == "iv_rank_unavailable"
+    assert gate.reason == "IV rank unavailable"

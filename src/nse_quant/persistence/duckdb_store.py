@@ -17,7 +17,7 @@ from nse_quant.analytics.implied_volatility import (
 from nse_quant.core.constants import IST
 from nse_quant.core.models import ChainSnapshot
 from nse_quant.core.settings import get_settings
-from nse_quant.research.capture_quality import 
+
 
 def _as_json_object(value: Any) -> Any:
     """Normalize DuckDB JSON values that may be strings or parsed objects."""
@@ -1065,8 +1065,7 @@ class DuckDBStore:
             query += " AND expiry = ?"
             params.append(expiry)
 
-        row = self.conn.execute(query, params).fetchone()
-        return row[0] if row is not None else 0
+        return self.conn.execute(query, params).fetchone()[0]
 
     def count_aligned_iv_rv_observations(
         self,

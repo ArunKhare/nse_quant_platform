@@ -125,7 +125,7 @@ class IronCondorBacktester:
             self.diagnostics.days += 1
 
             trade = self._backtest_day(
-                trade_date=trade_date,
+                trade_date=pd.Timestamp(trade_date).date(),
                 day_frame=day_frame,
             )
 
@@ -284,51 +284,56 @@ class IronCondorBacktester:
         puts["abs_delta"] = puts["delta"].abs()
         calls["abs_delta"] = calls["delta"].abs()
 
-        short_put_row = puts.iloc[
-            (
-                puts["abs_delta"]
-                - self.config.short_delta
-            )
-            .abs()
-            .argmin()
-        ]
+        put_candidates = puts.assign(
+            delta_distance=(puts["abs_delta"] - self.config.short_delta).abs()
+        ).sort_values("delta_distance", kind="stable")
+        call_candidates = calls.assign(
+            delta_distance=(calls["abs_delta"] - self.config.short_delta).abs()
+        ).sort_values("delta_distance", kind="stable")
 
-        short_call_row = calls.iloc[
-            (
-                calls["abs_delta"]
-                - self.config.short_delta
-            )
-            .abs()
-            .argmin()
-        ]
-
-        long_put_row = puts[
-            puts["strike"]
-            == short_put_row["strike"]
-            - self.config.wing_width
-        ]
-
-        long_call_row = calls[
-            calls["strike"]
-            == short_call_row["strike"]
-            + self.config.wing_width
-        ]
-
-        if long_put_row.empty or long_call_row.empty:
+        def select_short_and_wing(
+            candidates: pd.DataFrame,
+            available: pd.DataFrame,
+            wing_offset: int,
+        ) -> tuple[pd.Series, pd.Series] | None:
+            for _, short_row in candidates.iterrows():
+                long_rows = available[
+                    available["strike"]
+                    == short_row["strike"] + wing_offset
+                ]
+                if not long_rows.empty:
+                    return short_row, long_rows.iloc[0]
             return None
+
+        put_legs = select_short_and_wing(
+            put_candidates,
+            puts,
+            -self.config.wing_width,
+        )
+        call_legs = select_short_and_wing(
+            call_candidates,
+            calls,
+            self.config.wing_width,
+        )
+
+        if put_legs is None or call_legs is None:
+            return None
+
+        short_put_row, long_put_row = put_legs
+        short_call_row, long_call_row = call_legs
 
         return {
             "short_put": self._leg_from_row(
                 short_put_row
             ),
             "long_put": self._leg_from_row(
-                long_put_row.iloc[0]
+                long_put_row
             ),
             "short_call": self._leg_from_row(
                 short_call_row
             ),
             "long_call": self._leg_from_row(
-                long_call_row.iloc[0]
+                long_call_row
             ),
         }
 
@@ -425,14 +430,14 @@ class IronCondorBacktester:
 
             credit = self._credit(exit_legs)
 
-            if credit <= target_credit:
+            if credit_entry > 0 and credit <= target_credit:
                 return (
                     ts,
                     snapshot,
                     "profit_target",
                 )
 
-            if credit >= stop_credit:
+            if credit_entry > 0 and credit >= stop_credit:
                 return ts, snapshot, "stop_loss"
 
             if (

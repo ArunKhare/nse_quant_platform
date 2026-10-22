@@ -342,30 +342,6 @@ class Settings(BaseSettings):
 
         return profile
 
-    def get_effective_risk_settings(self, strategy_id: str) -> RiskSettings:
-        profile = self.get_strategy_profile(strategy_id)
-        effective = self.risk.model_copy(deep=True)
-
-        profile_risk = profile.risk.model_dump(exclude_unset=True)
-
-        for key, value in profile_risk.items():
-            if hasattr(effective, key):
-                setattr(effective, key, value)
-
-        return effective
-
-    def get_effective_exit_settings(self, strategy_id: str) -> ExitSettings:
-        profile = self.get_strategy_profile(strategy_id)
-        effective = self.exits.model_copy(deep=True)
-
-        profile_exits = profile.exits.model_dump(exclude_unset=True)
-
-        for key, value in profile_exits.items():
-            if hasattr(effective, key):
-                setattr(effective, key, value)
-
-        return effective
-
     @model_validator(mode="after")
     def validate_strategy_profiles(self) -> Self:
         for strategy_id, profile in self.strategies.items():
@@ -438,36 +414,35 @@ class Settings(BaseSettings):
         data["strategies"] = normalized
         return data
 
-def get_effective_risk_settings(
-    self,
-    strategy_id: str,
-) -> RiskSettings:
-    profile = self.get_strategy_profile(strategy_id)
-    effective = self.risk.model_copy(deep=True)
+    def get_effective_risk_settings(
+        self,
+        strategy_id: str,
+    ) -> RiskSettings:
+        profile = self.get_strategy_profile(strategy_id)
+        effective = self.risk.model_copy(deep=True)
 
-    profile_risk = profile.risk.model_dump(exclude_unset=True)
+        profile_risk = profile.risk.model_dump(exclude_unset=True)
 
-    for key, value in profile_risk.items():
-        if hasattr(effective, key):
-            setattr(effective, key, value)
+        for key, value in profile_risk.items():
+            if hasattr(effective, key):
+                setattr(effective, key, value)
 
-    return effective
+        return effective
 
+    def get_effective_exit_settings(
+        self,
+        strategy_id: str,
+    ) -> ExitSettings:
+        profile = self.get_strategy_profile(strategy_id)
+        effective = self.exits.model_copy(deep=True)
 
-def get_effective_exit_settings(
-    self,
-    strategy_id: str,
-) -> ExitSettings:
-    profile = self.get_strategy_profile(strategy_id)
-    effective = self.exits.model_copy(deep=True)
+        profile_exits = profile.exits.model_dump(exclude_unset=True)
 
-    profile_exits = profile.exits.model_dump(exclude_unset=True)
+        for key, value in profile_exits.items():
+            if hasattr(effective, key):
+                setattr(effective, key, value)
 
-    for key, value in profile_exits.items():
-        if hasattr(effective, key):
-            setattr(effective, key, value)
-
-    return effective
+        return effective
 
 def load_settings(path: str | Path | None = None) -> Settings:
     # Read the YAML file dictionary

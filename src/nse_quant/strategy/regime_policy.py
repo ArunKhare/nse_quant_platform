@@ -48,11 +48,7 @@ class PolicyDecision:
     checks: dict[str, bool]
 
 
-def load_policy(
-    path: str,
-    *,
-    strategy: str = "iron_condor",
-) -> RegimePolicy:
+def load_policy(path: str,*,strategy: str = "iron_condor",) -> RegimePolicy:
     with open(path, encoding="utf-8") as handle:
         payload = json.load(handle)
 

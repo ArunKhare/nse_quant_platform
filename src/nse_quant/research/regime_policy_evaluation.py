@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import asdict, dataclass
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -57,8 +57,8 @@ def evaluate_regime_policy(
     outcomes = load_trade_outcomes(
         settings.storage.db_path,
         symbol=symbol,
-        start_date=start_date,
-        end_date=end_date,
+        start_date=date.fromisoformat(start_date),
+        end_date=date.fromisoformat(end_date),
     )
 
     learned = select_regime_policy(

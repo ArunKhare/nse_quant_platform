@@ -31,7 +31,7 @@ from nse_quant.core.models import (
     StrategyPositionStatus,
     TradeProposal,
 )
-from nse_quant.core.settings import get_settings
+
 from nse_quant.execution.broker import PaperBroker
 from nse_quant.features.availability import FeatureAvailability
 from nse_quant.features.availability_checker import (
@@ -55,7 +55,8 @@ from nse_quant.research.regime_risk_policy import RegimeRiskLimits, build_regime
 from nse_quant.risk.risk_engine import RiskEngine
 from nse_quant.strategy.exit_engine import ExitEngine
 from nse_quant.strategy.iron_condor import IronCondorMonitor
-
+from nse_quant.core.settings import IronCondorProfileSettings, get_settings
+from nse_quant.ops.kill_switch import KillSwitch
 
 class DecisionLoop:
     def __init__(
@@ -68,6 +69,8 @@ class DecisionLoop:
         spot_instrument_token_resolver: Callable[[str], int] | None = None,
         feature_gate: SpotFeatureGate | None = None,
         live_snapshot_path: Path | None = None,
+        kill_switch: KillSwitch | None = None
+
     ) -> None:
         self.settings = settings or get_settings()
         self.store = store
@@ -82,20 +85,24 @@ class DecisionLoop:
             store.conn,
             self.settings,
             self.positions,
-            risk_settings=self.settings.get_effective_risk_settings("iron_condor_monitor"),
+            risk_settings=self.settings.risk,
         )
         self.exit_engine = ExitEngine(
-            self.settings.get_effective_exit_settings("iron_condor_monitor")
+            self.settings.get_effective_exit_settings(
+                "iron_condor_monitor"
             )
+        )
         self.strategy = IronCondorMonitor(self.settings)
         self.quality_checker = DataQualityChecker(
             stale_seconds=self.settings.runtime.stale_seconds,
         )
         self.feature_service = SpotFeatureService(
             store=store,
-            max_age_seconds=self.settings.runtime.stale_seconds,
+            max_age_seconds=int(self.settings.runtime.stale_seconds),
         )
-        self.feature_gate = feature_gate or SpotFeatureGate(max_age_seconds=self.settings.runtime.stale_seconds,)
+        self.feature_gate = feature_gate or SpotFeatureGate(
+            max_age_seconds=int(self.settings.runtime.stale_seconds),
+        )
         self._spot_instrument_token_resolver = (
             spot_instrument_token_resolver
             or self._default_spot_token_resolver
@@ -103,8 +110,11 @@ class DecisionLoop:
         self.availability_checker = FeatureAvailabilityChecker(store)
         self._live_snapshot_path = live_snapshot_path
         self.eligibility_alerts = EligibilityAlertManager(self.decisions)
+        self.kill_switch = kill_switch or KillSwitch()
 
     def run_once(self) -> dict[str, Any]:
+        if self.kill_switch.is_active():
+            return self.handle_kill_switch()
         symbol = self.settings.market_data.default_symbol
         spot_feature_snapshot = self.feature_service.latest(symbol)
         provider_token = self._resolve_spot_instrument_token(symbol)
@@ -292,6 +302,14 @@ class DecisionLoop:
                 as_of=features.ts,
             )
 
+            strategy_id = "iron_condor_monitor"
+            profile = self.settings.get_strategy_profile(strategy_id)
+
+            if not isinstance(profile, IronCondorProfileSettings):
+                raise TypeError(
+                    f"{strategy_id!r} must use IronCondorProfileSettings"
+                )
+
             effective_regimes, _regime_source, _policy_status = (
                 resolve_effective_regimes(
                     profile,
@@ -301,12 +319,12 @@ class DecisionLoop:
 
             regime_allowed = current_regime in effective_regimes
 
-            profile = self.settings.get_strategy_profile("iron_condor_monitor")
             eligibility = self._evaluate_strategy_eligibility(
                 profile=profile,
                 features=features,
                 iv_history_count=iv_history_count,
-                current_regime=regime_allowed,
+                current_regime=current_regime,
+                regime_allowed=regime_allowed,
                 regime_policy=regime_policy,
             )
 
@@ -404,7 +422,7 @@ class DecisionLoop:
 
             policy_allows = (
                 regime_policy is not None
-                and regime_policy["selection_status"] == "READY"
+                and regime_policy["selection_status"] != "READY"
                 and current_regime in allowed_regimes
             )
 
@@ -602,7 +620,14 @@ class DecisionLoop:
         proposal: TradeProposal | None = None,
         gates: list[Any] | None = None,
         extra: dict[str, Any] | None = None,
+        *,
+        kill_switch_active: bool | None = None
     ) -> dict[str, Any]:
+        kill_switch_active =(
+            self.kill_switch.is_active()
+            if kill_switch_active is None
+            else kill_switch_active
+        )
         eligibility_gate = next(
             (
                 gate
@@ -639,7 +664,7 @@ class DecisionLoop:
             build_snapshot(
                 features=features,
                 open_positions=self.positions.get_open_strategy_positions(),
-                kill_switch_active=False,
+                kill_switch_active=kill_switch_active,
                 loop_status=status,
                 data_quality=data_quality,
                 iv_history=iv_history,
@@ -793,13 +818,15 @@ class DecisionLoop:
 
         self.positions.update_strategy_position(strategy_position)
 
-    def handle_kill_switch(self) -> None:
+    def handle_kill_switch(self) -> dict[str, Any]:
+        kill_switch_active = self.kill_switch.is_active()
+
         write_live_snapshot(
             build_snapshot(
-                kill_switch_active=True,
+                kill_switch_active=kill_switch_active,
                 loop_status="kill_switch_active",
             ),
-            snapshot_path=self._live_snapshot_path
+            snapshot_path=self._live_snapshot_path,
         )
 
         self.decisions.save_system_event(
@@ -809,6 +836,11 @@ class DecisionLoop:
                 "reason": "dashboard_or_cli_kill_switch",
             },
         )
+
+        return {
+            "status": "kill_switch_active",
+            "kill_switch_active": kill_switch_active,
+        }
 
     def handle_loop_error(self, exc: Exception) -> dict[str, Any]:
         payload = {
@@ -895,7 +927,9 @@ class DecisionLoop:
         snapshot: ChainSnapshot,
         features: MarketFeatures,
         quality: DataQualityReport,
+        kill_switch_active: bool | None = None
     ) -> list[dict[str, Any]]:
+        kill_switch_active = self.kill_switch.is_active()
         outcomes: list[dict[str, Any]] = []
 
         for strategy_position in self.positions.get_open_strategy_positions():
@@ -930,7 +964,7 @@ class DecisionLoop:
                 strategy_position,
                 leg_positions,
                 features,
-                kill_switch_active=False,
+                kill_switch_active=kill_switch_active,
                 risk_breached=False,
                 data_stale=not quality.is_usable,
             )
@@ -982,7 +1016,7 @@ class DecisionLoop:
         )
 
         if callable(resolver):
-            return int(resolver(symbol))
+            return int(resolver(symbol))  # type: ignore[arg-type]
 
         configured_token = (
             self.settings.market_data.index_instrument_tokens.get(symbol)
@@ -1094,12 +1128,19 @@ class DecisionLoop:
     def _evaluate_strategy_eligibility(
         self,
         *,
-        profile: Any,
+        profile: IronCondorProfileSettings,
         features: MarketFeatures,
         iv_history_count: int,
         current_regime: str,
+        regime_allowed: bool,
         regime_policy: dict[str, Any] | None,
     ) -> GateResult:
+        iv_rank_available = features.iv_rank is not None
+        require_iv_rank = profile.regime_policy.require_iv_rank_available
+        minimum_iv_history = (
+            self.settings.analytics.min_iv_history_observations
+        )
+
         checks = {
             "strategy_id": "iron_condor_monitor",
             "profile_enabled": profile.enabled,
@@ -1108,83 +1149,47 @@ class DecisionLoop:
                 in profile.underlyings
             ),
             "current_regime": current_regime,
+            "regime_allowed": regime_allowed,
             "iv_history_count": iv_history_count,
+            "minimum_iv_history": minimum_iv_history,
+            "iv_history_available": (
+                iv_history_count >= minimum_iv_history
+            ),
             "iv_rank": features.iv_rank,
+            "iv_rank_available": iv_rank_available,
+            "iv_rank_required": require_iv_rank,
         }
 
+        reasons: list[str] = []
+
         if not profile.enabled:
-            return GateResult(
-                gate="strategy_eligibility",
-                passed=False,
-                reason="strategy_profile_disabled",
-                details=checks,
-            )
+            reasons.append("strategy profile disabled")
 
-        if (
-            self.settings.market_data.default_symbol
-            not in profile.underlyings
-        ):
-            checks["reason"] = "underlying_not_allowed"
-            return GateResult(
-                gate="strategy_eligibility",
-                passed=False,
-                reason="underlying_not_allowed",
-                details=checks,
-            )
-
-        policy_status = (
-            regime_policy.get("selection_status") if regime_policy else None
-        )
-        policy_regimes = set(
-            regime_policy.get("allowed_regimes") or []
-        ) if regime_policy else set()
-
-        if policy_status == "READY":
-            allowed_regimes = policy_regimes
-            regime_source = "learned_policy"
-        else:
-            allowed_regimes = set(profile.regime_policy.allowed_regimes)
-            regime_source = "configured_profile"
-
-        regime_allowed = current_regime in allowed_regimes
-        checks.update(
-            {
-                "regime_source": regime_source,
-                "allowed_regimes": sorted(allowed_regimes),
-                "policy_status": policy_status,
-                "regime_allowed": regime_allowed,
-            }
-        )
+        if not checks["underlying_allowed"]:
+            reasons.append("underlying not allowed by strategy profile")
 
         if not regime_allowed:
-            checks["reason"] = "iv_regime_not_allowed"
-            return GateResult(
-                gate="strategy_eligibility",
-                passed=False,
-                reason="iv_regime_not_allowed",
-                details=checks,
-            )
+            reasons.append(f"IV regime not allowed: {current_regime}")
 
-        if profile.regime_policy.require_iv_rank_available:
-            rank_available = features.iv_rank is not None
+        if require_iv_rank and not iv_rank_available:
+            reasons.append("IV rank unavailable")
 
-            checks["iv_rank_available"] = rank_available
+        if not checks["iv_history_available"]:
+            reasons.append("IV history below minimum required observations")
 
-            if not rank_available:
-                checks["reason"] = "iv_rank_unavailable"
-                return GateResult(
-                    gate="strategy_eligibility",
-                    passed=False,
-                    reason="iv_rank_unavailable",
-                    details=checks,
-                )
+        passed = not reasons
 
         return GateResult(
             gate="strategy_eligibility",
-            passed=True,
-            reason=f"eligible_regime_source={regime_source}",
+            passed=passed,
+            reason=(
+                "strategy eligibility satisfied"
+                if passed
+                else "; ".join(reasons)
+            ),
             details=checks,
         )
+
     def _send_eligibility_alert(self) -> None:
         if not self.settings.notifier.enabled:
             return

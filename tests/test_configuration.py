@@ -5,10 +5,9 @@ import yaml
 
 from nse_quant.core.settings import Settings, get_settings
 
-
-def test_yaml_load():
+def test_yaml_load(tmp_path: Path):
     settings = get_settings()
-
+    strategy_profile = settings.get_strategy_profile("iron_condor_monitor")
     assert settings.safety.dry_run is True
     assert settings.safety.trading_enabled is False
     strategy_profile  =  settings.get_strategy_profile(
@@ -22,8 +21,12 @@ def test_yaml_load():
     effective_risk = settings.get_effective_risk_settings(
         "iron_condor_monitor"
     )
+    effective_exits = settings.get_effective_exit_settings(
+        "iron_condor_monitor"
+    )
 
     assert effective_risk.max_open_positions == 1
+    assert effective_exits.iv_collapse_pct == 20
 
 def test_live_mode_is_blocked():
     data = yaml.safe_load(
