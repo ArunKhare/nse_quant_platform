@@ -10,10 +10,10 @@ from __future__ import annotations
 import argparse
 import json
 import time
+import traceback
 from datetime import UTC, datetime
 from pathlib import Path
 from uuid import uuid4
-import traceback
 
 from nse_quant.core.market_calendar import is_market_open_now
 from nse_quant.core.settings import get_settings

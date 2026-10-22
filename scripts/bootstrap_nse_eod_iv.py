@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import zipfile
 from datetime import date, datetime, time
 from pathlib import Path
 
@@ -15,7 +16,7 @@ from nse_quant.analytics.implied_volatility import (
 from nse_quant.core.constants import IST
 from nse_quant.core.settings import get_settings
 from nse_quant.persistence.duckdb_store import DuckDBStore
-import zipfile
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(

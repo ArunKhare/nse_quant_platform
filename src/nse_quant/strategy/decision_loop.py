@@ -228,7 +228,7 @@ class DecisionLoop:
                 snapshot=snapshot,
                 features=features,
             )
-        
+
         features.diagnostics["expected_move_inputs"] = (
             expected_move_inputs
         )

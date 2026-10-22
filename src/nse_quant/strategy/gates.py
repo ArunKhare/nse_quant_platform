@@ -35,7 +35,7 @@ class IvRegimeGate:
         expected_move = features.expected_move_points
         buffer = self.settings.analytics.max_expected_move_buffer
         diagnostics = features.diagnostics.get("expected_move_inputs", {})
-        
+
         analytics = self.settings.analytics
         iv_rank = features.iv_rank
         spread = features.iv_rv_spread
@@ -64,10 +64,11 @@ class IvRegimeGate:
             gate="iv_regime",
             passed=passed,
             reason=(
-                f"mode={mode},"
-                f"iv_history_count={iv_history_count},"
-                f"iv_rank={iv_rank},"
-                f"iv_rv_spread={spread}"
+                f"mode={mode}",
+                f"iv_history_count={iv_history_count}",
+                f"iv_rank={iv_rank}",
+                f"iv_rv_spread={spread}",
+                f"expected_move_points: {expected_move}",
             ),
             details={
                 "mode": mode,
@@ -80,6 +81,9 @@ class IvRegimeGate:
                     analytics.min_iv_history_observations
                 ),
                 "cold_start_allowed": analytics.allow_iv_rank_cold_start,
+                "expected_move_points": expected_move,
+                "max_buffer": buffer,
+                "diagnostics": diagnostics,
             },
         )
 
