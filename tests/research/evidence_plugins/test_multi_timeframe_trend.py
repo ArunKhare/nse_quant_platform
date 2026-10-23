@@ -1,0 +1,10 @@
+def test_insufficient_history_is_incomplete():
+    ...
+
+
+def test_aligned_down_trends_are_bearish():
+    ...
+
+
+def test_mixed_trends_are_mixed():
+    ...

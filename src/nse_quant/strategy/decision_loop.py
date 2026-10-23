@@ -49,6 +49,9 @@ from nse_quant.persistence.repositories import (
     DecisionRepository,
     PositionRepository,
 )
+from nse_quant.research.evidence_plugins.base import DecisionContext, EvidencePlugin
+from nse_quant.research.evidence_plugins.multi_timeframe import MultiTimeframeTrendPlugin
+from nse_quant.research.evidence_plugins.registry import EvidencePluginRunner
 from nse_quant.research.regime_policy import RegimePolicy
 from nse_quant.research.regime_policy_evaluation import (
     resolve_effective_regimes,
@@ -75,10 +78,25 @@ class DecisionLoop:
     ) -> None:
         self.settings = settings or get_settings()
         self.store = store
+
+        plugins: list[EvidencePlugin] = []
+
+        if self.settings.evidence.enabled:
+            mtf = self.settings.evidence.plugins.multi_timeframe
+
+            if mtf.enabled:
+                plugins.append(
+                    MultiTimeframeTrendPlugin(
+                        store=store,
+                        timeframes=mtf.timeframes,
+                        history_limit=mtf.history_limit,
+                    )
+                )
+
+        self.evidence_runner = EvidencePluginRunner(plugins)
         self.provider = provider
         self.broker = broker
         self.run_id = run_id
-
         self.feature_store = FeatureStore(store.conn)
         self.decisions = DecisionRepository(store.conn)
         self.positions = PositionRepository(store.conn)
@@ -213,6 +231,7 @@ class DecisionLoop:
                 "symbol": symbol,
                 "reasons": gate.reasons,
                 "checks": gate.checks,
+                "evidence": {}
             }
 
         snapshot = self.provider.get_chain_snapshot()
@@ -221,7 +240,7 @@ class DecisionLoop:
             snapshot,
         )
 
-        features, iv_history_count = self._build_features(snapshot)
+        features, iv_history_count, evidence = self._build_features(snapshot)
 
         # Diagnostics
         expected_move_inputs = self.build_expected_move_diagnostics(
@@ -363,6 +382,7 @@ class DecisionLoop:
                         "rejection_reason": eligibility.reason,
                         "position_outcomes": position_outcomes,
                         "persisted_option_rows": persisted_rows,
+                        "evidence": evidence,
                     },
                 )
 
@@ -389,6 +409,7 @@ class DecisionLoop:
                 extra={
                     "position_outcomes": position_outcomes,
                     "persisted_option_rows": persisted_rows,
+                    "evidence": evidence,
                 },
             )
 
@@ -475,6 +496,7 @@ class DecisionLoop:
                         "proposal_id": proposal.proposal_id,
                         "position_outcomes": position_outcomes,
                         "persisted_option_rows": persisted_rows,
+                        "evidence": evidence,
                     },
                 )
 
@@ -505,6 +527,7 @@ class DecisionLoop:
                         "reasons": regime_risk_decision.reasons,
                         "position_outcomes": position_outcomes,
                         "persisted_option_rows": persisted_rows,
+                        "evidence": evidence,
                     },
                 )
 
@@ -528,6 +551,7 @@ class DecisionLoop:
                     "proposal_id": proposal.proposal_id,
                     "position_outcomes": position_outcomes,
                     "persisted_option_rows": persisted_rows,
+                    "evidence": evidence,
                 },
             )
 
@@ -546,6 +570,7 @@ class DecisionLoop:
                     "reason": order.reject_reason,
                     "position_outcomes": position_outcomes,
                     "persisted_option_rows": persisted_rows,
+                    "evidence": evidence,
                 },
             )
 
@@ -611,27 +636,26 @@ class DecisionLoop:
                     else None
                 ),
                 "position_outcomes": position_outcomes,
-                "persisted_option_rows": persisted_rows
+                "persisted_option_rows": persisted_rows,
+                "evidence": evidence,
             },
         )
 
-    def _build_features(self,snapshot: ChainSnapshot,) -> tuple[MarketFeatures, int]:
+    def _build_features(
+        self,
+        snapshot: ChainSnapshot,
+    ) -> tuple[MarketFeatures, int, dict[str, Any]]:
         iv_history = self.store.latest_iv_history(snapshot.underlying)
+
         instrument_token = self._spot_instrument_token_resolver(
             snapshot.underlying
         )
-        spot_history = self.store.latest_spot_closes(
-            instrument_token=instrument_token,
-            interval="1m",
-            limit=60,
-        )
 
         spot_history = self.store.latest_spot_closes(
             instrument_token=instrument_token,
             interval="1m",
             limit=60,
         )
-
 
         features = build_features(
             snapshot,
@@ -639,7 +663,49 @@ class DecisionLoop:
             spot_history,
         )
 
-        return features, len(iv_history)
+        market_regime = self.store.get_market_regime_as_of(
+            symbol=snapshot.underlying,
+            ts=snapshot.ts,
+        )
+
+        current_regime = (
+            market_regime["regime"]
+            if market_regime
+            else "UNKNOWN"
+        )
+
+        regime_policy = self.store.latest_regime_policy(
+            symbol=snapshot.underlying,
+            as_of=snapshot.ts,
+        )
+
+        profile = self.settings.get_strategy_profile(
+            "iron_condor_monitor"
+        )
+
+        effective_regimes, _regime_source, _policy_status = (
+            resolve_effective_regimes(
+                profile,
+                learned_policy=regime_policy,
+            )
+        )
+
+        context = DecisionContext(
+            run_id=self.run_id,
+            symbol=snapshot.underlying,
+            ts=snapshot.ts,
+            features=features,
+            snapshot=snapshot,
+            iv_history_count=len(iv_history),
+            current_regime=current_regime,
+            effective_regimes=effective_regimes,
+            regime_policy=regime_policy,
+            spot_instrument_token=instrument_token,
+        )
+
+        evidence = self.evidence_runner.run(context)
+
+        return features, len(iv_history), evidence
 
     def _finish_cycle(
         self,
@@ -1073,7 +1139,7 @@ class DecisionLoop:
             snapshot,
         )
 
-        features, _iv_history_count = self._build_features(snapshot)
+        features, _iv_history_count, evidence = self._build_features(snapshot)
         quality = self.quality_checker.assess(snapshot)
 
 
@@ -1089,6 +1155,7 @@ class DecisionLoop:
             "availability": availability.overall_status.value,
             "position_outcomes": position_outcomes,
             "persisted_option_rows": persisted_rows,
+            "evidence": evidence
         }
 
     def _resolve_spot_instrument_token(self, symbol: str) -> int:

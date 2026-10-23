@@ -39,7 +39,7 @@ class DuckDBStore:
         settings = get_settings()
         self.path = Path(path or settings.storage.db_path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
-
+        self.history_limit = settings.evidence.plugins.multi_timeframe.history_limit
         self.conn = duckdb.connect(str(self.path), read_only=read_only,)
         self.conn.execute(  f"SET memory_limit = '{settings.storage.db_memory_limit}'")
         self.conn.execute(f"SET threads = {settings.storage.db_threads}")
@@ -425,6 +425,17 @@ class DuckDBStore:
             """
         self.conn.execute(DECISION_EVIDENCE)
 
+        EVIDENCE_SNAPSHOT = """
+            CREATE TABLE IF NOT EXISTS evidence_snapshots (
+                run_id VARCHAR,
+                ts TIMESTAMPTZ,
+                symbol VARCHAR,
+                plugin_name VARCHAR,
+                payload_json JSON,
+                PRIMARY KEY (run_id, ts, plugin_name)
+            )
+        """
+        self.conn.execute(EVIDENCE_SNAPSHOT)
 
     def _compute_option_iv(
         self,
@@ -1252,11 +1263,12 @@ class DuckDBStore:
             FROM spot_candles
             WHERE symbol = ?
               AND instrument_token = ?
-              AND interval = '1m'
+              AND interval = 1m
+              AND ts <= ?
             ORDER BY ts DESC
-            LIMIT 60
+            LIMIT ?
             """,
-            [symbol, instrument_token],
+            [symbol, instrument_token, as_of, self.history_limit],
         ).fetchall()
 
         if not rows:

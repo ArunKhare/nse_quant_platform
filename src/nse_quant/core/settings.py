@@ -246,15 +246,20 @@ class WalkForwardSettings(BaseModel):
 class MultiTimeframeEvidenceSettings(BaseModel):
     enabled: bool = True
     timeframes: list[str] = Field(
-        default_factory=lambda: ["1m", "15m", "60m"]
+        default_factory=lambda: ["1m", "15m", "60m"],
+        min_length=1,
+    )
+    history_limit: int = 6000
+
+class EvidencePluginsSettings(BaseModel):
+    multi_timeframe: MultiTimeframeEvidenceSettings = (
+        MultiTimeframeEvidenceSettings()
     )
 
 class EvidenceSettings(BaseModel):
-    enabled: bool = False
-    plugins: dict[str, MultiTimeframeEvidenceSettings] = Field(
-         default_factory=lambda: ["1m", "15m", "60m"]
-    )
-    
+    enabled: bool = True
+    plugins: EvidencePluginsSettings = EvidencePluginsSettings()
+
 def _load_yaml(path: Path) -> dict[str, Any]:
     if not path.exists():
         return {}
