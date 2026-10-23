@@ -10,7 +10,7 @@ import numpy as np
 import pandas as pd
 
 from ..core.constants import TRADING_DAYS_PER_YEAR
-from ..core.models import ChainSnapshot, MarketFeatures, MarketRegime, OptionType
+from ..core.models import ChainSnapshot, IVAnalytics, MarketFeatures, MarketRegime, OptionType
 from ..core.settings import settings
 from .option_analytics import enrich_quote
 
@@ -129,9 +129,12 @@ def build_features(
         straddle = c + p if c and p else None
     emp = straddle * 0.85 if straddle else None
     closes = list(close_history)
-    fast = float(pd.Series(closes).tail(20).mean()) if len(closes) >= 20 else None
-    slow = float(pd.Series(closes).tail(50).mean()) if len(closes) >= 50 else None
-    momentum = (closes[-1] / closes[-6] - 1) if len(closes) >= 6 else None
+    close_series = pd.Series(closes, dtype=float)
+    fast = float(close_series.tail(20).mean()) if len(closes) >= 20 else None
+    slow = float(close_series.tail(50).mean()) if len(closes) >= 50 else None
+    momentum = (closes[-1] / closes[-6] - 1) if len(closes) >= 6 and closes[-6] > 0 else None
+
+    iv_analytics = build_iv_analytics(atm_iv, iv_history)
 
     return MarketFeatures(
         ts=now,
@@ -139,10 +142,11 @@ def build_features(
         spot=snapshot.spot,
         expiry=snapshot.expiry,
         atm_iv=atm_iv,
-        iv_rank=iv_rank(atm_iv, iv_history) if atm_iv is not None else None,
-        iv_percentile=iv_percentile(atm_iv, iv_history) if atm_iv is not None else None,
         realized_vol=rv,
         iv_rv_spread=spread,
+        iv_rank=iv_analytics.iv_rank,
+        iv_percentile=iv_analytics.iv_percentile,
+        iv_analytics=iv_analytics,
         pcr=pcr,
         total_call_oi=call_oi,
         total_put_oi=put_oi,
@@ -151,6 +155,31 @@ def build_features(
         regime=classify_regime(snapshot.spot, fast, slow, rv),
         short_momentum=momentum,
         straddle_price=straddle,
-        expected_move_pct=emp / snapshot.spot * 100 if emp else None,
+        expected_move_pct=(emp / snapshot.spot * 100 if emp and snapshot.spot > 0 else None),
         expected_move_points=emp,
+    )
+
+
+def build_iv_analytics(
+    current_iv: float | None,
+    history: Iterable[float],
+) -> IVAnalytics:
+    values = np.asarray(list(history), dtype=float)
+    values = values[np.isfinite(values) & (values > 0)]
+
+    if current_iv is None or not np.isfinite(current_iv) or current_iv <= 0 or values.size == 0:
+        return IVAnalytics(valid_history_count=int(values.size))
+
+    lo = float(values.min())
+    hi = float(values.max())
+
+    rank = 50.0 if hi <= lo else max(0.0, min(100.0, (current_iv - lo) / (hi - lo) * 100.0))
+
+    return IVAnalytics(
+        current_iv=current_iv,
+        iv_min=lo,
+        iv_max=hi,
+        valid_history_count=int(values.size),
+        iv_rank=rank,
+        iv_percentile=iv_percentile(current_iv, values),
     )

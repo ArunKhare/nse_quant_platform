@@ -10,6 +10,7 @@ market data -> analytics -> feature snapshot -> open-position monitoring
 
 from __future__ import annotations
 
+import math
 from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
@@ -1101,9 +1102,13 @@ class DecisionLoop:
         regime_allowed: bool,
         regime_policy: dict[str, Any] | None,
     ) -> GateResult:
-        iv_rank_available = features.iv_rank is not None
+        iv_rank = features.iv_rank
+        iv_rank_available = iv_rank is not None
+        iv_rank_valid = iv_rank_available and math.isfinite(iv_rank) and 0.0 <= iv_rank <= 100.0
+
         require_iv_rank = profile.regime_policy.require_iv_rank_available
         minimum_iv_history = self.settings.analytics.min_iv_history_observations
+        iv_analytics = features.iv_analytics
 
         checks = {
             "strategy_id": "iron_condor_monitor",
@@ -1113,10 +1118,18 @@ class DecisionLoop:
             "regime_allowed": regime_allowed,
             "iv_history_count": iv_history_count,
             "minimum_iv_history": minimum_iv_history,
-            "iv_history_available": (iv_history_count >= minimum_iv_history),
+            "iv_history_available": iv_history_count >= minimum_iv_history,
+            "current_iv": iv_analytics.current_iv if iv_analytics else None,
+            "iv_min": iv_analytics.iv_min if iv_analytics else None,
+            "iv_max": iv_analytics.iv_max if iv_analytics else None,
+            "valid_iv_history_count": (iv_analytics.valid_history_count if iv_analytics else 0),
             "iv_rank": features.iv_rank,
-            "iv_rank_available": iv_rank_available,
+            "iv_rank_available": features.iv_rank is not None,
+            "iv_rank_valid": iv_rank_valid,
             "iv_rank_required": require_iv_rank,
+            "iv_rank_calculation_version": (
+                iv_analytics.calculation_version if iv_analytics else None
+            ),
         }
 
         reasons: list[str] = []
@@ -1132,6 +1145,9 @@ class DecisionLoop:
 
         if require_iv_rank and not iv_rank_available:
             reasons.append("IV rank unavailable")
+
+        if iv_rank_available and not iv_rank_valid:
+            reasons.append("IV rank outside valid range")
 
         if not checks["iv_history_available"]:
             reasons.append("IV history below minimum required observations")

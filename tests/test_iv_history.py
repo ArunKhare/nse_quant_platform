@@ -2,7 +2,7 @@ from datetime import UTC, date, datetime, timedelta
 
 import pytest
 
-from nse_quant.analytics.features import iv_rank
+from nse_quant.analytics.features import build_features, iv_rank
 from nse_quant.analytics.implied_volatility import implied_volatility
 from nse_quant.analytics.iv_history import derive_atm_iv_observations
 from nse_quant.core.models import MarketFeatures
@@ -186,3 +186,44 @@ def test_write_option_stream_computes_iv(
     assert all(row[0] is not None for row in rows)
 
     assert test_store.count_underlying_iv_observations(underlying="NIFTY") == 1
+
+
+def test_build_features_records_iv_diagnostics(snapshot_factory):
+    snapshot = snapshot_factory(
+        spot=22550.0,
+        call_price=120.0,
+        put_price=115.0,
+    )
+    baseline = build_features(snapshot, now=snapshot.ts)
+    current_iv = baseline.atm_iv
+    assert current_iv is not None
+
+    history = [current_iv * 0.75, current_iv * 1.25] * 20
+    features = build_features(snapshot, iv_history=history, now=snapshot.ts)
+
+    assert features.iv_analytics is not None
+    assert features.iv_analytics.current_iv == current_iv
+    assert features.iv_analytics.iv_min == pytest.approx(current_iv * 0.75)
+    assert features.iv_analytics.iv_max == pytest.approx(current_iv * 1.25)
+    assert features.iv_analytics.valid_history_count == 40
+    assert features.iv_analytics.iv_rank == 50.0
+
+
+def test_build_features_iv_rank_at_floor(snapshot_factory):
+    snapshot = snapshot_factory(
+        spot=22550.0,
+        call_price=120.0,
+        put_price=115.0,
+    )
+    baseline = build_features(snapshot, now=snapshot.ts)
+    current_iv = baseline.atm_iv
+    assert current_iv is not None
+
+    history = [current_iv * 1.5, current_iv * 2.0] * 20
+    features = build_features(snapshot, iv_history=history, now=snapshot.ts)
+
+    assert features.iv_rank == 0.0
+    assert features.iv_analytics is not None
+    assert features.iv_analytics.current_iv == current_iv
+    assert features.iv_analytics.iv_min == pytest.approx(current_iv * 1.5)
+    assert features.iv_analytics.iv_max == pytest.approx(current_iv * 2.0)

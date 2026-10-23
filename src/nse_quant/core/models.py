@@ -116,6 +116,7 @@ class MarketFeatures(BaseModel):
     iv_percentile: float | None = None
     realized_vol: float | None = None
     iv_rv_spread: float | None = None
+    iv_analytics: IVAnalytics | None = None
     pcr: float | None = None
     total_call_oi: int | None = None
     total_put_oi: int | None = None
@@ -127,6 +128,16 @@ class MarketFeatures(BaseModel):
     expected_move_pct: float | None = None
     expected_move_points: float | None = None
     diagnostics: dict[str, Any] = Field(default_factory=dict)
+
+
+class IVAnalytics(BaseModel):
+    current_iv: float | None = None
+    iv_min: float | None = None
+    iv_max: float | None = None
+    valid_history_count: int = 0
+    iv_rank: float | None = None
+    iv_percentile: float | None = None
+    calculation_version: str = "v2"
 
 
 class Leg(BaseModel):
