@@ -30,17 +30,11 @@ def classify_iv_regimes(
     missing = required.difference(frame.columns)
 
     if missing:
-        raise ValueError(
-            f"Missing required columns: {sorted(missing)}"
-        )
+        raise ValueError(f"Missing required columns: {sorted(missing)}")
 
-    low_threshold = frame[
-        "median_atm_iv_near"
-    ].quantile(iv_low_percentile)
+    low_threshold = frame["median_atm_iv_near"].quantile(iv_low_percentile)
 
-    high_threshold = frame[
-        "median_atm_iv_near"
-    ].quantile(iv_high_percentile)
+    high_threshold = frame["median_atm_iv_near"].quantile(iv_high_percentile)
 
     def iv_level(value: float) -> str:
         if value <= low_threshold:
@@ -63,24 +57,14 @@ def classify_iv_regimes(
             return "CALL_SKEW"
         return "NORMAL_SKEW"
 
-    frame["iv_level"] = frame[
-        "median_atm_iv_near"
-    ].apply(iv_level)
+    frame["iv_level"] = frame["median_atm_iv_near"].apply(iv_level)
 
-    frame["iv_term_regime"] = frame[
-        "median_term_structure"
-    ].apply(term_structure)
+    frame["iv_term_regime"] = frame["median_term_structure"].apply(term_structure)
 
-    frame["iv_skew_regime"] = frame[
-        "median_put_call_skew"
-    ].apply(skew_regime)
+    frame["iv_skew_regime"] = frame["median_put_call_skew"].apply(skew_regime)
 
     frame["iv_regime"] = (
-        frame["iv_level"]
-        + "_"
-        + frame["iv_term_regime"]
-        + "_"
-        + frame["iv_skew_regime"]
+        frame["iv_level"] + "_" + frame["iv_term_regime"] + "_" + frame["iv_skew_regime"]
     )
 
     return frame
@@ -95,10 +79,7 @@ def save_regime_report(
     output_path = Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
 
-    output = (
-        output_path
-        / f"iv_regimes_{underlying}.csv"
-    )
+    output = output_path / f"iv_regimes_{underlying}.csv"
 
     report.to_csv(output, index=False)
     return output

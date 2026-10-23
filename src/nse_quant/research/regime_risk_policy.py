@@ -40,11 +40,7 @@ def build_regime_risk_limits(
             max_notional_exposure=0.0,
             max_portfolio_vega=0.0,
             max_daily_loss=0.0,
-            reason=(
-                "regime_not_allowed"
-                if policy.is_usable
-                else "policy_not_ready"
-            ),
+            reason=("regime_not_allowed" if policy.is_usable else "policy_not_ready"),
         )
 
     metrics = policy.regime_metrics.get(regime, {})
@@ -85,14 +81,8 @@ def build_regime_risk_limits(
             1,
             int(base_limits.max_open_positions * scale),
         ),
-        max_notional_exposure=(
-            float(base_limits.max_notional_exposure) * scale
-        ),
-        max_portfolio_vega=(
-            float(base_limits.max_portfolio_vega) * scale
-        ),
-        max_daily_loss=(
-            float(base_limits.max_daily_loss) * scale
-        ),
+        max_notional_exposure=(float(base_limits.max_notional_exposure) * scale),
+        max_portfolio_vega=(float(base_limits.max_portfolio_vega) * scale),
+        max_daily_loss=(float(base_limits.max_daily_loss) * scale),
         reason=tier,
     )

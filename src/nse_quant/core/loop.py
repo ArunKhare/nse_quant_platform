@@ -19,9 +19,7 @@ from nse_quant.strategy.decision_loop import DecisionLoop
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(
-        description="Run the NSE Quant paper decision loop"
-    )
+    parser = argparse.ArgumentParser(description="Run the NSE Quant paper decision loop")
     parser.add_argument(
         "--seconds",
         type=int,
@@ -38,9 +36,7 @@ def main() -> int:
     settings = get_settings(args.config)
 
     if settings.safety.trading_enabled:
-        raise RuntimeError(
-            "Live trading is blocked in v0.3.0. Set TRADING_ENABLED=false."
-        )
+        raise RuntimeError("Live trading is blocked in v0.3.0. Set TRADING_ENABLED=false.")
 
     print("Starting NSE Quant paper decision loop...")
     print(
@@ -81,7 +77,7 @@ def main() -> int:
             try:
                 result = loop.run_once()
                 print(result)
-            except Exception as exc: #noqa:BLE001
+            except Exception as exc:  # noqa:BLE001
                 result = {
                     "status": "loop_error",
                     "error": str(exc),
@@ -90,19 +86,14 @@ def main() -> int:
                 notifier.send(f"NSE Quant loop error: {exc}")
                 decisions.save_system_event(
                     run_id,
-                    event_type='loop_error',
-                    payload={
-                        "error": str(exc),
-                        "error_type": type(exc).__name__
-                        },
-                    )
+                    event_type="loop_error",
+                    payload={"error": str(exc), "error_type": type(exc).__name__},
+                )
             status = result.get("status")
 
             if status in {"risk_rejected", "dry_run"}:
                 reasons = ", ".join(result.get("reasons", []))
-                notifier.send(
-                    f"NSE Quant: {status} {reasons}".strip()
-                )
+                notifier.send(f"NSE Quant: {status} {reasons}".strip())
 
             time.sleep(settings.runtime.loop_interval_seconds)
 

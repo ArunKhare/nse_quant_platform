@@ -140,4 +140,3 @@ evidence:
     multi_timeframe:
       enabled: true
       timeframes: [1m, 15m, 60m]
-

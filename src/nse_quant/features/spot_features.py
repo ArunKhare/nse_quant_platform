@@ -66,45 +66,27 @@ class SpotFeatureBuilder:
     def _build_minute_features(self, candles: pd.DataFrame) -> pd.DataFrame:
         frame = candles.copy()
 
-        frame["return_1m"] = np.log(
-            frame["close"] / frame["close"].shift(1)
-        )
+        frame["return_1m"] = np.log(frame["close"] / frame["close"].shift(1))
 
-        frame["rv_1m_30"] = (
-            frame["return_1m"]
-            .rolling(window=30, min_periods=30)
-            .std()
-            * np.sqrt(252 * 375)
+        frame["rv_1m_30"] = frame["return_1m"].rolling(window=30, min_periods=30).std() * np.sqrt(
+            252 * 375
         )
 
         frame["atr_1m_14"] = self._atr(frame, window=14)
 
-        typical_price = (
-            frame["high"] + frame["low"] + frame["close"]
-        ) / 3
+        typical_price = (frame["high"] + frame["low"] + frame["close"]) / 3
 
-        frame["vwap_1m"] = (
-            (typical_price * frame["volume"]).cumsum()
-            / frame["volume"].replace(0, np.nan).cumsum()
-        )
+        frame["vwap_1m"] = (typical_price * frame["volume"]).cumsum() / frame["volume"].replace(
+            0, np.nan
+        ).cumsum()
 
-        frame["vwap_distance_1m"] = (
-            frame["close"] / frame["vwap_1m"] - 1
-        )
+        frame["vwap_distance_1m"] = frame["close"] / frame["vwap_1m"] - 1
 
-        volume_mean = (
-            frame["volume"]
-            .rolling(window=30, min_periods=30)
-            .mean()
-        )
-        volume_std = (
-            frame["volume"]
-            .rolling(window=30, min_periods=30)
-            .std()
-        )
+        volume_mean = frame["volume"].rolling(window=30, min_periods=30).mean()
+        volume_std = frame["volume"].rolling(window=30, min_periods=30).std()
 
-        frame["volume_zscore_1m_30"] = (
-            (frame["volume"] - volume_mean) / volume_std.replace(0, np.nan)
+        frame["volume_zscore_1m_30"] = (frame["volume"] - volume_mean) / volume_std.replace(
+            0, np.nan
         )
 
         return frame[
@@ -136,10 +118,9 @@ class SpotFeatureBuilder:
         higher = candles.copy()
         higher["trend"] = higher["close"] / higher["close"].shift(1) - 1
         higher["atr"] = self._atr(higher, window=14)
-        higher["range_position"] = (
-            (higher["close"] - higher["low"])
-            / (higher["high"] - higher["low"]).replace(0, np.nan)
-        )
+        higher["range_position"] = (higher["close"] - higher["low"]) / (
+            higher["high"] - higher["low"]
+        ).replace(0, np.nan)
 
         # A higher-timeframe bar is usable only after it closes.
         higher["available_ts"] = higher["ts"] + pd.to_timedelta(

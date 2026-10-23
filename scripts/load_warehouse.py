@@ -9,9 +9,7 @@ from nse_quant.research.parquet_warehouse import ParquetWarehouse
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
-        description="Load partitioned option-stream Parquet data"
-    )
+    parser = argparse.ArgumentParser(description="Load partitioned option-stream Parquet data")
 
     parser.add_argument(
         "--underlying",
@@ -49,10 +47,7 @@ def main() -> int:
     args = parse_args()
     settings = get_settings()
 
-    warehouse_dir = (
-        args.warehouse_dir
-        or settings.storage.parquet_dir
-    )
+    warehouse_dir = args.warehouse_dir or settings.storage.parquet_dir
 
     warehouse = ParquetWarehouse(warehouse_dir)
 
@@ -68,9 +63,7 @@ def main() -> int:
             "start": args.start,
             "end": args.end,
             "rows": len(frame),
-            "snapshots": (
-                frame["ts"].nunique() if not frame.empty else 0
-            ),
+            "snapshots": (frame["ts"].nunique() if not frame.empty else 0),
         }
     )
 

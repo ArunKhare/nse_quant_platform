@@ -8,9 +8,7 @@ from nse_quant.persistence.duckdb_store import DuckDBStore
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
-        description="Build daily candles from 1-minute candles"
-    )
+    parser = argparse.ArgumentParser(description="Build daily candles from 1-minute candles")
 
     parser.add_argument("--symbol", default="NIFTY")
     parser.add_argument("--start-date", required=True)
@@ -86,7 +84,7 @@ def main() -> int:
                 date_trunc('day', ts)
             """,
             [args.symbol, args.start_date, args.end_date],
-            )
+        )
 
         daily_count_row = store.conn.execute(
             """

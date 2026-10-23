@@ -36,6 +36,7 @@ def test_settings():
     settings.runtime.allow_out_of_hours_testing = True
     return settings
 
+
 @pytest.fixture
 def _seed_candles():
     def seed(
@@ -67,6 +68,7 @@ def _seed_candles():
         )
 
     return seed
+
 
 @pytest.fixture
 def seed_spot_features():
@@ -120,10 +122,7 @@ def instrument_factory(expiry):
     ):
         suffix = "CE" if option_type == OptionType.CE else "PE"
 
-        tradingsymbol = (
-            f"NIFTY{expiry.strftime('%y%b').upper()}"
-            f"{int(strike)}{suffix}"
-        )
+        tradingsymbol = f"NIFTY{expiry.strftime('%y%b').upper()}{int(strike)}{suffix}"
 
         return Instrument(
             tradingsymbol=tradingsymbol,
@@ -203,6 +202,7 @@ def decision_loop_environment(
 ):
     seed_spot_features(test_store)
     live_snapshot_path = tmp_path / "live_snapshot.json"
+
     class Environment:
         def build_loop(
             self,
@@ -222,10 +222,7 @@ def decision_loop_environment(
             )
             loop.settings.research.enforce_feature_availability = False
             loop.settings.research.enforce_regime_policy = False
-            loop.settings.research.enforce_strategy_eligibility = (
-                enforce_strategy_eligibility
-            )
-
+            loop.settings.research.enforce_strategy_eligibility = enforce_strategy_eligibility
 
             if proposal is not None:
                 gates = self._build_gates()

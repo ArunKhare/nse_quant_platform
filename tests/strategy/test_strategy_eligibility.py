@@ -5,9 +5,7 @@ from nse_quant.core.models import MarketFeatures
 
 def make_features(iv_rank=None):
     return MarketFeatures(
-        ts=__import__("datetime").datetime.now(
-            __import__("datetime").UTC
-        ),
+        ts=__import__("datetime").datetime.now(__import__("datetime").UTC),
         underlying="NIFTY",
         spot=25000,
         expiry=__import__("datetime").date.today(),
@@ -21,9 +19,7 @@ def test_eligibility_rejects_unknown_regime(decision_loop_environment):
         enforce_strategy_eligibility=True,
     )
 
-    profile = loop.settings.get_strategy_profile(
-        "iron_condor_monitor"
-    )
+    profile = loop.settings.get_strategy_profile("iron_condor_monitor")
 
     gate = loop._evaluate_strategy_eligibility(
         profile=profile,
@@ -46,9 +42,7 @@ def test_eligibility_rejects_missing_iv_rank(
         enforce_strategy_eligibility=True,
     )
 
-    profile = loop.settings.get_strategy_profile(
-        "iron_condor_monitor"
-    )
+    profile = loop.settings.get_strategy_profile("iron_condor_monitor")
 
     allowed_regime = profile.regime_policy.allowed_regimes[0]
 

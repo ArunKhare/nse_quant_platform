@@ -51,8 +51,7 @@ def main() -> int:
     )
 
     day_frame = backtester.frame[
-        backtester.frame["trade_date"]
-        == pd.Timestamp(args.trade_date).date()
+        backtester.frame["trade_date"] == pd.Timestamp(args.trade_date).date()
     ]
 
     per_ts = day_frame.groupby("ts")["expiry"].nunique()
@@ -68,39 +67,24 @@ def main() -> int:
         return 1
 
     entry_ts = aligned_ts.min()
-    entry_snapshot = day_frame[
-        day_frame["ts"] == entry_ts
-    ]
+    entry_snapshot = day_frame[day_frame["ts"] == entry_ts]
 
-    expiries = sorted(
-        entry_snapshot["expiry"].unique()
-    )
+    expiries = sorted(entry_snapshot["expiry"].unique())
 
     print(f"Entry timestamp: {entry_ts}")
     print(f"Expiries: {expiries}")
 
     expiry = expiries[0]
-    expiry_snapshot = entry_snapshot[
-        entry_snapshot["expiry"] == expiry
-    ]
+    expiry_snapshot = entry_snapshot[entry_snapshot["expiry"] == expiry]
 
-    legs = backtester._select_legs(
-        expiry_snapshot
-    )
+    legs = backtester._select_legs(expiry_snapshot)
 
     if legs is None:
-        print(
-            "Could not select condor legs. "
-            "Check delta coverage and wing availability."
-        )
+        print("Could not select condor legs. Check delta coverage and wing availability.")
 
-        puts = expiry_snapshot[
-            expiry_snapshot["option_type"] == "PE"
-        ]
+        puts = expiry_snapshot[expiry_snapshot["option_type"] == "PE"]
 
-        calls = expiry_snapshot[
-            expiry_snapshot["option_type"] == "CE"
-        ]
+        calls = expiry_snapshot[expiry_snapshot["option_type"] == "CE"]
 
         print("Put rows:", len(puts))
         print("Call rows:", len(calls))
@@ -136,9 +120,7 @@ def main() -> int:
         print("No later aligned snapshot for exit")
         return 1
 
-    exit_snapshot = day_frame[
-        day_frame["ts"] == exit_ts
-    ]
+    exit_snapshot = day_frame[day_frame["ts"] == exit_ts]
 
     exit_legs = backtester._match_exit_legs(
         exit_snapshot=exit_snapshot,
@@ -146,21 +128,13 @@ def main() -> int:
     )
 
     if exit_legs is None:
-        print(
-            "Exit snapshot does not contain all four legs."
-        )
+        print("Exit snapshot does not contain all four legs.")
         print(f"Exit timestamp: {exit_ts}")
 
         for name, leg in legs.items():
             matches = exit_snapshot[
-                (
-                    exit_snapshot["option_type"]
-                    == leg["option_type"]
-                )
-                & (
-                    exit_snapshot["strike"]
-                    == leg["strike"]
-                )
+                (exit_snapshot["option_type"] == leg["option_type"])
+                & (exit_snapshot["strike"] == leg["strike"])
             ]
 
             print(
@@ -178,8 +152,7 @@ def main() -> int:
     print(f"Exit credit: {exit_credit}")
     print(
         "Simulated PnL:",
-        (credit - exit_credit)
-        * config.lot_size,
+        (credit - exit_credit) * config.lot_size,
     )
 
     return 0

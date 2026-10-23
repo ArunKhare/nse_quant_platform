@@ -62,3 +62,4 @@ notifier:
 paper_execution:
   fill_slippage_pct: 0.0
   allow_partial_fills: false
+

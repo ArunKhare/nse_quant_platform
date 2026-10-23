@@ -12,12 +12,8 @@ import pandas as pd
 @dataclass
 class CaptureQualityResult:
     is_usable: bool
-    issues: list[str] = field(
-        default_factory=list
-    )
-    warnings: list[str] = field(
-        default_factory=list
-    )
+    issues: list[str] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
     row_count: int = 0
     expiry_count: int = 0
     missing_ltp: int = 0
@@ -35,9 +31,7 @@ class CaptureQualityResult:
             "missing_ltp": self.missing_ltp,
             "missing_delta": self.missing_delta,
             "bad_ltp": self.bad_ltp,
-            "duplicate_contracts": (
-                self.duplicate_contracts
-            ),
+            "duplicate_contracts": (self.duplicate_contracts),
         }
 
 
@@ -53,9 +47,7 @@ class CaptureQualityMonitor:
     ) -> None:
         self.minimum_rows = minimum_rows
         self.minimum_expiries = minimum_expiries
-        self.maximum_missing_delta_pct = (
-            maximum_missing_delta_pct
-        )
+        self.maximum_missing_delta_pct = maximum_missing_delta_pct
 
     def evaluate(
         self,
@@ -69,29 +61,16 @@ class CaptureQualityMonitor:
         if snapshot.empty:
             return CaptureQualityResult(
                 is_usable=False,
-                issues=[
-                    "empty_snapshot"
-                ],
+                issues=["empty_snapshot"],
             )
 
-        expiry_count = int(
-            snapshot["expiry"].nunique()
-        )
+        expiry_count = int(snapshot["expiry"].nunique())
 
-        missing_ltp = int(
-            snapshot["ltp"].isna().sum()
-        )
+        missing_ltp = int(snapshot["ltp"].isna().sum())
 
-        missing_delta = int(
-            snapshot["delta"].isna().sum()
-        )
+        missing_delta = int(snapshot["delta"].isna().sum())
 
-        bad_ltp = int(
-            (
-                snapshot["ltp"].notna()
-                & (snapshot["ltp"] <= 0)
-            ).sum()
-        )
+        bad_ltp = int((snapshot["ltp"].notna() & (snapshot["ltp"] <= 0)).sum())
 
         duplicate_contracts = int(
             snapshot.duplicated(
@@ -103,42 +82,24 @@ class CaptureQualityMonitor:
         )
 
         if row_count < self.minimum_rows:
-            issues.append(
-                "insufficient_rows"
-            )
+            issues.append("insufficient_rows")
 
-        if (
-            expiry_count
-            < self.minimum_expiries
-        ):
-            warnings.append(
-                "insufficient_expiries"
-            )
+        if expiry_count < self.minimum_expiries:
+            warnings.append("insufficient_expiries")
 
         if missing_ltp:
-            issues.append(
-                "missing_ltp"
-            )
+            issues.append("missing_ltp")
 
         if bad_ltp:
             issues.append("bad_ltp")
 
         if duplicate_contracts:
-            issues.append(
-                "duplicate_contracts"
-            )
+            issues.append("duplicate_contracts")
 
-        missing_delta_pct = (
-            missing_delta / row_count * 100
-        )
+        missing_delta_pct = missing_delta / row_count * 100
 
-        if (
-            missing_delta_pct
-            > self.maximum_missing_delta_pct
-        ):
-            warnings.append(
-                "high_missing_delta"
-            )
+        if missing_delta_pct > self.maximum_missing_delta_pct:
+            warnings.append("high_missing_delta")
 
         return CaptureQualityResult(
             is_usable=not issues,
@@ -149,9 +110,7 @@ class CaptureQualityMonitor:
             missing_ltp=missing_ltp,
             missing_delta=missing_delta,
             bad_ltp=bad_ltp,
-            duplicate_contracts=(
-                duplicate_contracts
-            ),
+            duplicate_contracts=(duplicate_contracts),
         )
 
 
@@ -162,9 +121,7 @@ class CaptureQualityWriter:
         self,
         output_dir: str | Path,
     ) -> None:
-        self.output_dir = Path(
-            output_dir
-        )
+        self.output_dir = Path(output_dir)
 
     def write(
         self,
@@ -181,17 +138,14 @@ class CaptureQualityWriter:
             **{
                 key: [value]
                 for key, value in result.as_dict().items()
-                if key not in {
+                if key
+                not in {
                     "issues",
                     "warnings",
                 }
             },
-            "issues": [
-                ",".join(result.issues)
-            ],
-            "warnings": [
-                ",".join(result.warnings)
-            ],
+            "issues": [",".join(result.issues)],
+            "warnings": [",".join(result.warnings)],
         }
 
         frame = pd.DataFrame(record)
@@ -208,15 +162,10 @@ class CaptureQualityWriter:
             exist_ok=True,
         )
 
-        target = (
-            target_dir
-            / f"capture_quality_{trade_date}.parquet"
-        )
+        target = target_dir / f"capture_quality_{trade_date}.parquet"
 
         if target.exists():
-            existing = pd.read_parquet(
-                target
-            )
+            existing = pd.read_parquet(target)
             frame = pd.concat(
                 [existing, frame],
                 ignore_index=True,

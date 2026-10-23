@@ -15,24 +15,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--symbol", default="NIFTY")
     parser.add_argument(
         "--rv-regimes",
-        default=(
-            "data/research/milestone2/"
-            "rv_regimes_NIFTY.csv"
-        ),
+        default=("data/research/milestone2/rv_regimes_NIFTY.csv"),
     )
     parser.add_argument(
-        "--iv-daily",
-        default=(
-            "data/research/milestone2/"
-            "iv_surface_daily_NIFTY.csv"
-        )
+        "--iv-daily", default=("data/research/milestone2/iv_surface_daily_NIFTY.csv")
     )
     parser.add_argument(
         "--output",
-        default=(
-            "data/research/milestone2/"
-            "daily_research_panel_NIFTY.csv"
-        ),
+        default=("data/research/milestone2/daily_research_panel_NIFTY.csv"),
     )
     return parser.parse_args()
 
@@ -48,30 +38,22 @@ def build_daily_candles(
     )
 
     if frame.empty:
-        raise SystemExit(
-            f"No 1m candles found for {symbol}"
-        )
+        raise SystemExit(f"No 1m candles found for {symbol}")
 
     frame["ts"] = pd.to_datetime(frame["ts"])
     frame["trade_date"] = frame["ts"].dt.date
 
-    daily = (
-        frame.groupby("trade_date", as_index=False)
-        .agg(
-            open=("open", "first"),
-            high=("high", "max"),
-            low=("low", "min"),
-            close=("close", "last"),
-            volume=("volume", "sum"),
-            candle_count=("close", "count"),
-        )
+    daily = frame.groupby("trade_date", as_index=False).agg(
+        open=("open", "first"),
+        high=("high", "max"),
+        low=("low", "min"),
+        close=("close", "last"),
+        volume=("volume", "sum"),
+        candle_count=("close", "count"),
     )
 
     daily["daily_return"] = daily["close"].pct_change()
-    daily["range_pct"] = (
-        (daily["high"] - daily["low"])
-        / daily["close"].shift(1)
-    )
+    daily["range_pct"] = (daily["high"] - daily["low"]) / daily["close"].shift(1)
 
     daily["underlying"] = symbol
 
@@ -140,9 +122,7 @@ def load_csv(
         return pd.DataFrame()
 
     if "trade_date" in frame.columns:
-        frame["trade_date"] = pd.to_datetime(
-            frame["trade_date"]
-        ).dt.date
+        frame["trade_date"] = pd.to_datetime(frame["trade_date"]).dt.date
 
     return frame
 
@@ -197,11 +177,7 @@ def main() -> int:
         "snapshots",
     ]
 
-    available_iv_columns = [
-        column
-        for column in iv_columns
-        if column in iv.columns
-    ]
+    available_iv_columns = [column for column in iv_columns if column in iv.columns]
 
     if available_iv_columns:
         panel = panel.merge(
@@ -215,10 +191,7 @@ def main() -> int:
 
     panel.to_csv(output, index=False)
 
-    print(
-        f"Built {len(panel)} daily research rows "
-        f"for {args.symbol}"
-    )
+    print(f"Built {len(panel)} daily research rows for {args.symbol}")
     print(f"Saved: {output}")
     return 0
 

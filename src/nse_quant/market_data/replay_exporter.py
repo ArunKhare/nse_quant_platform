@@ -147,13 +147,8 @@ class ReplayExporter:
         )
 
     def _write_replay(
-        self,
-        *,
-        underlying: str,
-        rows: list[tuple[Any, ...]],
-        output_path: str | Path
+        self, *, underlying: str, rows: list[tuple[Any, ...]], output_path: str | Path
     ) -> Path:
-
         grouped: dict[tuple[datetime, float, date], list[OptionQuote]] = {}
         for row in rows:
             (
@@ -228,9 +223,7 @@ class ReplayExporter:
             json.dumps(
                 {
                     "underlying": underlying,
-                    "spot_instrument_token": self._resolve_spot_token(
-                        underlying
-                    ),
+                    "spot_instrument_token": self._resolve_spot_token(underlying),
                     "snapshots": snapshots,
                 },
                 default=str,

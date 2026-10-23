@@ -95,8 +95,7 @@ def latest_completed_candles(
             sorted_candles,
             interval_minutes=interval_minutes,
         )
-        if candle.bucket_start < active_bucket
-        and candle.candle_count == interval_minutes
+        if candle.bucket_start < active_bucket and candle.candle_count == interval_minutes
     ]
 
     return completed[-limit:]

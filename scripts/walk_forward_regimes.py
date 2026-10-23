@@ -26,9 +26,7 @@ def parse_date(value: str) -> date:
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
-        description="Run walk-forward regime validation"
-    )
+    parser = argparse.ArgumentParser(description="Run walk-forward regime validation")
 
     parser.add_argument("--symbol", required=True)
     parser.add_argument("--start", required=True)
@@ -147,16 +145,12 @@ def evaluate_parameters_factory(store, symbol: str):
         )
 
         metrics = summarize_outcomes(outcomes)
-        metrics["regimes"] = sorted(
-            {
-                outcome.regime
-                for outcome in outcomes
-            }
-        )
+        metrics["regimes"] = sorted({outcome.regime for outcome in outcomes})
 
         return metrics
 
     return evaluate_parameters
+
 
 def load_outcomes_factory(store: DuckDBStore, symbol: str):
     def load_outcomes(
@@ -172,6 +166,7 @@ def load_outcomes_factory(store: DuckDBStore, symbol: str):
 
     return load_outcomes
 
+
 def main() -> int:
     args = parse_args()
     settings = get_settings()
@@ -179,7 +174,7 @@ def main() -> int:
     evaluate_parameters = evaluate_parameters_factory(
         store,
         args.symbol,
-        )
+    )
     load_outcomes = load_outcomes_factory(store, args.symbol)
 
     try:
@@ -205,12 +200,8 @@ def main() -> int:
                 load_outcomes=load_outcomes,
                 select_policy=select_regime_policy,
                 evaluate_parameters=evaluate_parameters,
-                min_train_trades=(
-                    settings.walk_forward.min_train_trades
-                ),
-                min_test_trades=(
-                    settings.walk_forward.min_test_trades
-                ),
+                min_train_trades=(settings.walk_forward.min_train_trades),
+                min_test_trades=(settings.walk_forward.min_test_trades),
             )
 
             results.append(result)

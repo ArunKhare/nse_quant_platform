@@ -13,9 +13,7 @@ from nse_quant.persistence.duckdb_store import DuckDBStore
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
-        description="Import historical NSE spot candles"
-    )
+    parser = argparse.ArgumentParser(description="Import historical NSE spot candles")
 
     parser.add_argument(
         "--symbol",
@@ -56,11 +54,7 @@ def main() -> None:
     settings = get_settings()
 
     symbols = args.symbol or [settings.market_data.default_symbol]
-    intervals = [
-        interval.strip()
-        for interval in args.intervals.split(",")
-        if interval.strip()
-    ]
+    intervals = [interval.strip() for interval in args.intervals.split(",") if interval.strip()]
 
     start_dt = parse_datetime(args.from_dt)
     end_dt = parse_datetime(args.to_dt)
@@ -79,9 +73,7 @@ def main() -> None:
 
             for interval_key in intervals:
                 if interval_key not in settings.market_data.candle_intervals:
-                    raise ValueError(
-                        f"Unsupported interval: {interval_key!r}"
-                    )
+                    raise ValueError(f"Unsupported interval: {interval_key!r}")
 
                 candles: list[dict[str, Any]] = provider.get_historical_candles(
                     symbol=symbol,
@@ -101,10 +93,7 @@ def main() -> None:
                     interval=interval_key,
                 )
 
-                print(
-                    f"{symbol} {interval_key}: "
-                    f"fetched={len(candles)} persisted={rows}"
-                )
+                print(f"{symbol} {interval_key}: fetched={len(candles)} persisted={rows}")
     finally:
         store.close()
 

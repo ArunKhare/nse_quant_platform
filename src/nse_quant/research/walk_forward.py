@@ -133,37 +133,21 @@ def evaluate_fold(
         selected_parameters=selected_parameters,
     )
 
+
 def summarize_fold_results(
     results: list[FoldResult],
 ) -> dict[str, Any]:
-    usable = [
-        result
-        for result in results
-        if result.test_metrics.get("trades", 0) > 0
-    ]
+    usable = [result for result in results if result.test_metrics.get("trades", 0) > 0]
 
-    total_trades = sum(
-        int(result.test_metrics.get("trades", 0))
-        for result in usable
-    )
-    total_pnl = sum(
-        float(result.test_metrics.get("pnl", 0.0))
-        for result in usable
-    )
-    total_wins = sum(
-        int(result.test_metrics.get("wins", 0))
-        for result in usable
-    )
+    total_trades = sum(int(result.test_metrics.get("trades", 0)) for result in usable)
+    total_pnl = sum(float(result.test_metrics.get("pnl", 0.0)) for result in usable)
+    total_wins = sum(int(result.test_metrics.get("wins", 0)) for result in usable)
 
     return {
         "fold_count": len(results),
         "usable_fold_count": len(usable),
         "out_of_sample_trades": total_trades,
         "out_of_sample_pnl": total_pnl,
-        "out_of_sample_win_rate": (
-            total_wins / total_trades if total_trades else 0.0
-        ),
-        "out_of_sample_avg_pnl": (
-            total_pnl / total_trades if total_trades else 0.0
-        ),
+        "out_of_sample_win_rate": (total_wins / total_trades if total_trades else 0.0),
+        "out_of_sample_avg_pnl": (total_pnl / total_trades if total_trades else 0.0),
     }

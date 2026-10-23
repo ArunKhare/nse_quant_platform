@@ -10,9 +10,7 @@ from typing import Any
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
-        description="Show active regime-policy status"
-    )
+    parser = argparse.ArgumentParser(description="Show active regime-policy status")
 
     parser.add_argument("--symbol", required=True)
     parser.add_argument(
@@ -37,8 +35,7 @@ def main() -> int:
 
     if policy is None:
         print(
-            f"No exported policy found: {policy_path}\n"
-            "Run scripts/export_active_policy.py first."
+            f"No exported policy found: {policy_path}\nRun scripts/export_active_policy.py first."
         )
         return 1
 

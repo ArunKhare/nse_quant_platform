@@ -14,9 +14,7 @@ DEFAULT_OUTPUT = Path("data/active_regime_policy.json")
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
-        description="Export the active regime policy"
-    )
+    parser = argparse.ArgumentParser(description="Export the active regime policy")
 
     parser.add_argument("--symbol", required=True)
     parser.add_argument(
@@ -68,11 +66,7 @@ def build_active_policy(
 
     test_end = policy["test_end"]
 
-    expires_at = (
-        test_end.isoformat()
-        if hasattr(test_end, "isoformat")
-        else str(test_end)
-    )
+    expires_at = test_end.isoformat() if hasattr(test_end, "isoformat") else str(test_end)
 
     is_ready = policy["selection_status"] == "READY"
     is_current = test_end >= as_of.date()

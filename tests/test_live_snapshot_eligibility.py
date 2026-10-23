@@ -14,9 +14,7 @@ def test_strategy_eligibility_is_included_in_snapshot():
     )
 
     features = MarketFeatures(
-        ts=__import__("datetime").datetime.now(
-            __import__("datetime").UTC
-        ),
+        ts=__import__("datetime").datetime.now(__import__("datetime").UTC),
         underlying="NIFTY",
         spot=25000,
         expiry=__import__("datetime").date.today(),
@@ -30,10 +28,7 @@ def test_strategy_eligibility_is_included_in_snapshot():
 
     assert snapshot["loop_status"] == "strategy_eligibility_rejected"
     assert snapshot["strategy_eligibility"]["passed"] is False
-    assert (
-        snapshot["strategy_eligibility"]["reason"]
-        == "iv_regime_not_allowed"
-    )
+    assert snapshot["strategy_eligibility"]["reason"] == "iv_regime_not_allowed"
 
 
 def test_strategy_eligibility_defaults_to_none():

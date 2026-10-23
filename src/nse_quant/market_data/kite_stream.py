@@ -1,4 +1,5 @@
 """Read-only bounded Kite WebSocket runner."""
+
 from __future__ import annotations
 
 import argparse
@@ -8,6 +9,7 @@ import tempfile
 import threading
 import time
 import uuid
+from contextlib import suppress
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -50,23 +52,18 @@ def atomic_write(
 
                 time.sleep(0.2)
     finally:
-        try:
+        with suppress(FileNotFoundError):
             os.unlink(tmp)
-        except FileNotFoundError:
-            pass
 
-def main()->int:
-    parser=argparse.ArgumentParser()
-    parser.add_argument(
-        "--seconds",
-        type=int,
-        default=120
-        )
-    args=parser.parse_args()
-    settings=get_settings()
 
-    kite=get_authenticated_kite()
-    provider=KiteMarketDataProvider(kite)
+def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--seconds", type=int, default=120)
+    args = parser.parse_args()
+    settings = get_settings()
+
+    kite = get_authenticated_kite()
+    provider = KiteMarketDataProvider(kite)
 
     snapshots = provider.get_chain_snapshots()
     snapshot_ts = datetime.now(UTC)
@@ -74,20 +71,15 @@ def main()->int:
     for snapshot in snapshots:
         snapshot.ts = snapshot_ts
 
-    tokens=sorted(
-        {quote.instrument_token
-         for snapshot in snapshots
-         for quote in snapshot.quotes
-         }
-    )
+    tokens = sorted({quote.instrument_token for snapshot in snapshots for quote in snapshot.quotes})
     state: dict[int, dict[str, Any]] = {}
-    lock=threading.Lock()
-    connected=threading.Event()
+    lock = threading.Lock()
+    connected = threading.Event()
 
-    ws=KiteTicker(
+    ws = KiteTicker(
         settings.secrets.kite_api_key,
         kite.access_token,
-        )
+    )
 
     def on_connect(client, response):
         client.subscribe(tokens)
@@ -96,13 +88,11 @@ def main()->int:
 
     ws.on_connect = on_connect
 
-    def on_ticks(c,ticks):
-        now=datetime.now(UTC)
+    def on_ticks(c, ticks):
+        now = datetime.now(UTC)
         with lock:
             for t in ticks:
-                state[
-                    int(t["instrument_token"])
-                    ] = normalize_tick(t,now).model_dump(mode="json")
+                state[int(t["instrument_token"])] = normalize_tick(t, now).model_dump(mode="json")
 
     ws.on_ticks = on_ticks
     ws.on_error = lambda *a: connected.clear()
@@ -117,7 +107,7 @@ def main()->int:
         while time.monotonic() < end:
             time.sleep(1)
             with lock:
-                current=dict(state)
+                current = dict(state)
             now = datetime.now()
             for snapshot in snapshots:
                 print(snapshot)
@@ -127,7 +117,7 @@ def main()->int:
                         spot=snapshot.spot,
                         expiry=snapshot.expiry,
                         now=now,
-                        rate=settings.analytics.risk_free_rate
+                        rate=settings.analytics.risk_free_rate,
                     )
 
                 store.write_option_stream(
@@ -146,9 +136,13 @@ def main()->int:
                 },
             )
 
-    except KeyboardInterrupt: pass
+    except KeyboardInterrupt:
+        pass
     finally:
-        ws.close(); store.close()
+        ws.close()
+        store.close()
     return 0
 
-if __name__=="__main__": raise SystemExit(main())
+
+if __name__ == "__main__":
+    raise SystemExit(main())

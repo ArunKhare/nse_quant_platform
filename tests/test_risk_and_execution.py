@@ -141,8 +141,8 @@ def test_paper_broker_computes_leg_level_pnl(tmp_path):
 
     assert order.status.value == "FILLED"
 
-    position = broker.positions[0]
-   
+    position = broker.positions()[0]
+
     # Initial equal allocation: 50 / 4 = 12.5 per leg.
     for leg in proposal.legs:
         assert position.leg_entry_prices[leg.instrument.instrument_token] == 12.5
@@ -161,10 +161,7 @@ def test_paper_broker_computes_leg_level_pnl(tmp_path):
     )
 
     expected_unrealized = (
-        (20.0 - 12.5) * 75
-        + (12.5 - 10.0) * 75
-        + (12.5 - 15.0) * 75
-        + (25.0 - 12.5) * 75
+        (20.0 - 12.5) * 75 + (12.5 - 10.0) * 75 + (12.5 - 15.0) * 75 + (25.0 - 12.5) * 75
     )
 
     assert marked is not None

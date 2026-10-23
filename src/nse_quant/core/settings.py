@@ -1,4 +1,5 @@
 """Typed global settings with precedence: .env > YAML > defaults."""
+
 from __future__ import annotations
 
 from datetime import date as Date
@@ -13,15 +14,18 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 CONFIG_DIR = Path("config")
 SETTINGS_YAML = CONFIG_DIR / "settings.yaml"
 
+
 class SafetySettings(BaseModel):
     dry_run: bool = True
     trading_enabled: bool = False
     paper_trading: bool = True
     allowed_strategies: list[str] = Field(default_factory=lambda: ["iron_condor_monitor"])
 
+
 class UniverseSettings(BaseModel):
     underlying: str = "NIFTY"
     strikes_per_side: int = 10
+
 
 class RuntimeSettings(BaseModel):
     stale_seconds: float = 300.0
@@ -30,6 +34,7 @@ class RuntimeSettings(BaseModel):
     enforce_market_hours: bool = True
     allow_out_of_hours_testing: bool = False
 
+
 class StorageSettings(BaseModel):
     db_path: Path = Path("data/nse_quant.duckdb")
     parquet_dir: Path = Path("data/parquet")
@@ -37,6 +42,7 @@ class StorageSettings(BaseModel):
     dashboard_port: int = 8050
     db_memory_limit: str = "512MB"
     db_threads: int = 2
+
 
 class AnalyticsSettings(BaseModel):
     risk_free_rate: float = 0.07
@@ -55,11 +61,10 @@ class AnalyticsSettings(BaseModel):
             raise ValueError("min_iv_history_observations must be >= 1")
 
         if self.iv_history_limit < self.min_iv_history_observations:
-            raise ValueError(
-                "iv_history_limit must be >= min_iv_history_observations"
-            )
+            raise ValueError("iv_history_limit must be >= min_iv_history_observations")
 
         return self
+
 
 class RegimePolicySettings(BaseModel):
     allowed_regimes: list[str] = Field(default_factory=list)
@@ -91,14 +96,17 @@ class StrategyProfileSettings(BaseModel):
     risk: StrategyRiskSettings = Field(default_factory=StrategyRiskSettings)
     exits: StrategyExitSettings = Field(default_factory=StrategyExitSettings)
 
+
 class IronCondorProfileSettings(StrategyProfileSettings):
     strategy_type: str = "iron_condor"
     wing_distance_points: float = 200.0
     min_credit: float = 20.0
 
+
 STRATEGY_PROFILE_TYPES: dict[str, type[StrategyProfileSettings]] = {
     "iron_condor": IronCondorProfileSettings,
 }
+
 
 class RiskSettings(BaseModel):
     max_lots_per_order: int = 2
@@ -107,10 +115,11 @@ class RiskSettings(BaseModel):
     max_daily_loss: float = 25_000
     max_portfolio_delta: float = 100
     max_portfolio_vega: float = 5_000
-    max_portfolio_gamma: float = .01
-    max_spread_pct: float = .03
+    max_portfolio_gamma: float = 0.01
+    max_spread_pct: float = 0.03
     min_oi: int = 50_000
     min_volume: int = 500
+
 
 class ExitSettings(BaseModel):
     theta_decay_target_pct: float = 50
@@ -118,17 +127,21 @@ class ExitSettings(BaseModel):
     data_quality_max_age_seconds: int = 30
     expected_move_violation_buffer: float = 1.25
 
+
 class PaperExecutionSettings(BaseModel):
     fill_slippage_pct: float = 0.0
     allow_partial_fills: bool = False
+
 
 class TelegramNotifierSettings(BaseModel):
     enabled: bool = True
     uri: str = "https://api.telegram.org/bot{token}/sendMessage"
     message_length_limit: int = 4096
 
+
 class CandleIntervalSettings(BaseModel):
     kite_interval: str
+
 
 class MarketDataSettings(BaseModel):
     default_symbol: str = "NIFTY"
@@ -172,9 +185,11 @@ class MarketDataSettings(BaseModel):
         }
     )
 
+
 class NotifierSettings(BaseModel):
     enabled: bool = True
     telegram: TelegramNotifierSettings = Field(default_factory=TelegramNotifierSettings)
+
 
 class KiteSecrets(BaseSettings):
     model_config = SettingsConfigDict(
@@ -204,22 +219,22 @@ class SpecialSessionSettings(BaseModel):
 
 class TradingCalendarSettings(BaseModel):
     closed_dates: list[Date] = Field(default_factory=list)
-    special_sessions: list[SpecialSessionSettings] = Field(
-        default_factory=list
-    )
+    special_sessions: list[SpecialSessionSettings] = Field(default_factory=list)
+
+
 class BacktestReadinessSettings(BaseModel):
     min_complete_days: int = 20
     min_iv_rv_aligned_days: int = 10
     min_regime_days: int = 10
+
 
 class ResearchSettings(BaseModel):
     enforce_feature_availability: bool = True
     enforce_regime_policy: bool = True
     enforce_strategy_eligibility: bool = True
     min_history_observations: int = 1
-    backtest_readiness: BacktestReadinessSettings = Field(
-        default_factory=BacktestReadinessSettings
-    )
+    backtest_readiness: BacktestReadinessSettings = Field(default_factory=BacktestReadinessSettings)
+
 
 class WalkForwardSettings(BaseModel):
     train_days: int = 252
@@ -237,11 +252,10 @@ class WalkForwardSettings(BaseModel):
         if self.step_days <= 0:
             raise ValueError("step_days must be positive")
         if self.step_days > self.test_days:
-            raise ValueError(
-                "step_days must not exceed test_days"
-            )
+            raise ValueError("step_days must not exceed test_days")
 
         return self
+
 
 class MultiTimeframeEvidenceSettings(BaseModel):
     enabled: bool = True
@@ -251,14 +265,15 @@ class MultiTimeframeEvidenceSettings(BaseModel):
     )
     history_limit: int = 6000
 
+
 class EvidencePluginsSettings(BaseModel):
-    multi_timeframe: MultiTimeframeEvidenceSettings = (
-        MultiTimeframeEvidenceSettings()
-    )
+    multi_timeframe: MultiTimeframeEvidenceSettings = MultiTimeframeEvidenceSettings()
+
 
 class EvidenceSettings(BaseModel):
     enabled: bool = True
     plugins: EvidencePluginsSettings = EvidencePluginsSettings()
+
 
 def _load_yaml(path: Path) -> dict[str, Any]:
     if not path.exists():
@@ -268,13 +283,15 @@ def _load_yaml(path: Path) -> dict[str, Any]:
         raise TypeError(f"{path} must contain a mapping")
     return value
 
+
 class Settings(BaseSettings):
     """Inherits from BaseSettings to correctly process environmental variables and YAML loading."""
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
         extra="ignore",
-        env_nested_delimiter="__"  # Allows setting secrets via SECRETS__KITE_API_KEY
+        env_nested_delimiter="__",  # Allows setting secrets via SECRETS__KITE_API_KEY
     )
 
     safety: SafetySettings = Field(default_factory=SafetySettings)
@@ -296,7 +313,7 @@ class Settings(BaseSettings):
 
     @model_validator(mode="before")
     @classmethod
-    def validate_safety_before(cls, data:Any) -> Any:
+    def validate_safety_before(cls, data: Any) -> Any:
         """Validates incoming configuration data before the full model object is instantiated."""
         if not isinstance(data, dict):
             return data
@@ -309,9 +326,21 @@ class Settings(BaseSettings):
 
         # 1. Check Safety Rules
         # Handle both dictionary objects and pre-parsed instances (if mixed in tests)
-        trading_enabled = safety.get("trading_enabled", False) if isinstance(safety, dict) else getattr(safety, "trading_enabled", False)
-        dry_run = safety.get("dry_run", True) if isinstance(safety, dict) else getattr(safety, "dry_run", True)
-        paper_trading = safety.get("paper_trading", True) if isinstance(safety, dict) else getattr(safety, "paper_trading", True)
+        trading_enabled = (
+            safety.get("trading_enabled", False)
+            if isinstance(safety, dict)
+            else getattr(safety, "trading_enabled", False)
+        )
+        dry_run = (
+            safety.get("dry_run", True)
+            if isinstance(safety, dict)
+            else getattr(safety, "dry_run", True)
+        )
+        paper_trading = (
+            safety.get("paper_trading", True)
+            if isinstance(safety, dict)
+            else getattr(safety, "paper_trading", True)
+        )
 
         if trading_enabled and (dry_run or paper_trading):
             raise ValueError("Live mode requires DRY_RUN=false and PAPER_TRADING=false")
@@ -319,19 +348,35 @@ class Settings(BaseSettings):
             raise ValueError("Live trading is blocked in this milestone")
 
         # 2. Check Runtime Timing
-        stale_seconds = runtime.get("stale_seconds", 15.0) if isinstance(runtime, dict) else getattr(runtime, "stale_seconds", 15.0)
-        loop_interval_seconds = runtime.get("loop_interval_seconds", 15) if isinstance(runtime, dict) else getattr(runtime, "loop_interval_seconds", 15)
+        stale_seconds = (
+            runtime.get("stale_seconds", 15.0)
+            if isinstance(runtime, dict)
+            else getattr(runtime, "stale_seconds", 15.0)
+        )
+        loop_interval_seconds = (
+            runtime.get("loop_interval_seconds", 15)
+            if isinstance(runtime, dict)
+            else getattr(runtime, "loop_interval_seconds", 15)
+        )
 
         if stale_seconds <= 0 or loop_interval_seconds <= 0:
             raise ValueError("Runtime timing must be positive")
 
         # 3. Check Analytics Constraints
-        min_iv_rank = analytics.get("min_iv_rank", 40) if isinstance(analytics, dict) else getattr(analytics, "min_iv_rank", 40)
+        min_iv_rank = (
+            analytics.get("min_iv_rank", 40)
+            if isinstance(analytics, dict)
+            else getattr(analytics, "min_iv_rank", 40)
+        )
         if not 0 <= min_iv_rank <= 100:
             raise ValueError("min_iv_rank must be 0-100")
 
         # 4. Check Risk Constraints
-        max_lots_per_order = risk.get("max_lots_per_order", 2) if isinstance(risk, dict) else getattr(risk, "max_lots_per_order", 2)
+        max_lots_per_order = (
+            risk.get("max_lots_per_order", 2)
+            if isinstance(risk, dict)
+            else getattr(risk, "max_lots_per_order", 2)
+        )
         if max_lots_per_order < 1:
             raise ValueError("max_lots_per_order must be >=1")
 
@@ -346,13 +391,14 @@ class Settings(BaseSettings):
             if not interval:
                 raise ValueError("Candle interval keys must be non-empty")
             if not config.kite_interval:
-                raise ValueError(
-                    f"kite_interval must be configured for interval {interval!r}"
-                )
+                raise ValueError(f"kite_interval must be configured for interval {interval!r}")
 
         return self
 
-    def get_strategy_profile(self, strategy_id: str,) -> StrategyProfileSettings:
+    def get_strategy_profile(
+        self,
+        strategy_id: str,
+    ) -> StrategyProfileSettings:
         profile = self.strategies.get(strategy_id)
 
         if profile is None:
@@ -367,22 +413,17 @@ class Settings(BaseSettings):
 
             if expected_type is None or not isinstance(profile, expected_type):
                 raise ValueError(
-                    f"Strategy {strategy_id!r} has invalid strategy_type "
-                    f"{profile.strategy_type!r}"
+                    f"Strategy {strategy_id!r} has invalid strategy_type {profile.strategy_type!r}"
                 )
 
-            if (
-                strategy_id in self.safety.allowed_strategies
-                and not profile.enabled
-            ):
+            if strategy_id in self.safety.allowed_strategies and not profile.enabled:
                 raise ValueError(
                     f"Strategy {strategy_id!r} is enabled in "
                     "safety.allowed_strategies but its profile is disabled"
                 )
 
-            overlap = (
-                set(profile.regime_policy.allowed_regimes)
-                & set(profile.regime_policy.blocked_regimes)
+            overlap = set(profile.regime_policy.allowed_regimes) & set(
+                profile.regime_policy.blocked_regimes
             )
 
             if overlap:
@@ -415,16 +456,14 @@ class Settings(BaseSettings):
             strategy_type = profile.get("strategy_type")
             if not isinstance(strategy_type, str):
                 raise TypeError(
-                    f"Unknown strategy_type {strategy_type!r} "
-                    f"for strategy {strategy_id!r}"
+                    f"Unknown strategy_type {strategy_type!r} for strategy {strategy_id!r}"
                 )
 
             profile_type = STRATEGY_PROFILE_TYPES.get(strategy_type)
 
             if profile_type is None:
                 raise ValueError(
-                    f"Unknown strategy_type {strategy_type!r} "
-                    f"for strategy {strategy_id!r}"
+                    f"Unknown strategy_type {strategy_type!r} for strategy {strategy_id!r}"
                 )
 
             normalized[strategy_id] = profile_type(**profile)
@@ -462,12 +501,14 @@ class Settings(BaseSettings):
 
         return effective
 
+
 def load_settings(path: str | Path | None = None) -> Settings:
     # Read the YAML file dictionary
     yaml_data = _load_yaml(Path(path) if path else SETTINGS_YAML)
 
     # BaseSettings automatically merges kwargs, files, and environment variables
     return Settings(**yaml_data)
+
 
 def get_settings(path: str | Path | None = None) -> Settings:
     """Return validated settings. Kept as a function for testability."""

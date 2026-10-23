@@ -14,10 +14,7 @@ def main() -> int:
     parser.add_argument("--returns", required=True)
     parser.add_argument(
         "--output",
-        default=(
-            "data/research/milestone2/"
-            "quantstats_report.html"
-        ),
+        default=("data/research/milestone2/quantstats_report.html"),
     )
     args = parser.parse_args()
 
@@ -26,9 +23,7 @@ def main() -> int:
         parse_dates=["trade_date"],
     )
 
-    returns = frame.set_index("trade_date")[
-        "daily_return"
-    ]
+    returns = frame.set_index("trade_date")["daily_return"]
 
     output = Path(args.output)
     output.parent.mkdir(parents=True, exist_ok=True)

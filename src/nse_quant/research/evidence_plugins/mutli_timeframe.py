@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from nse_quant.market_data.timeframes import ResampledCandle, latest_completed_candles
+from nse_quant.research.candle_resampler import ResampledCandle, latest_completed_candles
 from nse_quant.research.evidence_plugins.base import (
     DecisionContext,
     EvidencePlugin,
@@ -17,10 +17,8 @@ TIMEFRAME_RULES: dict[str, tuple[int, int]] = {
 }
 
 
-
 class MultiTimeframeTrendPlugin(EvidencePlugin):
     name = "multi_timeframe_trend"
-
 
     def __init__(
         self,
@@ -33,8 +31,7 @@ class MultiTimeframeTrendPlugin(EvidencePlugin):
 
         if unknown:
             raise ValueError(
-                f"Unsupported timeframes: {sorted(unknown)}. "
-                f"Supported: {sorted(TIMEFRAME_RULES)}"
+                f"Unsupported timeframes: {sorted(unknown)}. Supported: {sorted(TIMEFRAME_RULES)}"
             )
 
         if not timeframes:
@@ -43,7 +40,6 @@ class MultiTimeframeTrendPlugin(EvidencePlugin):
         self._store = store
         self._timeframes = timeframes
         self._history_limit = history_limit
-
 
     def build(self, context: DecisionContext) -> dict[str, Any]:
         as_of = context.ts
@@ -99,11 +95,7 @@ class MultiTimeframeTrendPlugin(EvidencePlugin):
                 limit=required_buckets,
             )
 
-            trend = (
-                self._trend(completed)
-                if len(completed) >= required_buckets
-                else None
-            )
+            trend = self._trend(completed) if len(completed) >= required_buckets else None
 
             timeframe_results[timeframe] = {
                 "trend": trend,
@@ -113,9 +105,7 @@ class MultiTimeframeTrendPlugin(EvidencePlugin):
             }
 
         available_trends = [
-            result["trend"]
-            for result in timeframe_results.values()
-            if result["trend"] is not None
+            result["trend"] for result in timeframe_results.values() if result["trend"] is not None
         ]
 
         complete = len(available_trends) == len(self._timeframes)
@@ -126,13 +116,8 @@ class MultiTimeframeTrendPlugin(EvidencePlugin):
             "as_of": as_of.isoformat(),
             "bars_used": len(candles),
             "timeframes": timeframe_results,
-            "alignment": (
-                self._alignment(available_trends)
-                if complete
-                else None
-            ),
+            "alignment": (self._alignment(available_trends) if complete else None),
         }
-
 
     def _trend(
         self,
@@ -149,7 +134,6 @@ class MultiTimeframeTrendPlugin(EvidencePlugin):
             return "DOWN"
 
         return "FLAT"
-
 
     def _alignment(
         self,

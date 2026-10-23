@@ -16,8 +16,7 @@ class ParquetWarehouse:
 
         if not self.warehouse_dir.exists():
             raise FileNotFoundError(
-                f"Parquet warehouse directory does not exist: "
-                f"{self.warehouse_dir}"
+                f"Parquet warehouse directory does not exist: {self.warehouse_dir}"
             )
 
     def load_option_stream(
@@ -28,26 +27,13 @@ class ParquetWarehouse:
         end_date: str | date,
         columns: list[str] | None = None,
     ) -> pd.DataFrame:
-        start = (
-            date.fromisoformat(start_date)
-            if isinstance(start_date, str)
-            else start_date
-        )
-        end = (
-            date.fromisoformat(end_date)
-            if isinstance(end_date, str)
-            else end_date
-        )
+        start = date.fromisoformat(start_date) if isinstance(start_date, str) else start_date
+        end = date.fromisoformat(end_date) if isinstance(end_date, str) else end_date
 
         if end < start:
             raise ValueError("end_date must be on or after start_date")
 
-        files = sorted(
-            self.warehouse_dir.glob(
-                f"underlying={underlying}/year=*/month=*/*"
-                ".parquet"
-            )
-        )
+        files = sorted(self.warehouse_dir.glob(f"underlying={underlying}/year=*/month=*/*.parquet"))
 
         selected: list[Path] = []
 
@@ -63,10 +49,7 @@ class ParquetWarehouse:
         if not selected:
             return pd.DataFrame()
 
-        frames = [
-            pd.read_parquet(path, columns=columns)
-            for path in selected
-        ]
+        frames = [pd.read_parquet(path, columns=columns) for path in selected]
 
         frame = pd.concat(frames, ignore_index=True)
 
@@ -74,14 +57,9 @@ class ParquetWarehouse:
             return frame
 
         frame["ts"] = pd.to_datetime(frame["ts"], utc=True)
-        frame = frame[
-            (frame["ts"].dt.date >= start)
-            & (frame["ts"].dt.date <= end)
-        ]
+        frame = frame[(frame["ts"].dt.date >= start) & (frame["ts"].dt.date <= end)]
 
-        return frame.sort_values(
-            ["ts", "instrument_token"]
-        ).reset_index(drop=True)
+        return frame.sort_values(["ts", "instrument_token"]).reset_index(drop=True)
 
     @staticmethod
     def _date_from_filename(filename: str) -> date | None:
@@ -91,7 +69,7 @@ class ParquetWarehouse:
         if not filename.startswith(prefix) or not filename.endswith(suffix):
             return None
 
-        raw = filename[len(prefix):-len(suffix)]
+        raw = filename[len(prefix) : -len(suffix)]
 
         try:
             return date.fromisoformat(raw)

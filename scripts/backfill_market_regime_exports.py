@@ -25,9 +25,7 @@ def build_regime_export_path(
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
-        description="Backfill market-regime Parquet exports"
-    )
+    parser = argparse.ArgumentParser(description="Backfill market-regime Parquet exports")
 
     parser.add_argument("--symbol", default="NIFTY")
     parser.add_argument(

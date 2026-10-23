@@ -44,10 +44,7 @@ def main() -> int:
         spot_token = token
 
     if spot_token is None:
-        raise SystemExit(
-            f"No spot instrument token configured for {symbol}; "
-            "pass --spot-token"
-        )
+        raise SystemExit(f"No spot instrument token configured for {symbol}; pass --spot-token")
 
     store = DuckDBStore(read_only=True)
     checker = FeatureAvailabilityChecker(store)

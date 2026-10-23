@@ -24,12 +24,8 @@ class RegimePolicy:
     ) -> RegimePolicy:
         return cls(
             strategy=strategy,
-            allowed_regimes=set(
-                payload.get("allowed_regimes", [])
-            ),
-            blocked_regimes=set(
-                payload.get("blocked_regimes", [])
-            ),
+            allowed_regimes=set(payload.get("allowed_regimes", [])),
+            blocked_regimes=set(payload.get("blocked_regimes", [])),
             require_iv_rank_available=bool(
                 payload.get(
                     "require_iv_rank_available",
@@ -48,16 +44,18 @@ class PolicyDecision:
     checks: dict[str, bool]
 
 
-def load_policy(path: str,*,strategy: str = "iron_condor",) -> RegimePolicy:
+def load_policy(
+    path: str,
+    *,
+    strategy: str = "iron_condor",
+) -> RegimePolicy:
     with open(path, encoding="utf-8") as handle:
         payload = json.load(handle)
 
     strategy_payload = payload.get(strategy)
 
     if not isinstance(strategy_payload, dict):
-        raise TypeError(
-            f"No policy configured for strategy: {strategy}"
-        )
+        raise TypeError(f"No policy configured for strategy: {strategy}")
 
     return RegimePolicy.from_dict(
         strategy=strategy,
@@ -72,15 +70,9 @@ def evaluate_regime_policy(
     underlying: str,
     iv_rank: float | None,
 ) -> PolicyDecision:
-    regime_record = store.latest_daily_iv_regime(
-        underlying=underlying
-    )
+    regime_record = store.latest_daily_iv_regime(underlying=underlying)
 
-    regime = (
-        regime_record["iv_regime"]
-        if regime_record
-        else None
-    )
+    regime = regime_record["iv_regime"] if regime_record else None
 
     reasons: list[str] = []
     checks: dict[str, bool] = {}
@@ -91,34 +83,23 @@ def evaluate_regime_policy(
     if not regime_available:
         reasons.append("IV regime unavailable")
     else:
-        checks["regime_not_blocked"] = (
-            regime not in policy.blocked_regimes
-        )
+        checks["regime_not_blocked"] = regime not in policy.blocked_regimes
 
         if regime in policy.blocked_regimes:
-            reasons.append(
-                f"Regime blocked: {regime}"
-            )
+            reasons.append(f"Regime blocked: {regime}")
 
         if policy.allowed_regimes:
-            checks["regime_allowed"] = (
-                regime in policy.allowed_regimes
-            )
+            checks["regime_allowed"] = regime in policy.allowed_regimes
 
             if regime not in policy.allowed_regimes:
-                reasons.append(
-                    f"Regime not allowed: {regime}"
-                )
+                reasons.append(f"Regime not allowed: {regime}")
         else:
             checks["regime_allowed"] = True
 
     iv_rank_available = iv_rank is not None
     checks["iv_rank_available"] = iv_rank_available
 
-    if (
-        policy.require_iv_rank_available
-        and not iv_rank_available
-    ):
+    if policy.require_iv_rank_available and not iv_rank_available:
         reasons.append("IV rank unavailable")
 
     allowed = all(

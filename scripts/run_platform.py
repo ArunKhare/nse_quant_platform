@@ -52,13 +52,10 @@ def main() -> int:
     args = parse_args()
     settings = get_settings(args.config)
 
-
     if args.allow_out_of_hours:
         settings.runtime.allow_out_of_hours_testing = True
     if settings.safety.trading_enabled:
-        raise RuntimeError(
-            "Live trading is blocked in v0.3.0. Set TRADING_ENABLED=false."
-        )
+        raise RuntimeError("Live trading is blocked in v0.3.0. Set TRADING_ENABLED=false.")
 
     store = DuckDBStore()
     decisions = DecisionRepository(store.conn)
@@ -95,10 +92,7 @@ def main() -> int:
     )
     dashboard_thread.start()
 
-    print(
-        f"Dashboard: http://{settings.storage.dashboard_host}:"
-        f"{settings.storage.dashboard_port}"
-    )
+    print(f"Dashboard: http://{settings.storage.dashboard_host}:{settings.storage.dashboard_port}")
     print("Starting paper decision loop...")
 
     end_time = time.monotonic() + args.seconds
@@ -115,15 +109,12 @@ def main() -> int:
                 time.sleep(settings.runtime.market_closed_wait_seconds)
                 continue
             if not is_market_open_now() and settings.runtime.allow_out_of_hours_testing:
-                print(
-                    "NSE Market is closed. "
-                    "Out-of-hours strategy testing enabled."
-                )
+                print("NSE Market is closed. Out-of-hours strategy testing enabled.")
 
             try:
                 result = loop.run_once()
                 print(result)
-            except Exception as exc: #noqa:BLE001
+            except Exception as exc:  # noqa:BLE001
                 result = {
                     "status": "loop_error",
                     "error": str(exc),
@@ -132,20 +123,15 @@ def main() -> int:
                 notifier.send(f"NSE Quant loop error: {exc}")
                 decisions.save_system_event(
                     run_id,
-                    event_type='loop_error',
-                    payload={
-                        "error": str(exc),
-                        "error_type": type(exc).__name__
-                        },
-                    )
+                    event_type="loop_error",
+                    payload={"error": str(exc), "error_type": type(exc).__name__},
+                )
 
             status = result.get("status")
 
             if status in {"risk_rejected", "dry_run"}:
                 reasons = ", ".join(result.get("reasons", []))
-                notifier.send(
-                    f"NSE Quant: {status} {reasons}".strip()
-                )
+                notifier.send(f"NSE Quant: {status} {reasons}".strip())
 
             time.sleep(settings.runtime.loop_interval_seconds)
 

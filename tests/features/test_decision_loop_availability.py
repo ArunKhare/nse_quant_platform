@@ -29,8 +29,8 @@ def test_partial_htf_history_blocks_entries_but_allows_monitoring() -> None:
 
     store.conn.execute.return_value.fetchone.side_effect = [
         [100],  # 1m candles
-        [20],   # 15m candles
-        [20],   # 60m candles
+        [20],  # 15m candles
+        [20],  # 60m candles
         [300],  # IV observations
         [300],  # daily spot observations
     ]

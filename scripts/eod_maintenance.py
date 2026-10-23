@@ -25,9 +25,7 @@ IST = ZoneInfo("Asia/Kolkata")
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
-        description="Run end-of-day maintenance"
-    )
+    parser = argparse.ArgumentParser(description="Run end-of-day maintenance")
 
     parser.add_argument(
         "--symbol",
@@ -97,8 +95,7 @@ def run_command(command: list[str]) -> None:
 
     if completed.returncode != 0:
         raise RuntimeError(
-            f"Command failed with exit code {completed.returncode}: "
-            f"{' '.join(command)}"
+            f"Command failed with exit code {completed.returncode}: {' '.join(command)}"
         )
 
 
@@ -116,9 +113,7 @@ def get_observation_counts(
         [symbol],
     ).fetchone()[0]
 
-    iv_observations = store.count_underlying_iv_observations(
-        underlying=symbol
-    )
+    iv_observations = store.count_underlying_iv_observations(underlying=symbol)
 
     aligned = store.conn.execute(
         """
@@ -141,6 +136,7 @@ def get_observation_counts(
         "iv_rv_aligned_days": int(aligned),
     }
 
+
 def get_option_stream_count_for_date(
     store: DuckDBStore,
     *,
@@ -159,6 +155,7 @@ def get_option_stream_count_for_date(
 
     return int(count)
 
+
 def build_summary(
     *,
     symbol: str,
@@ -174,23 +171,18 @@ def build_summary(
         f"Trade date: {trade_date}",
         f"1m candles: {counts['candles_1m']:,}",
         f"IV observations: {counts['iv_observations']:,}",
-        (
-            "IV-RV aligned days: "
-            f"{counts['iv_rv_aligned_days']:,}/30"
-        ),
+        (f"IV-RV aligned days: {counts['iv_rv_aligned_days']:,}/30"),
     ]
 
     if parquet_path is not None:
         lines.append(f"Parquet export: {parquet_path}")
 
     if validation_issues:
-        lines.append(
-            "Warehouse validation: FAILED — "
-            + ", ".join(validation_issues)
-        )
+        lines.append("Warehouse validation: FAILED — " + ", ".join(validation_issues))
     if regime_path is not None:
         lines.append(f"Regime export: {regime_path}")
     return "\n".join(lines)
+
 
 def build_regime_export_path(
     *,
@@ -214,24 +206,14 @@ def main() -> int:
     export_dir = args.export_dir
     symbol = args.symbol or settings.market_data.default_symbol
 
-    trade_date = (
-        args.trade_date
-        or datetime.now(UTC).astimezone(IST).date().isoformat()
-    )
+    trade_date = args.trade_date or datetime.now(UTC).astimezone(IST).date().isoformat()
 
-    notifier = (
-        Notifier()
-        if settings.notifier.enabled
-        else NullNotifier()
-    )
+    notifier = Notifier() if settings.notifier.enabled else NullNotifier()
 
     trade_day = date.fromisoformat(trade_date)
 
     if not is_nse_trading_day(trade_day):
-        message = (
-            "NSE Quant EOD skipped: market holiday "
-            f"({trade_date})."
-        )
+        message = f"NSE Quant EOD skipped: market holiday ({trade_date})."
 
         print(message)
         notifier.send(message)
@@ -277,9 +259,7 @@ def main() -> int:
                     counts=counts,
                     parquet_path=None,
                     regime_path=None,
-                    validation_issues=[
-                        "no_option_stream_observations_for_trade_date"
-                    ],
+                    validation_issues=["no_option_stream_observations_for_trade_date"],
                 )
 
                 print(summary)
@@ -315,9 +295,7 @@ def main() -> int:
                 )
 
                 if validation["status"] != "ok":
-                    validation_issues = list(
-                        validation.get("issues", [])
-                    )
+                    validation_issues = list(validation.get("issues", []))
 
             regime_path: Path | None = None
 
@@ -344,7 +322,6 @@ def main() -> int:
                 regime_path=regime_path,
                 validation_issues=validation_issues,
             )
-
 
             print(summary)
             notifier.send(summary)

@@ -23,9 +23,7 @@ def main() -> int:
     captured_days = int(rows[0])
 
     if captured_days == 0:
-        Notifier().send(
-            f"NSE Quant: NIFTY IV capture failed for {today}."
-        )
+        Notifier().send(f"NSE Quant: NIFTY IV capture failed for {today}.")
         return 1
 
     print(f"NIFTY IV capture OK for {today}: {captured_days} day(s)")

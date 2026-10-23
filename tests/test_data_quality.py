@@ -41,7 +41,7 @@ def test_stale_quote_is_failure():
         received_at = datetime.now(UTC)
 
     class Snapshot:
-        quotes:ClassVar[list] = [Quote()]
+        quotes: ClassVar[list] = [Quote()]
 
     report = checker.assess(Snapshot())
 

@@ -10,9 +10,7 @@ from nse_quant.persistence.duckdb_store import DuckDBStore
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
-        description="Backfill ATM IV history from option_stream"
-    )
+    parser = argparse.ArgumentParser(description="Backfill ATM IV history from option_stream")
 
     parser.add_argument(
         "--underlying",
@@ -95,14 +93,9 @@ def main() -> int:
             source="atm_average_backfill",
         )
 
-    count = store.count_underlying_iv_observations(
-        underlying=args.underlying
-    )
+    count = store.count_underlying_iv_observations(underlying=args.underlying)
 
-    print(
-        f"Backfilled {written} IV observations for "
-        f"{args.underlying}; total={count}"
-    )
+    print(f"Backfilled {written} IV observations for {args.underlying}; total={count}")
 
     store.close()
     return 0

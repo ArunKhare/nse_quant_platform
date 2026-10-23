@@ -39,7 +39,7 @@ def test_blocked_eligibility_alerts_once():
 def test_recovery_alerts_after_blocked_state():
     decisions = FakeDecisions()
     manager = EligibilityAlertManager(decisions)
-    notify_messages = []
+    notify_messages: list[str] = []
 
     blocked = {
         "passed": False,

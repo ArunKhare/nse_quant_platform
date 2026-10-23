@@ -89,12 +89,12 @@ class DecisionAnalyticsRepository:
         return self.store.conn.execute(query, params).fetchdf()
 
     def funnel(
-            self,
-            run_id: str | None = None,
-            from_ts: datetime | None = None,
-            to_ts: datetime | None = None,
-        ) -> pd.DataFrame:
-            query = """
+        self,
+        run_id: str | None = None,
+        from_ts: datetime | None = None,
+        to_ts: datetime | None = None,
+    ) -> pd.DataFrame:
+        query = """
                 WITH gates AS (
                     SELECT
                         CAST(ts AS DATE) AS date,
@@ -132,21 +132,21 @@ class DecisionAnalyticsRepository:
                 WHERE 1 = 1
             """
 
-            params: list[object] = []
+        params: list[object] = []
 
-            if from_ts is not None:
-                query += " AND COALESCE(g.date, s.date, r.date) >= ?"
-                params.append(from_ts)
+        if from_ts is not None:
+            query += " AND COALESCE(g.date, s.date, r.date) >= ?"
+            params.append(from_ts)
 
-            if to_ts is not None:
-                query += " AND COALESCE(g.date, s.date, r.date) <= ?"
-                params.append(to_ts)
+        if to_ts is not None:
+            query += " AND COALESCE(g.date, s.date, r.date) <= ?"
+            params.append(to_ts)
 
-            query += """
+        query += """
                 GROUP BY
                     COALESCE(g.date, s.date, r.date)
                 ORDER BY
                     COALESCE(g.date, s.date, r.date)
             """
 
-            return self.store.conn.execute(query, params).fetchdf()
+        return self.store.conn.execute(query, params).fetchdf()

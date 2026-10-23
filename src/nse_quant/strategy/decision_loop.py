@@ -8,7 +8,6 @@ market data -> analytics -> feature snapshot -> open-position monitoring
 -> close -> post-trade review.
 """
 
-
 from __future__ import annotations
 
 from collections.abc import Callable
@@ -50,7 +49,7 @@ from nse_quant.persistence.repositories import (
     PositionRepository,
 )
 from nse_quant.research.evidence_plugins.base import DecisionContext, EvidencePlugin
-from nse_quant.research.evidence_plugins.multi_timeframe import MultiTimeframeTrendPlugin
+from nse_quant.research.evidence_plugins.mutli_timeframe import MultiTimeframeTrendPlugin
 from nse_quant.research.evidence_plugins.registry import EvidencePluginRunner
 from nse_quant.research.regime_policy import RegimePolicy
 from nse_quant.research.regime_policy_evaluation import (
@@ -73,8 +72,7 @@ class DecisionLoop:
         spot_instrument_token_resolver: Callable[[str], int] | None = None,
         feature_gate: SpotFeatureGate | None = None,
         live_snapshot_path: Path | None = None,
-        kill_switch: KillSwitch | None = None
-
+        kill_switch: KillSwitch | None = None,
     ) -> None:
         self.settings = settings or get_settings()
         self.store = store
@@ -107,9 +105,7 @@ class DecisionLoop:
             risk_settings=self.settings.risk,
         )
         self.exit_engine = ExitEngine(
-            self.settings.get_effective_exit_settings(
-                "iron_condor_monitor"
-            )
+            self.settings.get_effective_exit_settings("iron_condor_monitor")
         )
         self.strategy = IronCondorMonitor(self.settings)
         self.quality_checker = DataQualityChecker(
@@ -123,8 +119,7 @@ class DecisionLoop:
             max_age_seconds=int(self.settings.runtime.stale_seconds),
         )
         self._spot_instrument_token_resolver = (
-            spot_instrument_token_resolver
-            or self._default_spot_token_resolver
+            spot_instrument_token_resolver or self._default_spot_token_resolver
         )
         self.availability_checker = FeatureAvailabilityChecker(store)
         self._live_snapshot_path = live_snapshot_path
@@ -151,8 +146,7 @@ class DecisionLoop:
             ts=datetime.now(UTC),
             run_id=self.run_id,
             symbol=symbol,
-            passed=availability.core_status
-            == FeatureAvailability.READY,
+            passed=availability.core_status == FeatureAvailability.READY,
             reasons=availability.reasons,
             checks={
                 "core_status": availability.core_status.value,
@@ -161,19 +155,13 @@ class DecisionLoop:
                 "overall_status": availability.overall_status.value,
                 "observations": availability.observations,
                 "missing": availability.missing,
-                "enforced": (
-                    self.settings.research.enforce_feature_availability
-                ),
+                "enforced": (self.settings.research.enforce_feature_availability),
             },
         )
 
-        availability_enforced = (
-            self.settings.research.enforce_feature_availability
-        )
+        availability_enforced = self.settings.research.enforce_feature_availability
 
-        if (
-            availability_enforced
-            and availability.core_status != FeatureAvailability.READY):
+        if availability_enforced and availability.core_status != FeatureAvailability.READY:
             return {
                 "status": "feature_availability_rejected",
                 "symbol": symbol,
@@ -182,16 +170,11 @@ class DecisionLoop:
                     "core_status": availability.core_status.value,
                     "htf_status": availability.htf_status.value,
                     "iv_status": availability.iv_status.value,
-                    "overall_status": (
-                        availability.overall_status.value
-                    ),
+                    "overall_status": (availability.overall_status.value),
                 },
             }
 
-        if (
-            availability_enforced
-            and not availability.can_evaluate_new_entries
-        ):
+        if availability_enforced and not availability.can_evaluate_new_entries:
             open_positions = self.positions.get_open_strategy_positions()
 
             if not open_positions:
@@ -200,9 +183,7 @@ class DecisionLoop:
                     "symbol": symbol,
                     "reasons": availability.reasons,
                     "checks": {
-                        "overall_status": (
-                            availability.overall_status.value
-                        ),
+                        "overall_status": (availability.overall_status.value),
                         "observations": availability.observations,
                     },
                 }
@@ -211,9 +192,9 @@ class DecisionLoop:
             return self._monitor_and_exit_only(
                 symbol=symbol,
                 availability=availability,
+                instrument_token=provider_token,
             )
         gate = self.feature_gate.evaluate(spot_feature_snapshot)
-
 
         self.store.write_feature_gate_result(
             gate_result_id=uuid4().hex,
@@ -231,7 +212,7 @@ class DecisionLoop:
                 "symbol": symbol,
                 "reasons": gate.reasons,
                 "checks": gate.checks,
-                "evidence": {}
+                "evidence": {},
             }
 
         snapshot = self.provider.get_chain_snapshot()
@@ -240,7 +221,9 @@ class DecisionLoop:
             snapshot,
         )
 
-        features, iv_history_count, evidence = self._build_features(snapshot)
+        features, iv_history_count, evidence = self._build_features(
+            snapshot, instrument_token=provider_token
+        )
 
         # Diagnostics
         expected_move_inputs = self.build_expected_move_diagnostics(
@@ -248,9 +231,7 @@ class DecisionLoop:
             features=features,
         )
 
-        features.diagnostics["expected_move_inputs"] = (
-            expected_move_inputs
-        )
+        features.diagnostics["expected_move_inputs"] = expected_move_inputs
 
         quality: DataQualityReport = self.quality_checker.assess(snapshot)
         position_outcomes = self._monitor_open_positions(
@@ -292,20 +273,15 @@ class DecisionLoop:
 
         iv_history = {
             "observation_count": iv_history_count,
-            "minimum_required": (
-                self.settings.analytics.min_iv_history_observations
-            ),
+            "minimum_required": (self.settings.analytics.min_iv_history_observations),
             "mode": (
                 "ENFORCED"
-                if iv_history_count
-                >= self.settings.analytics.min_iv_history_observations
+                if iv_history_count >= self.settings.analytics.min_iv_history_observations
                 else "COLD_START"
             ),
         }
 
-        profile = self.settings.get_strategy_profile(
-            "iron_condor_monitor"
-        )
+        profile = self.settings.get_strategy_profile("iron_condor_monitor")
         open_positions = self.positions.get_open_strategy_positions()
         effective_risk = self.settings.get_effective_risk_settings("iron_condor_monitor")
         if len(open_positions) >= effective_risk.max_open_positions:
@@ -336,15 +312,11 @@ class DecisionLoop:
             profile = self.settings.get_strategy_profile(strategy_id)
 
             if not isinstance(profile, IronCondorProfileSettings):
-                raise TypeError(
-                    f"{strategy_id!r} must use IronCondorProfileSettings"
-                )
+                raise TypeError(f"{strategy_id!r} must use IronCondorProfileSettings")
 
-            effective_regimes, _regime_source, _policy_status = (
-                resolve_effective_regimes(
-                    profile,
-                    learned_policy=regime_policy,
-                )
+            effective_regimes, _regime_source, _policy_status = resolve_effective_regimes(
+                profile,
+                learned_policy=regime_policy,
             )
 
             regime_allowed = current_regime in effective_regimes
@@ -366,10 +338,10 @@ class DecisionLoop:
             )
 
             self.eligibility_alerts.evaluate(
-                        run_id=self.run_id,
-                        eligibility=eligibility.model_dump(mode="json"),
-                        notify=self._send_eligibility_alert,
-                    )
+                run_id=self.run_id,
+                eligibility=eligibility.model_dump(mode="json"),
+                notify=self._send_eligibility_alert,
+            )
             if not eligibility.passed:
                 return self._finish_cycle(
                     status="strategy_eligibility_rejected",
@@ -423,10 +395,7 @@ class DecisionLoop:
             },
         )
 
-
-        regime_policy_enforced = (
-            self.settings.research.enforce_regime_policy
-        )
+        regime_policy_enforced = self.settings.research.enforce_regime_policy
 
         if regime_policy_enforced:
             market_regime = self.store.get_market_regime_as_of(
@@ -434,23 +403,14 @@ class DecisionLoop:
                 ts=features.ts,
             )
 
-            current_regime = (
-                market_regime["regime"]
-                if market_regime
-                else "UNKNOWN"
-            )
-
+            current_regime = market_regime["regime"] if market_regime else "UNKNOWN"
 
             regime_policy = self.store.latest_regime_policy(
                 symbol=symbol,
                 as_of=features.ts,
             )
 
-            allowed_regimes = (
-                regime_policy["allowed_regimes"]
-                if regime_policy
-                else set()
-            )
+            allowed_regimes = regime_policy["allowed_regimes"] if regime_policy else set()
 
             policy_allows = (
                 regime_policy is not None
@@ -473,13 +433,9 @@ class DecisionLoop:
                             ),
                             details={
                                 "regime": current_regime,
-                                "allowed_regimes": sorted(
-                                    allowed_regimes
-                                ),
+                                "allowed_regimes": sorted(allowed_regimes),
                                 "policy_status": (
-                                    regime_policy["selection_status"]
-                                    if regime_policy
-                                    else None
+                                    regime_policy["selection_status"] if regime_policy else None
                                 ),
                             },
                         )
@@ -531,9 +487,7 @@ class DecisionLoop:
                     },
                 )
 
-        if (
-            self.settings.safety.dry_run
-        ):
+        if self.settings.safety.dry_run:
             self.decisions.save_decision(
                 self.run_id,
                 "dry_run_order_skipped",
@@ -642,14 +596,9 @@ class DecisionLoop:
         )
 
     def _build_features(
-        self,
-        snapshot: ChainSnapshot,
+        self, snapshot: ChainSnapshot, instrument_token: int
     ) -> tuple[MarketFeatures, int, dict[str, Any]]:
         iv_history = self.store.latest_iv_history(snapshot.underlying)
-
-        instrument_token = self._spot_instrument_token_resolver(
-            snapshot.underlying
-        )
 
         spot_history = self.store.latest_spot_closes(
             instrument_token=instrument_token,
@@ -668,26 +617,18 @@ class DecisionLoop:
             ts=snapshot.ts,
         )
 
-        current_regime = (
-            market_regime["regime"]
-            if market_regime
-            else "UNKNOWN"
-        )
+        current_regime = market_regime["regime"] if market_regime else "UNKNOWN"
 
         regime_policy = self.store.latest_regime_policy(
             symbol=snapshot.underlying,
             as_of=snapshot.ts,
         )
 
-        profile = self.settings.get_strategy_profile(
-            "iron_condor_monitor"
-        )
+        profile = self.settings.get_strategy_profile("iron_condor_monitor")
 
-        effective_regimes, _regime_source, _policy_status = (
-            resolve_effective_regimes(
-                profile,
-                learned_policy=regime_policy,
-            )
+        effective_regimes, _regime_source, _policy_status = resolve_effective_regimes(
+            profile,
+            learned_policy=regime_policy,
         )
 
         context = DecisionContext(
@@ -717,12 +658,10 @@ class DecisionLoop:
         gates: list[Any] | None = None,
         extra: dict[str, Any] | None = None,
         *,
-        kill_switch_active: bool | None = None
+        kill_switch_active: bool | None = None,
     ) -> dict[str, Any]:
-        kill_switch_active =(
-            self.kill_switch.is_active()
-            if kill_switch_active is None
-            else kill_switch_active
+        kill_switch_active = (
+            self.kill_switch.is_active() if kill_switch_active is None else kill_switch_active
         )
         eligibility_gate = next(
             (
@@ -734,24 +673,15 @@ class DecisionLoop:
         )
 
         strategy_eligibility = (
-            eligibility_gate.model_dump(mode="json")
-            if eligibility_gate is not None
-            else None
+            eligibility_gate.model_dump(mode="json") if eligibility_gate is not None else None
         )
         self.decisions.save_decision(
             self.run_id,
             status,
             proposal,
             {
-                "gates": [
-                    gate.model_dump(mode="json")
-                    for gate in (gates or [])
-                ],
-                "proposal": (
-                    proposal.model_dump(mode="json")
-                    if proposal is not None
-                    else None
-                ),
+                "gates": [gate.model_dump(mode="json") for gate in (gates or [])],
+                "proposal": (proposal.model_dump(mode="json") if proposal is not None else None),
                 **(extra or {}),
             },
         )
@@ -772,10 +702,7 @@ class DecisionLoop:
         return {
             "status": status,
             **(extra or {}),
-            "gates": [
-                gate.model_dump(mode="json")
-                for gate in (gates or [])
-            ],
+            "gates": [gate.model_dump(mode="json") for gate in (gates or [])],
         }
 
     @staticmethod
@@ -847,8 +774,7 @@ class DecisionLoop:
         for leg in proposal.legs:
             leg_position = LegPosition(
                 leg_position_id=(
-                    f"{strategy_position.strategy_position_id}:"
-                    f"{leg.instrument.tradingsymbol}"
+                    f"{strategy_position.strategy_position_id}:{leg.instrument.tradingsymbol}"
                 ),
                 strategy_position_id=strategy_position.strategy_position_id,
                 proposal_id=proposal.proposal_id,
@@ -886,33 +812,26 @@ class DecisionLoop:
             mark = self._mark_price(quote)
 
             if mark is None:
-                mark = (
-                    leg_position.current_price
-                    or leg_position.entry_price
-                )
+                mark = leg_position.current_price or leg_position.entry_price
 
             leg_position.current_price = mark
 
             direction = 1 if leg_position.side == OrderSide.BUY else -1
 
             leg_position.unrealized_pnl = (
-                mark - leg_position.entry_price
-            ) * leg_position.quantity * direction
+                (mark - leg_position.entry_price) * leg_position.quantity * direction
+            )
 
             self.positions.update_leg_position(leg_position)
 
             strategy_mark += (
-                mark
-                * leg_position.quantity
-                * (1 if leg_position.side == OrderSide.BUY else -1)
+                mark * leg_position.quantity * (1 if leg_position.side == OrderSide.BUY else -1)
             )
 
         close_cost = -strategy_mark
 
         strategy_position.current_price = close_cost
-        strategy_position.unrealized_pnl = (
-            strategy_position.entry_price - close_cost
-        )
+        strategy_position.unrealized_pnl = strategy_position.entry_price - close_cost
 
         self.positions.update_strategy_position(strategy_position)
 
@@ -962,11 +881,7 @@ class DecisionLoop:
         if quote is None:
             return None
 
-        if (
-            quote.bid is not None
-            and quote.ask is not None
-            and quote.ask >= quote.bid > 0
-        ):
+        if quote.bid is not None and quote.ask is not None and quote.ask >= quote.bid > 0:
             return (quote.bid + quote.ask) / 2
 
         return quote.ltp
@@ -1004,18 +919,9 @@ class DecisionLoop:
             closed_at=closed_at,
             realized_pnl=strategy_position.realized_pnl,
             exit_reason=exit_reason,
-            thesis_status=(
-                "VALID"
-                if strategy_position.realized_pnl >= 0
-                else "INVALID"
-            ),
-            decision_quality_notes=(
-                "Thesis and gate evidence retained in decision history."
-            ),
-            outcome_notes=(
-                "Realized P&L is an outcome measure, not a "
-                "decision-quality measure."
-            ),
+            thesis_status=("VALID" if strategy_position.realized_pnl >= 0 else "INVALID"),
+            decision_quality_notes=("Thesis and gate evidence retained in decision history."),
+            outcome_notes=("Realized P&L is an outcome measure, not a decision-quality measure."),
         )
 
         self.positions.save_post_trade_review(review)
@@ -1025,15 +931,13 @@ class DecisionLoop:
         snapshot: ChainSnapshot,
         features: MarketFeatures,
         quality: DataQualityReport,
-        kill_switch_active: bool | None = None
+        kill_switch_active: bool | None = None,
     ) -> list[dict[str, Any]]:
         kill_switch_active = self.kill_switch.is_active()
         outcomes: list[dict[str, Any]] = []
 
         for strategy_position in self.positions.get_open_strategy_positions():
-            leg_positions = self.positions.get_leg_positions(
-                strategy_position.strategy_position_id
-            )
+            leg_positions = self.positions.get_leg_positions(strategy_position.strategy_position_id)
 
             if not leg_positions:
                 continue
@@ -1049,9 +953,7 @@ class DecisionLoop:
             if proposal is None:
                 outcomes.append(
                     {
-                        "strategy_position_id": (
-                            strategy_position.strategy_position_id
-                        ),
+                        "strategy_position_id": (strategy_position.strategy_position_id),
                         "status": "missing_proposal",
                     }
                 )
@@ -1070,9 +972,7 @@ class DecisionLoop:
             self.positions.save_exit_evaluation(exit_evaluation)
 
             outcome = {
-                "strategy_position_id": (
-                    strategy_position.strategy_position_id
-                ),
+                "strategy_position_id": (strategy_position.strategy_position_id),
                 "status": "open",
                 "selected_exit_reason": (
                     exit_evaluation.selected_reason.value
@@ -1114,24 +1014,21 @@ class DecisionLoop:
         )
 
         if callable(resolver):
-            return int(resolver(symbol))  # type: ignore[arg-type]
+            return int(resolver(symbol))
 
-        configured_token = (
-            self.settings.market_data.index_instrument_tokens.get(symbol)
-        )
+        configured_token = self.settings.market_data.index_instrument_tokens.get(symbol)
 
         if configured_token:
             return int(configured_token)
 
-        raise ValueError(
-            f"No spot instrument token resolver available for {symbol!r}"
-        )
+        raise ValueError(f"No spot instrument token resolver available for {symbol!r}")
 
     def _monitor_and_exit_only(
         self,
         *,
         symbol: str,
         availability: Any,
+        instrument_token: int,
     ) -> dict[str, Any]:
         snapshot = self.provider.get_chain_snapshot()
         persisted_rows = self.store.write_option_stream(
@@ -1139,9 +1036,11 @@ class DecisionLoop:
             snapshot,
         )
 
-        features, _iv_history_count, evidence = self._build_features(snapshot)
+        features, _iv_history_count, evidence = self._build_features(
+            snapshot,
+            instrument_token=instrument_token,
+        )
         quality = self.quality_checker.assess(snapshot)
-
 
         position_outcomes = self._monitor_open_positions(
             snapshot=snapshot,
@@ -1155,47 +1054,37 @@ class DecisionLoop:
             "availability": availability.overall_status.value,
             "position_outcomes": position_outcomes,
             "persisted_option_rows": persisted_rows,
-            "evidence": evidence
+            "evidence": evidence,
         }
 
     def _resolve_spot_instrument_token(self, symbol: str) -> int:
         if self._spot_instrument_token_resolver is None:
             raise ValueError(
-                "A spot_instrument_token_resolver is required to evaluate "
-                "feature availability"
+                "A spot_instrument_token_resolver is required to evaluate feature availability"
             )
 
         return int(self._spot_instrument_token_resolver(symbol))
 
-    def _apply_regime_limits(self, *, current_regime:str, regime_policy:dict[str, Any]| None,) -> RegimeRiskLimits:
+    def _apply_regime_limits(
+        self,
+        *,
+        current_regime: str,
+        regime_policy: dict[str, Any] | None,
+    ) -> RegimeRiskLimits:
         regime_limits_config = (
-            regime_policy["risk_limits"].get(current_regime)
-            if regime_policy
-            else None
+            regime_policy["risk_limits"].get(current_regime) if regime_policy else None
         )
 
         if regime_limits_config:
             regime_limits = RegimeRiskLimits(
                 regime=current_regime,
                 allowed=bool(regime_limits_config.get("allowed", False)),
-                max_lots_per_order=int(
-                    regime_limits_config["max_lots_per_order"]
-                ),
-                max_open_positions=int(
-                    regime_limits_config["max_open_positions"]
-                ),
-                max_notional_exposure=float(
-                    regime_limits_config["max_notional_exposure"]
-                ),
-                max_portfolio_vega=float(
-                    regime_limits_config["max_portfolio_vega"]
-                ),
-                max_daily_loss=float(
-                    regime_limits_config["max_daily_loss"]
-                ),
-                reason=str(
-                    regime_limits_config.get("reason", "CONFIGURED")
-                ),
+                max_lots_per_order=int(regime_limits_config["max_lots_per_order"]),
+                max_open_positions=int(regime_limits_config["max_open_positions"]),
+                max_notional_exposure=float(regime_limits_config["max_notional_exposure"]),
+                max_portfolio_vega=float(regime_limits_config["max_portfolio_vega"]),
+                max_daily_loss=float(regime_limits_config["max_daily_loss"]),
+                reason=str(regime_limits_config.get("reason", "CONFIGURED")),
             )
         else:
             regime_limits = build_regime_risk_limits(
@@ -1209,7 +1098,6 @@ class DecisionLoop:
     def _policy_from_lookup(
         regime_policy: dict[str, Any] | None,
     ) -> Any:
-
         if regime_policy is None:
             return RegimePolicy(
                 allowed_regimes=frozenset(),
@@ -1218,9 +1106,7 @@ class DecisionLoop:
             )
 
         return RegimePolicy(
-            allowed_regimes=frozenset(
-                regime_policy["allowed_regimes"]
-            ),
+            allowed_regimes=frozenset(regime_policy["allowed_regimes"]),
             regime_metrics={},
             selection_status=regime_policy["selection_status"],
         )
@@ -1237,24 +1123,17 @@ class DecisionLoop:
     ) -> GateResult:
         iv_rank_available = features.iv_rank is not None
         require_iv_rank = profile.regime_policy.require_iv_rank_available
-        minimum_iv_history = (
-            self.settings.analytics.min_iv_history_observations
-        )
+        minimum_iv_history = self.settings.analytics.min_iv_history_observations
 
         checks = {
             "strategy_id": "iron_condor_monitor",
             "profile_enabled": profile.enabled,
-            "underlying_allowed": (
-                self.settings.market_data.default_symbol
-                in profile.underlyings
-            ),
+            "underlying_allowed": (self.settings.market_data.default_symbol in profile.underlyings),
             "current_regime": current_regime,
             "regime_allowed": regime_allowed,
             "iv_history_count": iv_history_count,
             "minimum_iv_history": minimum_iv_history,
-            "iv_history_available": (
-                iv_history_count >= minimum_iv_history
-            ),
+            "iv_history_available": (iv_history_count >= minimum_iv_history),
             "iv_rank": features.iv_rank,
             "iv_rank_available": iv_rank_available,
             "iv_rank_required": require_iv_rank,
@@ -1282,11 +1161,7 @@ class DecisionLoop:
         return GateResult(
             gate="strategy_eligibility",
             passed=passed,
-            reason=(
-                "strategy eligibility satisfied"
-                if passed
-                else "; ".join(reasons)
-            ),
+            reason=("strategy eligibility satisfied" if passed else "; ".join(reasons)),
             details=checks,
         )
 
@@ -1322,30 +1197,19 @@ class DecisionLoop:
             }
 
         atm_strike = min(
-            (
-                quote.instrument.strike
-                for quote in snapshot.quotes
-            ),
+            (quote.instrument.strike for quote in snapshot.quotes),
             key=lambda strike: abs(strike - snapshot.spot),
         )
 
         atm_ivs = [
             quote.iv
             for quote in snapshot.quotes
-            if quote.instrument.strike == atm_strike
-            and quote.iv is not None
+            if quote.instrument.strike == atm_strike and quote.iv is not None
         ]
 
-        atm_iv = (
-            sum(atm_ivs) / len(atm_ivs)
-            if atm_ivs
-            else None
-        )
+        atm_iv = sum(atm_ivs) / len(atm_ivs) if atm_ivs else None
 
-        nearest_expiry = min(
-            quote.instrument.expiry
-            for quote in snapshot.quotes
-        )
+        nearest_expiry = min(quote.instrument.expiry for quote in snapshot.quotes)
 
         dte_days = max(
             (nearest_expiry - now.date()).days,
@@ -1354,16 +1218,9 @@ class DecisionLoop:
 
         implied_iv = None
 
-        if (
-            features.expected_move_points
-            and snapshot.spot
-            and dte_days > 0
-        ):
+        if features.expected_move_points and snapshot.spot and dte_days > 0:
             implied_iv = (
-                features.expected_move_points
-                / snapshot.spot
-                / (dte_days / 365) ** 0.5
-                * 100
+                features.expected_move_points / snapshot.spot / (dte_days / 365) ** 0.5 * 100
             )
 
         return {

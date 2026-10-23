@@ -33,7 +33,7 @@ class PaperBroker(BrokerInterface):
 
     def __init__(self) -> None:
         self.orders: list[PaperOrder] = []
-        self.positions: list[PaperPosition] = []
+        self._positions: list[PaperPosition] = []
 
     def submit(self, proposal: TradeProposal) -> PaperOrder:
         order = PaperOrder(
@@ -72,12 +72,12 @@ class PaperBroker(BrokerInterface):
             leg_current_prices=dict(leg_entry_prices),
         )
 
-        self.positions.append(position)
+        self._positions.append(position)
         self.orders.append(order)
         return order
 
     def positions(self) -> list[PaperPosition]:
-        return list(self.positions)
+        return list(self._positions)
 
     def mark_position(
         self,
@@ -121,14 +121,12 @@ class PaperBroker(BrokerInterface):
         position.status = "CLOSED"
         position.exit_reason = reason
         position.closed_at = datetime.now(UTC)
-        position.thesis_status = (
-            "VALID" if position.realized_pnl >= 0 else "INVALID"
-        )
+        position.thesis_status = "VALID" if position.realized_pnl >= 0 else "INVALID"
 
         return position
 
     def _get_open_position(self, position_id: str) -> PaperPosition | None:
-        for position in self.positions:
+        for position in self._positions:
             if position.position_id == position_id and position.status == "OPEN":
                 return position
 
@@ -171,10 +169,7 @@ class PaperBroker(BrokerInterface):
         position: PaperPosition,
         current_prices: dict[int, float],
     ) -> float:
-        return sum(
-            self._leg_pnl(position, token, price)
-            for token, price in current_prices.items()
-        )
+        return sum(self._leg_pnl(position, token, price) for token, price in current_prices.items())
 
     def _strategy_mark(self, position: PaperPosition) -> float:
         """Net premium value of the strategy group at current leg prices."""

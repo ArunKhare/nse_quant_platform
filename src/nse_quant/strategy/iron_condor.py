@@ -32,15 +32,11 @@ class IronCondorMonitor:
         self.settings = settings or get_settings()
         self.profile = self.settings.get_strategy_profile(self.strategy_name)
         if not isinstance(self.profile, IronCondorProfileSettings):
-            raise TypeError(
-                f"{self.strategy_name} must use IronCondorProfileSettings"
-            )
+            raise TypeError(f"{self.strategy_name} must use IronCondorProfileSettings")
 
         self.config = self.profile
         self.gates = GateEvaluator(self.settings)
-        self.risk_settings = self.settings.get_effective_risk_settings(
-            "iron_condor_monitor"
-        )
+        self.risk_settings = self.settings.get_effective_risk_settings("iron_condor_monitor")
         self.exit_settings = self.settings.get_effective_exit_settings("iron_condor_monitor")
 
     def evaluate(
@@ -67,7 +63,9 @@ class IronCondorMonitor:
             long_call_strike,
         ]
 
-        gates = self.gates.evaluate(snapshot, features, required_strikes, iv_history_count=iv_history_count)
+        gates = self.gates.evaluate(
+            snapshot, features, required_strikes, iv_history_count=iv_history_count
+        )
 
         if not self.gates.all_passed(gates):
             return None, gates

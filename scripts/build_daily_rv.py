@@ -39,10 +39,7 @@ def main() -> int:
         if len(returns) < 2:
             continue
 
-        rv = float(
-            returns.std(ddof=1)
-            * math.sqrt(TRADING_DAYS_PER_YEAR)
-        )
+        rv = float(returns.std(ddof=1) * math.sqrt(TRADING_DAYS_PER_YEAR))
 
         written += store.write_daily_rv_observation(
             symbol=args.symbol,

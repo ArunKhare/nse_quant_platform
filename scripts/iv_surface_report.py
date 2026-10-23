@@ -13,9 +13,7 @@ from nse_quant.research.iv_surface import (
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
-        description="Build IV surface research reports"
-    )
+    parser = argparse.ArgumentParser(description="Build IV surface research reports")
 
     parser.add_argument(
         "--underlying",
@@ -73,10 +71,7 @@ def main() -> int:
         ).fetchdf()
 
         if frame.empty:
-            print(
-                "No eligible option-stream rows found for the "
-                "requested date range."
-            )
+            print("No eligible option-stream rows found for the requested date range.")
             return 1
 
         snapshot_report = build_iv_surface_report(
@@ -85,15 +80,10 @@ def main() -> int:
         )
 
         if snapshot_report.empty:
-            print(
-                "Not enough multi-expiry snapshots to build an "
-                "IV surface report."
-            )
+            print("Not enough multi-expiry snapshots to build an IV surface report.")
             return 1
 
-        daily_report = build_daily_iv_summary(
-            snapshot_report
-        )
+        daily_report = build_daily_iv_summary(snapshot_report)
 
         snapshot_path, daily_path = save_reports(
             snapshot_report=snapshot_report,

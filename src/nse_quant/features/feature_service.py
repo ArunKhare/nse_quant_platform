@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 import pandas as pd
 
@@ -61,26 +61,18 @@ class SpotFeatureService:
             return_1m=self._optional_float(record["return_1m"]),
             rv_1m_30=self._optional_float(record["rv_1m_30"]),
             atr_1m_14=self._optional_float(record["atr_1m_14"]),
-            vwap_distance_1m=self._optional_float(
-                record["vwap_distance_1m"]
-            ),
-            volume_zscore_1m_30=self._optional_float(
-                record["volume_zscore_1m_30"]
-            ),
+            vwap_distance_1m=self._optional_float(record["vwap_distance_1m"]),
+            volume_zscore_1m_30=self._optional_float(record["volume_zscore_1m_30"]),
             trend_15m=self._optional_float(record["trend_15m"]),
             atr_15m_14=self._optional_float(record["atr_15m_14"]),
-            range_position_15m=self._optional_float(
-                record["range_position_15m"]
-            ),
+            range_position_15m=self._optional_float(record["range_position_15m"]),
             trend_60m=self._optional_float(record["trend_60m"]),
             atr_60m_14=self._optional_float(record["atr_60m_14"]),
-            range_position_60m=self._optional_float(
-                record["range_position_60m"]
-            ),
+            range_position_60m=self._optional_float(record["range_position_60m"]),
         )
 
     @staticmethod
     def _optional_float(value: object) -> float | None:
         if value is None or pd.isna(value):
             return None
-        return float(value)
+        return float(cast(float, value))

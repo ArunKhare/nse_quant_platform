@@ -18,9 +18,7 @@ from nse_quant.strategy.decision_loop import DecisionLoop
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
-        description="Generate closed trades from replay snapshots"
-    )
+    parser = argparse.ArgumentParser(description="Generate closed trades from replay snapshots")
 
     parser.add_argument(
         "--replay-file",
@@ -58,9 +56,7 @@ def load_replay_snapshots(
     snapshots = payload.get("snapshots")
 
     if not isinstance(snapshots, list) or not snapshots:
-        raise ValueError(
-            f"No replay snapshots found in {replay_file}"
-        )
+        raise ValueError(f"No replay snapshots found in {replay_file}")
 
     return snapshots
 
@@ -79,7 +75,6 @@ def main() -> int:
     store = DuckDBStore(database_path, read_only=True)
     broker = PaperBroker()
 
-
     loop = DecisionLoop(
         store=store,
         provider=provider,
@@ -87,9 +82,7 @@ def main() -> int:
         run_id=f"replay:{replay_file.stem}",
         settings=settings,
         spot_instrument_token_resolver=lambda _symbol: 256265,
-        live_snapshot_path=database_path.with_suffix(
-            ".live_snapshot.json"
-        ),
+        live_snapshot_path=database_path.with_suffix(".live_snapshot.json"),
     )
 
     cycle_count = 0
@@ -97,10 +90,7 @@ def main() -> int:
 
     try:
         for _ in snapshots:
-            if (
-                args.max_cycles is not None
-                and cycle_count >= args.max_cycles
-            ):
+            if args.max_cycles is not None and cycle_count >= args.max_cycles:
                 break
 
             try:
@@ -117,16 +107,10 @@ def main() -> int:
                 }
 
             status = result.get("status", "unknown")
-            status_counts[status] = (
-                status_counts.get(status, 0) + 1
-            )
+            status_counts[status] = status_counts.get(status, 0) + 1
             cycle_count += 1
 
-            print(
-                f"cycle={cycle_count} "
-                f"status={status} "
-                f"proposal_id={result.get('proposal_id')}"
-            )
+            print(f"cycle={cycle_count} status={status} proposal_id={result.get('proposal_id')}")
 
         closed_trades_row = store.conn.execute(
             """
@@ -134,11 +118,7 @@ def main() -> int:
             FROM post_trade_reviews
             """
         ).fetchone()
-        closed_trades = (
-            closed_trades_row[0]
-            if closed_trades_row is not None
-            else 0
-        )
+        closed_trades = closed_trades_row[0] if closed_trades_row is not None else 0
 
         open_trades_row = store.conn.execute(
             """
@@ -147,11 +127,7 @@ def main() -> int:
             WHERE status = 'OPEN'
             """
         ).fetchone()
-        open_trades = (
-            open_trades_row[0]
-            if open_trades_row is not None
-            else 0
-        )
+        open_trades = open_trades_row[0] if open_trades_row is not None else 0
 
         print("\nReplay complete")
         print(f"cycles={cycle_count}")

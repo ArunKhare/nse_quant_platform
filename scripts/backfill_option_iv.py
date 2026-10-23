@@ -17,9 +17,7 @@ RISK_FREE_RATE = get_settings().analytics.risk_free_rate
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
-        description="Backfill option IV from stored prices"
-    )
+    parser = argparse.ArgumentParser(description="Backfill option IV from stored prices")
 
     parser.add_argument("--underlying", default="NIFTY")
     parser.add_argument("--from", dest="from_dt", required=True)
@@ -101,9 +99,7 @@ def main() -> int:
         )
         updated += 1
 
-    print(
-        f"IV backfill complete: updated={updated}, skipped={skipped}"
-    )
+    print(f"IV backfill complete: updated={updated}, skipped={skipped}")
 
     store.close()
     return 0

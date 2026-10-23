@@ -37,9 +37,7 @@ def main() -> int:
     trades_path = Path(args.trades_csv)
 
     if not trades_path.exists():
-        print(
-            f"Trades file not found: {trades_path}"
-        )
+        print(f"Trades file not found: {trades_path}")
         return 1
 
     trades = pd.read_csv(trades_path)
@@ -49,15 +47,10 @@ def main() -> int:
         "pnl",
     }
 
-    missing = required.difference(
-        trades.columns
-    )
+    missing = required.difference(trades.columns)
 
     if missing:
-        print(
-            "Missing required columns: "
-            f"{sorted(missing)}"
-        )
+        print(f"Missing required columns: {sorted(missing)}")
         return 1
 
     if trades.empty:
@@ -69,17 +62,9 @@ def main() -> int:
         utc=True,
     )
 
-    trades["trade_date"] = (
-        trades["exit_ts"]
-        .dt.tz_convert("Asia/Kolkata")
-        .dt.date
-    )
+    trades["trade_date"] = trades["exit_ts"].dt.tz_convert("Asia/Kolkata").dt.date
 
-    daily_pnl = (
-        trades.groupby("trade_date")["pnl"]
-        .sum()
-        .sort_index()
-    )
+    daily_pnl = trades.groupby("trade_date")["pnl"].sum().sort_index()
 
     all_days = pd.date_range(
         start=min(daily_pnl.index),
@@ -96,19 +81,14 @@ def main() -> int:
         {
             "trade_date": daily_pnl.index,
             "daily_pnl": daily_pnl.values,
-            "daily_return": (
-                daily_pnl.values
-                / args.capital
-            ),
+            "daily_return": (daily_pnl.values / args.capital),
         }
     )
 
     output_path = (
         Path(args.output)
         if args.output
-        else trades_path.with_name(
-            f"{trades_path.stem}_daily_returns.csv"
-        )
+        else trades_path.with_name(f"{trades_path.stem}_daily_returns.csv")
     )
 
     output_path.parent.mkdir(
@@ -124,20 +104,12 @@ def main() -> int:
     print(
         {
             "days": len(returns_frame),
-            "trading_days": int(
-                (returns_frame["daily_pnl"] != 0).sum()
-            ),
+            "trading_days": int((returns_frame["daily_pnl"] != 0).sum()),
             "total_pnl": round(
-                float(
-                    returns_frame[
-                        "daily_pnl"
-                    ].sum()
-                ),
+                float(returns_frame["daily_pnl"].sum()),
                 2,
             ),
-            "returns_file": str(
-                output_path
-            ),
+            "returns_file": str(output_path),
         }
     )
 

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import argparse
-from datetime import datetime
+from datetime import date, datetime
 from typing import cast
 
 import pandas as pd
@@ -16,9 +16,7 @@ from nse_quant.research.regimes import (
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
-        description="Build historical market regimes"
-    )
+    parser = argparse.ArgumentParser(description="Build historical market regimes")
 
     parser.add_argument("--symbol", required=True)
     parser.add_argument("--from", dest="from_ts", required=True)
@@ -53,11 +51,8 @@ def main() -> int:
 
         daily["sma50"] = daily["close"].rolling(50, min_periods=50).mean()
         daily["returns"] = daily["close"].pct_change()
-        daily["realized_volatility"] = (
-            daily["returns"]
-            .rolling(20, min_periods=20)
-            .std(ddof=1)
-            * (252 ** 0.5)
+        daily["realized_volatility"] = daily["returns"].rolling(20, min_periods=20).std(ddof=1) * (
+            252**0.5
         )
         daily["rv_percentile"] = rolling_percentile(
             daily["realized_volatility"],
@@ -99,16 +94,10 @@ def main() -> int:
             ],
         ).fetchdf()
 
-        print(
-            f"IV history days={len(iv_history)}, "
-            f"last_date={iv_history['trading_date'].iloc[-1]}"
-        )
-        iv_percentiles: dict[object, float] = {}
+        print(f"IV history days={len(iv_history)}, last_date={iv_history['trading_date'].iloc[-1]}")
+        iv_percentiles: dict[date, float] = {}
 
-        iv_history["trading_date"] = pd.to_datetime(
-            iv_history["trading_date"]
-
-        ).dt.date
+        iv_history["trading_date"] = pd.to_datetime(iv_history["trading_date"]).dt.date
 
         if not iv_history.empty:
             iv_history["iv_rank"] = (
@@ -116,16 +105,14 @@ def main() -> int:
                 .rolling(252, min_periods=30)
                 .apply(
                     lambda values: (
-                        (values[-1] > values[:-1]).mean() * 100
-                        if len(values) > 1
-                        else float("nan")
+                        (values[-1] > values[:-1]).mean() * 100 if len(values) > 1 else float("nan")
                     ),
                     raw=True,
                 )
             )
 
             iv_percentiles = {
-                row.trading_date: float(cast(float, row.iv_rank))
+                cast(date, row.trading_date): float(cast(float, row.iv_rank))
                 for row in iv_history.itertuples()
                 if pd.notna(row.iv_rank)
             }
@@ -153,17 +140,12 @@ def main() -> int:
         atr_by_date: dict[object, float] = {}
 
         if not atr.empty:
-            atr["trading_date"] = (
-                pd.to_datetime(atr["ts"])
-                .dt.tz_convert("Asia/Kolkata")
-                .dt.date
-            )
+            atr["trading_date"] = pd.to_datetime(atr["ts"]).dt.tz_convert("Asia/Kolkata").dt.date
 
             latest_atr = atr.groupby("trading_date").last()
 
             atr_by_date = {
-                row.Index: float(cast(float, row.atr_1m_14))
-                for row in latest_atr.itertuples()
+                row.Index: float(cast(float, row.atr_1m_14)) for row in latest_atr.itertuples()
             }
 
         written = 0
@@ -173,20 +155,14 @@ def main() -> int:
             trading_date = ts.date()
             close = float(cast(float, row.close))
 
-            sma50 = (
-                float(cast(float, row.sma50))
-                if pd.notna(row.sma50)
-                else None
-            )
+            sma50 = float(cast(float, row.sma50)) if pd.notna(row.sma50) else None
             realized_volatility = (
                 float(cast(float, row.realized_volatility))
                 if pd.notna(row.realized_volatility)
                 else None
             )
             rv_percentile = (
-                float(cast(float, row.rv_percentile))
-                if pd.notna(row.rv_percentile)
-                else None
+                float(cast(float, row.rv_percentile)) if pd.notna(row.rv_percentile) else None
             )
 
             iv_rank = iv_percentiles.get(trading_date)

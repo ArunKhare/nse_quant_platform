@@ -68,9 +68,7 @@ def test_blocked_regime_is_removed_from_learned_policy():
         profile,
         learned_policy={
             "selection_status": "READY",
-            "allowed_regimes": [
-                "HIGH_IV_BACKWARDATION_HIGH_PUT_SKEW"
-            ],
+            "allowed_regimes": ["HIGH_IV_BACKWARDATION_HIGH_PUT_SKEW"],
         },
     )
 

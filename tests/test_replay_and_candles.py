@@ -31,9 +31,7 @@ def test_replay_exporter_writes_snapshots(
 
     assert result.exists()
 
-    payload = json.loads(
-        result.read_text(encoding="utf-8")
-    )
+    payload = json.loads(result.read_text(encoding="utf-8"))
 
     assert "snapshots" in payload
     assert payload["snapshots"][0]["spot"] == snapshot.spot

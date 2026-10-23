@@ -11,9 +11,7 @@ from nse_quant.research.warehouse_validation import (
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
-        description="Validate Parquet warehouse files"
-    )
+    parser = argparse.ArgumentParser(description="Validate Parquet warehouse files")
 
     parser.add_argument(
         "--warehouse-dir",
@@ -47,10 +45,7 @@ def main() -> int:
     args = parse_args()
     settings = get_settings()
 
-    warehouse_dir = (
-        args.warehouse_dir
-        or settings.storage.parquet_dir
-    )
+    warehouse_dir = args.warehouse_dir or settings.storage.parquet_dir
 
     report = validate_warehouse(
         warehouse_dir,
@@ -60,10 +55,7 @@ def main() -> int:
     )
 
     if report.empty:
-        print(
-            f"No warehouse files found for {args.underlying} "
-            f"in {warehouse_dir}"
-        )
+        print(f"No warehouse files found for {args.underlying} in {warehouse_dir}")
         return 0
 
     print(report.to_string(index=False))
@@ -72,10 +64,7 @@ def main() -> int:
     warnings = int((report["status"] == "warning").sum())
     ok = int((report["status"] == "ok").sum())
 
-    print(
-        f"\nValidated {len(report)} files: "
-        f"ok={ok}, warnings={warnings}, invalid={invalid}"
-    )
+    print(f"\nValidated {len(report)} files: ok={ok}, warnings={warnings}, invalid={invalid}")
 
     return 1 if invalid else 0
 

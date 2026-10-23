@@ -1,4 +1,5 @@
 """Small service registry used by the decision loop and UI."""
+
 from __future__ import annotations
 
 from collections.abc import Callable

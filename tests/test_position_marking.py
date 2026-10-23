@@ -83,7 +83,7 @@ def test_ltp_fallback_when_quotes_invalid(tmp_path):
         provider=SyntheticProvider(),
         broker=PaperBroker(),
         run_id="marking-test",
-        settings= get_settings(),
+        settings=get_settings(),
         spot_instrument_token_resolver=lambda symbol: 256265,
         live_snapshot_path=live_snapshot_path,
     )

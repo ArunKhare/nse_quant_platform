@@ -109,6 +109,7 @@ class DecisionRepository:
             ],
         )
         return risk_decision_id
+
     def save_system_event(
         self,
         run_id: str,
@@ -137,6 +138,7 @@ class DecisionRepository:
             ],
         )
         return decision_id
+
 
 class PositionRepository:
     def __init__(self, conn: Any) -> None:

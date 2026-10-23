@@ -52,9 +52,7 @@ def evaluate_regime_policy(
     profile = settings.get_strategy_profile(strategy_id)
 
     if not isinstance(profile, IronCondorProfileSettings):
-        raise TypeError(
-            f"{strategy_id!r} must use IronCondorProfileSettings"
-        )
+        raise TypeError(f"{strategy_id!r} must use IronCondorProfileSettings")
 
     conn = duckdb.connect(
         str(settings.storage.db_path),
@@ -80,31 +78,19 @@ def evaluate_regime_policy(
     configured_blocked = set(profile.regime_policy.blocked_regimes)
 
     if learned.is_usable:
-        effective_allowed = sorted(
-            set(learned.allowed_regimes) - configured_blocked
-        )
+        effective_allowed = sorted(set(learned.allowed_regimes) - configured_blocked)
         learned_status = learned.selection_status
         reason = "learned_policy_ready"
     else:
-        effective_allowed = sorted(
-            set(configured_allowed) - configured_blocked
-        )
+        effective_allowed = sorted(set(configured_allowed) - configured_blocked)
         learned_status = learned.selection_status
-        reason = (
-            "configured_policy_fallback"
-            if effective_allowed
-            else "no_allowed_regimes"
-        )
+        reason = "configured_policy_fallback" if effective_allowed else "no_allowed_regimes"
 
     coverage: dict[str, int] = {}
     for outcome in outcomes:
         coverage[outcome.regime] = coverage.get(outcome.regime, 0) + 1
 
-    actionable = (
-        profile.enabled
-        and bool(effective_allowed)
-        and reason != "no_allowed_regimes"
-    )
+    actionable = profile.enabled and bool(effective_allowed) and reason != "no_allowed_regimes"
 
     evaluation = RegimePolicyEvaluation(
         symbol=symbol,
@@ -134,9 +120,7 @@ def export_evaluation(
     expires_in_days: int = 7,
 ) -> None:
     payload = asdict(evaluation)
-    payload["expires_at"] = (
-        datetime.now(UTC) + timedelta(days=expires_in_days)
-    ).isoformat()
+    payload["expires_at"] = (datetime.now(UTC) + timedelta(days=expires_in_days)).isoformat()
     payload["risk_limits"] = {}
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -145,20 +129,15 @@ def export_evaluation(
         encoding="utf-8",
     )
 
+
 def resolve_effective_regimes(
     profile: IronCondorProfileSettings,
     *,
     learned_policy: dict[str, Any] | None,
 ) -> tuple[list[str], str, str | None]:
-    policy_status = (
-        learned_policy.get("selection_status")
-        if learned_policy
-        else None
-    )
+    policy_status = learned_policy.get("selection_status") if learned_policy else None
 
-    learned_allowed = set(
-        learned_policy.get("allowed_regimes") or []
-    ) if learned_policy else set()
+    learned_allowed = set(learned_policy.get("allowed_regimes") or []) if learned_policy else set()
 
     configured_allowed = set(profile.regime_policy.allowed_regimes)
     blocked = set(profile.regime_policy.blocked_regimes)
