@@ -1,0 +1,89 @@
+diff --git a/src/nse_quant/strategy/decision_loop.py b/src/nse_quant/strategy/decision_loop.py
+index 38774d8..cb59500 100644
+--- a/src/nse_quant/strategy/decision_loop.py
++++ b/src/nse_quant/strategy/decision_loop.py
+@@ -13,7 +13,7 @@ from __future__ import annotations
+ from collections.abc import Callable
+ from datetime import UTC, datetime
+ from pathlib import Path
+-from typing import Any
++from typing import Any, cast
+ from uuid import uuid4
+ 
+ from nse_quant.analytics.features import build_features
+@@ -555,26 +555,6 @@ class DecisionLoop:
+         #     ],
+         # )
+ 
+-        exit_evaluation = self.exit_engine.evaluate(
+-            proposal,
+-            strategy_position,
+-            leg_positions,
+-            features,
+-            kill_switch_active=False,
+-            risk_breached=False,
+-            data_stale=not quality.is_usable,
+-        )
+-
+-        self.positions.save_exit_evaluation(exit_evaluation)
+-
+-        if exit_evaluation.selected_reason is not None:
+-            self._close_positions(
+-                proposal=proposal,
+-                strategy_position=strategy_position,
+-                leg_positions=leg_positions,
+-                exit_reason=exit_evaluation.selected_reason,
+-            )
+-
+         return self._finish_cycle(
+             status="paper_filled",
+             features=features,
+@@ -584,11 +564,7 @@ class DecisionLoop:
+             extra={
+                 "proposal_id": proposal.proposal_id,
+                 "strategy_position_id": strategy_position.strategy_position_id,
+-                "exit_reason": (
+-                    exit_evaluation.selected_reason.value
+-                    if exit_evaluation.selected_reason
+-                    else None
+-                ),
++                "exit_reason": None,
+                 "position_outcomes": position_outcomes,
+                 "persisted_option_rows": persisted_rows,
+                 "evidence": evidence,
+@@ -1014,7 +990,8 @@ class DecisionLoop:
+         )
+ 
+         if callable(resolver):
+-            return int(resolver(symbol))
++            typed_resolver = cast(Callable[[str], int], resolver)
++            return int(typed_resolver(symbol))
+ 
+         configured_token = self.settings.market_data.index_instrument_tokens.get(symbol)
+ 
+diff --git a/tests/strategy/test_decision_loop_position_monitoring.py b/tests/strategy/test_decision_loop_position_monitoring.py
+index 8ad96f7..08f2faf 100644
+--- a/tests/strategy/test_decision_loop_position_monitoring.py
++++ b/tests/strategy/test_decision_loop_position_monitoring.py
+@@ -17,8 +17,12 @@ def test_open_position_is_marked_and_exit_evaluated(
+     loop.settings.research.enforce_strategy_eligibility = False
+     first = loop.run_once()
+     assert first["status"] == "paper_filled"
++    assert first["exit_reason"] is None
+ 
+     strategy_position_id = first["strategy_position_id"]
++    assert strategy_position_id in {
++        position.strategy_position_id for position in loop.positions.get_open_strategy_positions()
++    }
+ 
+     second = loop.run_once()
+ 
+@@ -194,6 +198,8 @@ def test_position_closes_on_iv_collapse(
+     loop.settings.research.enforce_strategy_eligibility = False
+     loop.settings.research.enforce_feature_availability = False
+     loop.settings.research.enforce_regime_policy = False
++    # This fixture's synthetic two-leg credit triggers theta decay too.
++    loop.exit_engine.exit_settings.theta_decay_target_pct = 10_000
+ 
+     loop.run_once()
+     result = loop.run_once()

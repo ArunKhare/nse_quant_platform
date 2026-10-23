@@ -81,7 +81,6 @@ files = [
   "src/",
   "scripts/",
   "tests/",
-  "config/"
 ]
 
 [tool.pylint.main]

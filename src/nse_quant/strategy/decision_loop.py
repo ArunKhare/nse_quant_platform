@@ -13,7 +13,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 from uuid import uuid4
 
 from nse_quant.analytics.features import build_features
@@ -281,7 +281,10 @@ class DecisionLoop:
             ),
         }
 
-        profile = self.settings.get_strategy_profile("iron_condor_monitor")
+        profile = cast(
+            IronCondorProfileSettings,
+            self.settings.get_strategy_profile("iron_condor_monitor"),
+        )
         open_positions = self.positions.get_open_strategy_positions()
         effective_risk = self.settings.get_effective_risk_settings("iron_condor_monitor")
         if len(open_positions) >= effective_risk.max_open_positions:
@@ -555,26 +558,6 @@ class DecisionLoop:
         #     ],
         # )
 
-        exit_evaluation = self.exit_engine.evaluate(
-            proposal,
-            strategy_position,
-            leg_positions,
-            features,
-            kill_switch_active=False,
-            risk_breached=False,
-            data_stale=not quality.is_usable,
-        )
-
-        self.positions.save_exit_evaluation(exit_evaluation)
-
-        if exit_evaluation.selected_reason is not None:
-            self._close_positions(
-                proposal=proposal,
-                strategy_position=strategy_position,
-                leg_positions=leg_positions,
-                exit_reason=exit_evaluation.selected_reason,
-            )
-
         return self._finish_cycle(
             status="paper_filled",
             features=features,
@@ -584,11 +567,7 @@ class DecisionLoop:
             extra={
                 "proposal_id": proposal.proposal_id,
                 "strategy_position_id": strategy_position.strategy_position_id,
-                "exit_reason": (
-                    exit_evaluation.selected_reason.value
-                    if exit_evaluation.selected_reason
-                    else None
-                ),
+                "exit_reason": None,
                 "position_outcomes": position_outcomes,
                 "persisted_option_rows": persisted_rows,
                 "evidence": evidence,
@@ -624,7 +603,10 @@ class DecisionLoop:
             as_of=snapshot.ts,
         )
 
-        profile = self.settings.get_strategy_profile("iron_condor_monitor")
+        profile = cast(
+            IronCondorProfileSettings,
+            self.settings.get_strategy_profile("iron_condor_monitor"),
+        )
 
         effective_regimes, _regime_source, _policy_status = resolve_effective_regimes(
             profile,
@@ -657,12 +639,10 @@ class DecisionLoop:
         proposal: TradeProposal | None = None,
         gates: list[Any] | None = None,
         extra: dict[str, Any] | None = None,
-        *,
-        kill_switch_active: bool | None = None,
     ) -> dict[str, Any]:
-        kill_switch_active = (
-            self.kill_switch.is_active() if kill_switch_active is None else kill_switch_active
-        )
+
+        kill_switch_active = self.kill_switch.is_active()
+
         eligibility_gate = next(
             (
                 gate
@@ -931,7 +911,6 @@ class DecisionLoop:
         snapshot: ChainSnapshot,
         features: MarketFeatures,
         quality: DataQualityReport,
-        kill_switch_active: bool | None = None,
     ) -> list[dict[str, Any]]:
         kill_switch_active = self.kill_switch.is_active()
         outcomes: list[dict[str, Any]] = []
@@ -1014,7 +993,8 @@ class DecisionLoop:
         )
 
         if callable(resolver):
-            return int(resolver(symbol))
+            typed_resolver = cast(Callable[[str], int], resolver)
+            return int(typed_resolver(symbol))
 
         configured_token = self.settings.market_data.index_instrument_tokens.get(symbol)
 
