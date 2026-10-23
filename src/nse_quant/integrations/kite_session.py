@@ -71,7 +71,7 @@ def get_cached_kite(settings: Any | None = None) -> Any:
             kite.profile()
             print("Reusing existing Kite session.")
             return kite
-        except Exception: #noqa:BLE001
+        except Exception:  # noqa:BLE001
             print("Cached Kite session is invalid; requesting new login.")
 
     kite = get_authenticated_kite(settings=settings)
@@ -81,5 +81,3 @@ def get_cached_kite(settings: Any | None = None) -> Any:
         print("Saved new Kite session for reuse today.")
 
     return kite
-
-

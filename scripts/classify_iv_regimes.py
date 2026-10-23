@@ -16,9 +16,7 @@ from nse_quant.research.iv_surface import (
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
-        description="Classify daily IV regimes"
-    )
+    parser = argparse.ArgumentParser(description="Classify daily IV regimes")
 
     parser.add_argument(
         "--underlying",
@@ -90,19 +88,12 @@ def main() -> int:
         )
 
         if snapshot_report.empty:
-            print(
-                "Not enough multi-expiry snapshots to classify "
-                "IV regimes."
-            )
+            print("Not enough multi-expiry snapshots to classify IV regimes.")
             return 1
 
-        daily_report = build_daily_iv_summary(
-            snapshot_report
-        )
+        daily_report = build_daily_iv_summary(snapshot_report)
 
-        regime_report = classify_iv_regimes(
-            daily_report
-        )
+        regime_report = classify_iv_regimes(daily_report)
 
         if args.persist:
             persisted = 0
@@ -116,27 +107,13 @@ def main() -> int:
                     iv_skew_regime=row["iv_skew_regime"],
                     iv_regime=row["iv_regime"],
                     metrics={
-                        "median_spot": float(
-                            row["median_spot"]
-                        ),
-                        "median_atm_iv_near": float(
-                            row["median_atm_iv_near"]
-                        ),
-                        "median_atm_iv_next": float(
-                            row["median_atm_iv_next"]
-                        ),
-                        "median_term_structure": float(
-                            row["median_term_structure"]
-                        ),
-                        "median_put_call_skew": float(
-                            row["median_put_call_skew"]
-                        ),
-                        "median_risk_reversal": float(
-                            row["median_risk_reversal"]
-                        ),
-                        "median_butterfly": float(
-                            row["median_butterfly"]
-                        ),
+                        "median_spot": float(row["median_spot"]),
+                        "median_atm_iv_near": float(row["median_atm_iv_near"]),
+                        "median_atm_iv_next": float(row["median_atm_iv_next"]),
+                        "median_term_structure": float(row["median_term_structure"]),
+                        "median_put_call_skew": float(row["median_put_call_skew"]),
+                        "median_risk_reversal": float(row["median_risk_reversal"]),
+                        "median_butterfly": float(row["median_butterfly"]),
                     },
                 )
 
@@ -150,11 +127,7 @@ def main() -> int:
         print(
             {
                 "days": len(regime_report),
-                "regimes": (
-                    regime_report["iv_regime"]
-                    .value_counts()
-                    .to_dict()
-                ),
+                "regimes": (regime_report["iv_regime"].value_counts().to_dict()),
                 "report": str(output_path),
             }
         )

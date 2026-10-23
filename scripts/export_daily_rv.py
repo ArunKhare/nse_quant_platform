@@ -36,19 +36,14 @@ def main() -> int:
     store.close()
 
     if frame.empty:
-        raise SystemExit(
-            f"No daily RV observations found for {args.symbol}"
-        )
+        raise SystemExit(f"No daily RV observations found for {args.symbol}")
 
     output = Path(args.output)
     output.parent.mkdir(parents=True, exist_ok=True)
 
     frame.to_csv(output, index=False)
 
-    print(
-        f"Exported {len(frame)} daily RV observations "
-        f"to {output}"
-    )
+    print(f"Exported {len(frame)} daily RV observations to {output}")
     return 0
 
 

@@ -22,9 +22,7 @@ from nse_quant.research.warehouse_validation import validate_warehouse
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
-        description="Run Milestone 2 IV and RV research."
-    )
+    parser = argparse.ArgumentParser(description="Run Milestone 2 IV and RV research.")
 
     parser.add_argument(
         "--warehouse-dir",
@@ -70,21 +68,14 @@ def load_research_grade_option_streams(
         min_iv_coverage=min_iv_coverage,
     )
 
-    valid = validation[
-        validation["status"] == "ok"
-    ].copy()
+    valid = validation[validation["status"] == "ok"].copy()
 
     if valid.empty:
         return pd.DataFrame(), validation
 
     warehouse = ParquetWarehouse(warehouse_dir)
 
-    dates = [
-        Path(path).stem.replace(
-            "option_stream_", ""
-        )
-        for path in valid["file"]
-    ]
+    dates = [Path(path).stem.replace("option_stream_", "") for path in valid["file"]]
 
     frames: list[pd.DataFrame] = []
 
@@ -106,6 +97,7 @@ def load_research_grade_option_streams(
         validation,
     )
 
+
 def build_rv_regimes(
     rv: pd.DataFrame,
     *,
@@ -115,14 +107,9 @@ def build_rv_regimes(
 
     if "trade_date" not in frame.columns:
         if "trading_date" not in frame.columns:
-            raise ValueError(
-                "RV file must contain either "
-                "'trade_date' or 'trading_date'"
-            )
+            raise ValueError("RV file must contain either 'trade_date' or 'trading_date'")
 
-        frame = frame.rename(
-            columns={"trading_date": "trade_date"}
-        )
+        frame = frame.rename(columns={"trading_date": "trade_date"})
 
     required = {
         "trade_date",
@@ -132,13 +119,9 @@ def build_rv_regimes(
     missing = required.difference(frame.columns)
 
     if missing:
-        raise ValueError(
-            f"RV file missing columns: {sorted(missing)}"
-        )
+        raise ValueError(f"RV file missing columns: {sorted(missing)}")
 
-    frame["trade_date"] = pd.to_datetime(
-        frame["trade_date"]
-    ).dt.date
+    frame["trade_date"] = pd.to_datetime(frame["trade_date"]).dt.date
 
     frame = frame.sort_values("trade_date")
 
@@ -148,7 +131,7 @@ def build_rv_regimes(
     )
 
     def label(value: float | None) -> str:
-        if pd.isna(value):
+        if value is None or pd.isna(value):
             return "UNKNOWN"
 
         if value >= 80:
@@ -159,9 +142,7 @@ def build_rv_regimes(
 
         return "NORMAL_RV"
 
-    frame["rv_regime"] = frame[
-        "rv_percentile"
-    ].apply(label)
+    frame["rv_regime"] = frame["rv_percentile"].apply(label)
 
     frame["underlying"] = underlying
 
@@ -175,6 +156,7 @@ def build_rv_regimes(
         ]
     ]
 
+
 def main() -> None:
     args = parse_args()
 
@@ -182,26 +164,18 @@ def main() -> None:
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    option_stream, validation = (
-        load_research_grade_option_streams(
-            warehouse_dir=warehouse_dir,
-            underlying=args.symbol,
-            min_snapshots=args.min_snapshots,
-            min_iv_coverage=args.min_iv_coverage,
-        )
+    option_stream, validation = load_research_grade_option_streams(
+        warehouse_dir=warehouse_dir,
+        underlying=args.symbol,
+        min_snapshots=args.min_snapshots,
+        min_iv_coverage=args.min_iv_coverage,
     )
 
-    validation_path = (
-        output_dir
-        / f"warehouse_validation_{args.symbol}.csv"
-    )
+    validation_path = output_dir / f"warehouse_validation_{args.symbol}.csv"
     validation.to_csv(validation_path, index=False)
 
     if option_stream.empty:
-        print(
-            "No research-grade option-stream days found. "
-            f"Validation saved to {validation_path}"
-        )
+        print(f"No research-grade option-stream days found. Validation saved to {validation_path}")
         return
 
     snapshot_report = build_iv_surface_report(
@@ -209,9 +183,7 @@ def main() -> None:
         underlying=args.symbol,
     )
 
-    daily_iv = build_daily_iv_summary(
-        snapshot_report
-    )
+    daily_iv = build_daily_iv_summary(snapshot_report)
 
     iv_regimes = classify_iv_regimes(daily_iv)
 
@@ -238,10 +210,7 @@ def main() -> None:
             underlying=args.symbol,
         )
 
-        rv_regimes_path = (
-            output_dir
-            / f"rv_regimes_{args.symbol}.csv"
-        )
+        rv_regimes_path = output_dir / f"rv_regimes_{args.symbol}.csv"
 
         rv_regimes.to_csv(
             rv_regimes_path,

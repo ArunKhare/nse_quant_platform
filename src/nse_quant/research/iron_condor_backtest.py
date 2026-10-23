@@ -75,9 +75,7 @@ class IronCondorBacktester:
         config: IronCondorConfig | None = None,
     ) -> None:
         if frame.empty:
-            raise ValueError(
-                "Cannot backtest an empty option-stream frame"
-            )
+            raise ValueError("Cannot backtest an empty option-stream frame")
 
         self.frame = frame.copy()
         self.config = config or IronCondorConfig()
@@ -97,31 +95,20 @@ class IronCondorBacktester:
         missing = required.difference(self.frame.columns)
 
         if missing:
-            raise ValueError(
-                "Missing required option-stream columns: "
-                f"{sorted(missing)}"
-            )
+            raise ValueError(f"Missing required option-stream columns: {sorted(missing)}")
 
         self.frame["ts"] = pd.to_datetime(
             self.frame["ts"],
             utc=True,
         )
-        self.frame["market_ts"] = self.frame[
-            "ts"
-        ].dt.tz_convert("Asia/Kolkata")
-        self.frame["expiry"] = pd.to_datetime(
-            self.frame["expiry"]
-        ).dt.date
-        self.frame["trade_date"] = self.frame[
-            "market_ts"
-        ].dt.date
+        self.frame["market_ts"] = self.frame["ts"].dt.tz_convert("Asia/Kolkata")
+        self.frame["expiry"] = pd.to_datetime(self.frame["expiry"]).dt.date
+        self.frame["trade_date"] = self.frame["market_ts"].dt.date
 
     def run(self) -> list[BacktestTrade]:
         trades: list[BacktestTrade] = []
 
-        for trade_date, day_frame in self.frame.groupby(
-            "trade_date"
-        ):
+        for trade_date, day_frame in self.frame.groupby("trade_date"):
             self.diagnostics.days += 1
 
             trade = self._backtest_day(
@@ -140,49 +127,30 @@ class IronCondorBacktester:
         trade_date: date,
         day_frame: pd.DataFrame,
     ) -> BacktestTrade | None:
-        entry_frame = day_frame[
-            day_frame["market_ts"].dt.time
-            >= self.config.entry_time
-        ]
+        entry_frame = day_frame[day_frame["market_ts"].dt.time >= self.config.entry_time]
 
         if entry_frame.empty:
             return None
 
-        entry_timestamps = (
-            entry_frame["market_ts"]
-            .drop_duplicates()
-            .sort_values()
-        )
+        entry_timestamps = entry_frame["market_ts"].drop_duplicates().sort_values()
 
         for entry_ts in entry_timestamps:
-            entry_snapshot = entry_frame[
-                entry_frame["market_ts"]
-                == entry_ts
-            ]
+            entry_snapshot = entry_frame[entry_frame["market_ts"] == entry_ts]
 
-            expiry = self._select_expiry(
-                entry_snapshot
-            )
+            expiry = self._select_expiry(entry_snapshot)
 
             if expiry is None:
                 continue
 
-            expiry_snapshot = entry_snapshot[
-                entry_snapshot["expiry"]
-                == expiry
-            ]
+            expiry_snapshot = entry_snapshot[entry_snapshot["expiry"] == expiry]
 
-            legs = self._select_legs(
-                expiry_snapshot
-            )
+            legs = self._select_legs(expiry_snapshot)
 
             if legs is None:
                 continue
 
             credit_entry = self._credit(legs)
-            spot_entry = float(
-                expiry_snapshot["spot"].iloc[0]
-            )
+            spot_entry = float(expiry_snapshot["spot"].iloc[0])
 
             self.diagnostics.entries += 1
 
@@ -214,9 +182,7 @@ class IronCondorBacktester:
                 return None
 
             credit_exit = self._credit(exit_legs)
-            spot_exit = float(
-                exit_snapshot["spot"].iloc[0]
-            )
+            spot_exit = float(exit_snapshot["spot"].iloc[0])
 
             pnl = self._net_pnl(
                 credit_entry=credit_entry,
@@ -252,9 +218,7 @@ class IronCondorBacktester:
         self,
         snapshot: pd.DataFrame,
     ) -> date | None:
-        expiries = sorted(
-            snapshot["expiry"].unique()
-        )
+        expiries = sorted(snapshot["expiry"].unique())
 
         return expiries[0] if expiries else None
 
@@ -297,10 +261,7 @@ class IronCondorBacktester:
             wing_offset: int,
         ) -> tuple[pd.Series, pd.Series] | None:
             for _, short_row in candidates.iterrows():
-                long_rows = available[
-                    available["strike"]
-                    == short_row["strike"] + wing_offset
-                ]
+                long_rows = available[available["strike"] == short_row["strike"] + wing_offset]
                 if not long_rows.empty:
                     return short_row, long_rows.iloc[0]
             return None
@@ -323,18 +284,10 @@ class IronCondorBacktester:
         short_call_row, long_call_row = call_legs
 
         return {
-            "short_put": self._leg_from_row(
-                short_put_row
-            ),
-            "long_put": self._leg_from_row(
-                long_put_row
-            ),
-            "short_call": self._leg_from_row(
-                short_call_row
-            ),
-            "long_call": self._leg_from_row(
-                long_call_row
-            ),
+            "short_put": self._leg_from_row(short_put_row),
+            "long_put": self._leg_from_row(long_put_row),
+            "short_call": self._leg_from_row(short_call_row),
+            "long_call": self._leg_from_row(long_call_row),
         }
 
     @staticmethod
@@ -342,16 +295,10 @@ class IronCondorBacktester:
         row: pd.Series,
     ) -> Leg:
         return {
-            "option_type": str(
-                row["option_type"]
-            ),
+            "option_type": str(row["option_type"]),
             "strike": float(row["strike"]),
             "ltp": float(row["ltp"]),
-            "delta": (
-                float(row["delta"])
-                if pd.notna(row["delta"])
-                else float("nan")
-            ),
+            "delta": (float(row["delta"]) if pd.notna(row["delta"]) else float("nan")),
         }
 
     @staticmethod
@@ -371,26 +318,17 @@ class IronCondorBacktester:
         credit_entry: float,
         credit_exit: float,
     ) -> float:
-        entry_credit_after_slippage = (
-            credit_entry
-            - 4 * self.config.slippage_per_leg
-        )
+        entry_credit_after_slippage = credit_entry - 4 * self.config.slippage_per_leg
 
-        exit_credit_after_slippage = (
-            credit_exit
-            + 4 * self.config.slippage_per_leg
-        )
+        exit_credit_after_slippage = credit_exit + 4 * self.config.slippage_per_leg
 
         gross_pnl = (
-            entry_credit_after_slippage
-            - exit_credit_after_slippage
-        ) * self.config.lot_size * self.config.contracts
-
-        brokerage = (
-            self.config.brokerage_per_lot
+            (entry_credit_after_slippage - exit_credit_after_slippage)
             * self.config.lot_size
             * self.config.contracts
         )
+
+        brokerage = self.config.brokerage_per_lot * self.config.lot_size * self.config.contracts
 
         return float(gross_pnl - brokerage)
 
@@ -403,21 +341,12 @@ class IronCondorBacktester:
         entry_ts: pd.Timestamp,
         credit_entry: float,
     ) -> tuple[pd.Timestamp, pd.DataFrame, str] | None:
-        target_credit = credit_entry * (
-            1.0 - self.config.profit_target_pct
-        )
-        stop_credit = credit_entry * (
-            self.config.stop_loss_multiple
-        )
+        target_credit = credit_entry * (1.0 - self.config.profit_target_pct)
+        stop_credit = credit_entry * (self.config.stop_loss_multiple)
 
-        active = day_frame[
-            (day_frame["expiry"] == expiry)
-            & (day_frame["market_ts"] > entry_ts)
-        ]
+        active = day_frame[(day_frame["expiry"] == expiry) & (day_frame["market_ts"] > entry_ts)]
 
-        for ts, snapshot in active.groupby(
-            "market_ts"
-        ):
+        for ts, snapshot in active.groupby("market_ts"):
             ts = pd.Timestamp(ts)
 
             exit_legs = self._match_exit_legs(
@@ -440,11 +369,7 @@ class IronCondorBacktester:
             if credit_entry > 0 and credit >= stop_credit:
                 return ts, snapshot, "stop_loss"
 
-            if (
-                ts.date() == expiry
-                and ts.time()
-                >= self.config.exit_time
-            ):
+            if ts.date() == expiry and ts.time() >= self.config.exit_time:
                 return (
                     ts,
                     snapshot,
@@ -456,9 +381,7 @@ class IronCondorBacktester:
         if pd.isna(final_ts):
             return None
 
-        final_snapshot = active[
-            active["market_ts"] == final_ts
-        ]
+        final_snapshot = active[active["market_ts"] == final_ts]
 
         final_legs = self._match_exit_legs(
             exit_snapshot=final_snapshot,
@@ -484,25 +407,15 @@ class IronCondorBacktester:
 
         for name, leg in legs.items():
             candidates = exit_snapshot[
-                (
-                    exit_snapshot["option_type"]
-                    == leg["option_type"]
-                )
-                & (
-                    exit_snapshot["strike"]
-                    == leg["strike"]
-                )
+                (exit_snapshot["option_type"] == leg["option_type"])
+                & (exit_snapshot["strike"] == leg["strike"])
                 & exit_snapshot["ltp"].notna()
             ]
 
             if candidates.empty:
                 return None
 
-            matched[name] = (
-                IronCondorBacktester._leg_from_row(
-                    candidates.iloc[0]
-                )
-            )
+            matched[name] = IronCondorBacktester._leg_from_row(candidates.iloc[0])
 
         return matched
 
@@ -525,6 +438,4 @@ def trades_to_frame(
     if not trades:
         return pd.DataFrame(columns=columns)
 
-    return pd.DataFrame(
-        [trade.__dict__ for trade in trades]
-    )
+    return pd.DataFrame([trade.__dict__ for trade in trades])

@@ -32,8 +32,6 @@ def test_folds_use_future_test_windows() -> None:
     assert second.test_start == second.train_end + timedelta(days=1)
 
 
-
-
 def test_insufficient_train_trades_clears_policy() -> None:
     fold = build_folds(
         start_date=date(2025, 1, 1),
@@ -58,14 +56,9 @@ def test_insufficient_train_trades_clears_policy() -> None:
     )
 
     assert result.selected_parameters["allowed_regimes"] == []
-    assert (
-        result.selected_parameters["selection_status"]
-        == "INSUFFICIENT_TRAIN_TRADES"
-    )
-    assert (
-        result.train_metrics["selection_status"]
-        == "INSUFFICIENT_TRAIN_TRADES"
-    )
+    assert result.selected_parameters["selection_status"] == "INSUFFICIENT_TRAIN_TRADES"
+    assert result.train_metrics["selection_status"] == "INSUFFICIENT_TRAIN_TRADES"
+
 
 def test_summary_handles_no_usable_folds() -> None:
     summary = summarize_fold_results([])

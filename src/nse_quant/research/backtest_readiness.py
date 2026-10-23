@@ -35,19 +35,17 @@ def evaluate_backtest_readiness(
 
     if not matching_files:
         return BacktestReadinessReport(
-                underlying=underlying,
-                warehouse_glob=warehouse_glob,
-                complete_option_days=0,
-                iv_rv_aligned_days=0,
-                regime_days=0,
-                min_complete_days=min_complete_days,
-                min_iv_rv_aligned_days=min_iv_rv_aligned_days,
-                min_regime_days=min_regime_days,
-                ready=False,
-                blockers=[
-                    f"warehouse_empty: no Parquet files matched {warehouse_glob}"
-                ],
-            )
+            underlying=underlying,
+            warehouse_glob=warehouse_glob,
+            complete_option_days=0,
+            iv_rv_aligned_days=0,
+            regime_days=0,
+            min_complete_days=min_complete_days,
+            min_iv_rv_aligned_days=min_iv_rv_aligned_days,
+            min_regime_days=min_regime_days,
+            ready=False,
+            blockers=[f"warehouse_empty: no Parquet files matched {warehouse_glob}"],
+        )
     option_files = glob(warehouse_glob)
     regime_files = glob(regime_glob)
 
@@ -63,9 +61,7 @@ def evaluate_backtest_readiness(
             min_regime_days=min_regime_days,
             ready=False,
             blockers=[
-                (
-                    f"warehouse_empty: no option-stream Parquet files matched {warehouse_glob}"
-                )
+                (f"warehouse_empty: no option-stream Parquet files matched {warehouse_glob}")
             ],
         )
 
@@ -81,11 +77,8 @@ def evaluate_backtest_readiness(
             [warehouse_glob, underlying],
         ).fetchone()
         complete_option_days = (
-            complete_option_days_row[0]
-            if complete_option_days_row is not None
-            else 0
+            complete_option_days_row[0] if complete_option_days_row is not None else 0
         )
-
 
         iv_rv_aligned_days_row = conn.execute(
             """
@@ -104,11 +97,7 @@ def evaluate_backtest_readiness(
             """,
             [warehouse_glob, underlying],
         ).fetchone()
-        iv_rv_aligned_days = (
-            iv_rv_aligned_days_row[0]
-            if iv_rv_aligned_days_row is not None
-            else 0
-        )
+        iv_rv_aligned_days = iv_rv_aligned_days_row[0] if iv_rv_aligned_days_row is not None else 0
 
         regime_days = 0
         if regime_files:
@@ -127,21 +116,13 @@ def evaluate_backtest_readiness(
     blockers: list[str] = []
 
     if complete_option_days < min_complete_days:
-        blockers.append(
-            f"complete_option_days={complete_option_days} "
-            f"< {min_complete_days}"
-        )
+        blockers.append(f"complete_option_days={complete_option_days} < {min_complete_days}")
 
     if iv_rv_aligned_days < min_iv_rv_aligned_days:
-        blockers.append(
-            f"iv_rv_aligned_days={iv_rv_aligned_days} "
-            f"< {min_iv_rv_aligned_days}"
-        )
+        blockers.append(f"iv_rv_aligned_days={iv_rv_aligned_days} < {min_iv_rv_aligned_days}")
 
     if regime_days < min_regime_days:
-        blockers.append(
-            f"regime_days={regime_days} < {min_regime_days}"
-        )
+        blockers.append(f"regime_days={regime_days} < {min_regime_days}")
 
     report = BacktestReadinessReport(
         underlying=underlying,
@@ -156,6 +137,7 @@ def evaluate_backtest_readiness(
         blockers=blockers,
     )
     return report
+
 
 def write_report(
     report: BacktestReadinessReport,

@@ -7,10 +7,10 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-DEFAULT_SNAPSHOT_PATH  = Path("data/live_snapshot.json")
+DEFAULT_SNAPSHOT_PATH = Path("data/live_snapshot.json")
 
 
-def write_live_snapshot(payload: dict[str, Any], *, snapshot_path: Path | None=None) -> Path:
+def write_live_snapshot(payload: dict[str, Any], *, snapshot_path: Path | None = None) -> Path:
     """Atomically write the latest UI snapshot."""
     target = snapshot_path or DEFAULT_SNAPSHOT_PATH
     target.parent.mkdir(parents=True, exist_ok=True)
@@ -26,7 +26,10 @@ def write_live_snapshot(payload: dict[str, Any], *, snapshot_path: Path | None=N
     return target
 
 
-def read_live_snapshot(*, snapshot_path: Path | None = None,) -> dict[str, Any]:
+def read_live_snapshot(
+    *,
+    snapshot_path: Path | None = None,
+) -> dict[str, Any]:
     """Read the latest UI snapshot. Returns an empty dict if unavailable."""
     target = snapshot_path or DEFAULT_SNAPSHOT_PATH
     if not target.exists():
@@ -54,13 +57,11 @@ def build_snapshot(
         "loop_status": loop_status,
         "kill_switch_active": kill_switch_active,
         "features": features.model_dump(mode="json") if features else None,
-        "open_positions": [
-            position.model_dump(mode="json")
-            for position in (open_positions or [])
-        ],
+        "open_positions": [position.model_dump(mode="json") for position in (open_positions or [])],
         "latest_orders": latest_orders or [],
         "latest_exits": latest_exits or [],
-        "data_quality": data_quality or {
+        "data_quality": data_quality
+        or {
             "is_usable": True,
             "stale": False,
             "missing_quotes": 0,
@@ -69,11 +70,11 @@ def build_snapshot(
             "issues": [],
             "warnings": [],
         },
-        "iv_history": iv_history or {
+        "iv_history": iv_history
+        or {
             "observation_count": 0,
             "minimum_required": 0,
             "mode": "COLD_START",
         },
         "strategy_eligibility": strategy_eligibility,
-
     }

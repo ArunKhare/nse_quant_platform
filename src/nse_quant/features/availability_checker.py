@@ -181,9 +181,7 @@ class FeatureAvailabilityChecker:
         return {
             "iv_observations": iv_observations,
             "iv_days": int(iv_days_row[0]),
-            "iv_rv_aligned_observations": int(
-                iv_rv_aligned_observations
-            ),
+            "iv_rv_aligned_observations": int(iv_rv_aligned_observations),
         }
 
     def _daily_spot_observation_count(
@@ -242,17 +240,11 @@ class FeatureAvailabilityChecker:
 
             if count > 0:
                 statuses.append(FeatureAvailability.WARMING_UP)
-                reasons.append(
-                    f"{requirement.feature}: "
-                    f"{count}/{available} observations"
-                )
+                reasons.append(f"{requirement.feature}: {count}/{available} observations")
             else:
                 statuses.append(FeatureAvailability.UNAVAILABLE)
                 missing.append(requirement.feature)
-                reasons.append(
-                    f"{requirement.feature}: "
-                    f"no observations; requires {available}"
-                )
+                reasons.append(f"{requirement.feature}: no observations; requires {available}")
 
         if FeatureAvailability.UNAVAILABLE in statuses:
             return FeatureAvailability.UNAVAILABLE

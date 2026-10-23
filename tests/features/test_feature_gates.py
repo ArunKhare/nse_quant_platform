@@ -53,6 +53,7 @@ def test_gate_rejects_missing_snapshot() -> None:
     assert not result.passed
     assert result.reasons == ["spot_features_unavailable"]
 
+
 def test_gate_rejects_stale_snapshot() -> None:
     gate = SpotFeatureGate(max_age_seconds=60)
 

@@ -111,5 +111,4 @@ class FeatureStore:
 
 
 def _json(value: Any) -> str:
-    
     return json.dumps(value, default=str)

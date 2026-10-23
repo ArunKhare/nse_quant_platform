@@ -31,7 +31,11 @@ class IvRegimeGate:
     def __init__(self, settings: Any | None = None) -> None:
         self.settings = settings or get_settings()
 
-    def evaluate(self,features: MarketFeatures,iv_history_count: int | None = None,) -> GateResult:
+    def evaluate(
+        self,
+        features: MarketFeatures,
+        iv_history_count: int | None = None,
+    ) -> GateResult:
         expected_move = features.expected_move_points
         buffer = self.settings.analytics.max_expected_move_buffer
         diagnostics = features.diagnostics.get("expected_move_inputs", {})
@@ -40,10 +44,7 @@ class IvRegimeGate:
         iv_rank = features.iv_rank
         spread = features.iv_rv_spread
 
-        spread_ok = (
-            spread is not None
-            and spread >= analytics.min_iv_rv_spread
-        )
+        spread_ok = spread is not None and spread >= analytics.min_iv_rv_spread
 
         has_minimum_history = (
             iv_history_count is not None
@@ -77,15 +78,14 @@ class IvRegimeGate:
                 "iv_rv_spread": spread,
                 "min_iv_rank": analytics.min_iv_rank,
                 "min_iv_rv_spread": analytics.min_iv_rv_spread,
-                "min_iv_history_observations": (
-                    analytics.min_iv_history_observations
-                ),
+                "min_iv_history_observations": (analytics.min_iv_history_observations),
                 "cold_start_allowed": analytics.allow_iv_rank_cold_start,
                 "expected_move_points": expected_move,
                 "max_buffer": buffer,
                 "diagnostics": diagnostics,
             },
         )
+
 
 class ExpectedMoveGate:
     def __init__(self, settings: Any | None = None) -> None:
@@ -146,36 +146,24 @@ class LiquidityGate:
                     continue
 
                 if not has_depth:
-                    warnings.append(
-                        f"{option_type}:{strike}:missing_bid_ask"
-                    )
+                    warnings.append(f"{option_type}:{strike}:missing_bid_ask")
 
                 if oi < limits.min_oi:
-                    failures.append(
-                        f"{option_type}:{strike}:low_oi={oi}"
-                    )
+                    failures.append(f"{option_type}:{strike}:low_oi={oi}")
 
                 if spread is not None and spread > limits.max_spread_pct:
-                    failures.append(
-                        f"{option_type}:{strike}:wide_spread={spread}"
-                    )
+                    failures.append(f"{option_type}:{strike}:wide_spread={spread}")
 
                 # Volume may be zero for deep OTM wings or outside active trading.
                 # Treat it as a warning, not an automatic rejection, when OI and
                 # quote data are present.
                 if volume < limits.min_volume:
-                    warnings.append(
-                        f"{option_type}:{strike}:low_volume={volume}"
-                    )
+                    warnings.append(f"{option_type}:{strike}:low_volume={volume}")
 
         return GateResult(
             gate="strategy_liquidity",
             passed=not failures,
-            reason=(
-                "all_required_legs_liquid"
-                if not failures
-                else "illiquid_or_missing_legs"
-            ),
+            reason=("all_required_legs_liquid" if not failures else "illiquid_or_missing_legs"),
             details={
                 "failures": failures,
                 "warnings": warnings,

@@ -1,4 +1,5 @@
 """Kite REST provider."""
+
 from __future__ import annotations
 
 from datetime import UTC, date, datetime
@@ -14,12 +15,13 @@ from nse_quant.market_data import chain
 class InstrumentResolutionError(ValueError):
     """Raised when an underlying cannot be resolved to a Kite instrument."""
 
+
 class KiteMarketDataProvider:
-    def __init__(self, kite:Any, underlying:str|None=None):
+    def __init__(self, kite: Any, underlying: str | None = None):
         self.settings = get_settings()
-        self.kite=kite
-        self.underlying=underlying or self.settings.universe.underlying
-        self._instruments:list[dict[str, Any]] | None = None
+        self.kite = kite
+        self.underlying = underlying or self.settings.universe.underlying
+        self._instruments: list[dict[str, Any]] | None = None
         # self._index_instruments: list[dict[str, Any]] | None = None
         self._instrument_cache: dict[str, list[dict[str, Any]]] = {}
 
@@ -81,8 +83,7 @@ class KiteMarketDataProvider:
 
         if len(matches) != 1:
             raise InstrumentResolutionError(
-                f"Expected one NSE EQ instrument for {symbol!r}, "
-                f"found {len(matches)}"
+                f"Expected one NSE EQ instrument for {symbol!r}, found {len(matches)}"
             )
 
         return int(matches[0]["instrument_token"])
@@ -110,17 +111,10 @@ class KiteMarketDataProvider:
 
         assert self._index_instruments is not None
 
-        index_symbol = (
-            self.settings
-            .market_data
-            .index_instrument_symbols
-            .get(symbol)
-        )
+        index_symbol = self.settings.market_data.index_instrument_symbols.get(symbol)
 
         if index_symbol is None:
-            raise ValueError(
-                f"No index instrument mapping for {symbol}"
-            )
+            raise ValueError(f"No index instrument mapping for {symbol}")
 
         matches = [
             instrument
@@ -131,26 +125,24 @@ class KiteMarketDataProvider:
         ]
 
         if not matches:
-            raise ValueError(
-                f"Index instrument not found: {index_symbol}"
-            )
+            raise ValueError(f"Index instrument not found: {index_symbol}")
 
         return int(matches[0]["instrument_token"])
+
     def get_spot(self) -> float:
         key = self.get_spot_key(self.underlying)
 
         quote = self.kite.quote([key])[key]
 
         return float(quote["last_price"])
+
     def get_spot_key(self, symbol: str) -> str:
         configured = self.settings.market_data.spot_quote_keys.get(symbol)
         if configured:
             return configured
 
         if self._is_index(symbol):
-            raise ValueError(
-                f"No spot_quote_keys mapping configured for index {symbol!r}"
-            )
+            raise ValueError(f"No spot_quote_keys mapping configured for index {symbol!r}")
 
         return f"NSE:{symbol}"
 
@@ -160,8 +152,7 @@ class KiteMarketDataProvider:
         candidate_instruments = [
             row
             for row in raw_instruments
-            if row.get("instrument_type") in {"CE", "PE"}
-            and row.get("name") == self.underlying
+            if row.get("instrument_type") in {"CE", "PE"} and row.get("name") == self.underlying
         ]
 
         spot = self.get_spot()
@@ -175,10 +166,7 @@ class KiteMarketDataProvider:
         )
 
         raw = self.kite.quote(
-            [
-                f"NFO:{instrument.tradingsymbol}"
-                for instrument in option_instruments
-            ]
+            [f"NFO:{instrument.tradingsymbol}" for instrument in option_instruments]
         )
 
         ticks: dict[int, dict[str, Any]] = {}
@@ -214,17 +202,14 @@ class KiteMarketDataProvider:
     def get_chain_snapshots(self) -> list[ChainSnapshot]:
         settings = self.settings
 
-        expiry_count = (
-            settings.analytics.expiries_per_snapshot
-        )
+        expiry_count = settings.analytics.expiries_per_snapshot
 
         raw_instruments = self._load_nfo_instruments()
 
         candidate_instruments = [
             row
             for row in raw_instruments
-            if row.get("instrument_type") in {"CE", "PE"}
-            and row.get("name") == self.underlying
+            if row.get("instrument_type") in {"CE", "PE"} and row.get("name") == self.underlying
         ]
 
         spot = self.get_spot()
@@ -234,9 +219,7 @@ class KiteMarketDataProvider:
             underlying=self.underlying,
             spot=spot,
             expiries_requested=expiry_count,
-            strikes_per_side=(
-                self.settings.universe.strikes_per_side
-            ),
+            strikes_per_side=(self.settings.universe.strikes_per_side),
         )
 
         snapshot_ts = datetime.now(UTC)
@@ -244,10 +227,7 @@ class KiteMarketDataProvider:
 
         for expiry, option_instruments in chains:
             raw = self.kite.quote(
-                [
-                    f"NFO:{instrument.tradingsymbol}"
-                    for instrument in option_instruments
-                ]
+                [f"NFO:{instrument.tradingsymbol}" for instrument in option_instruments]
             )
 
             ticks: dict[int, dict[str, Any]] = {}
@@ -262,21 +242,13 @@ class KiteMarketDataProvider:
 
                 ticks[instrument.instrument_token] = {
                     "ltp": quote.get("last_price"),
-                    "bid": (
-                        depth.get("buy") or [{}]
-                    )[0].get("price"),
-                    "ask": (
-                        depth.get("sell") or [{}]
-                    )[0].get("price"),
+                    "bid": (depth.get("buy") or [{}])[0].get("price"),
+                    "ask": (depth.get("sell") or [{}])[0].get("price"),
                     "volume": quote.get("volume"),
                     "oi": quote.get("oi"),
-                    "exchange_ts": quote.get(
-                        "exchange_timestamp"
-                    ),
-                    "trade_ts": quote.get(
-                        "last_trade_time"
-                    ),
-                    "received_at":  snapshot_ts,
+                    "exchange_ts": quote.get("exchange_timestamp"),
+                    "trade_ts": quote.get("last_trade_time"),
+                    "received_at": snapshot_ts,
                 }
 
             snapshots.append(
@@ -292,39 +264,35 @@ class KiteMarketDataProvider:
         return snapshots
 
     def get_historical_candles(
-            self,
-            symbol: str,
-            interval: str,
-            from_dt: datetime,
-            to_dt: datetime,
-        ) -> list[dict[str, Any]]:
-            """Fetch historical spot candles for an index or equity underlying."""
-            kite_interval = self._resolve_kite_interval(interval)
-            instrument_token = self.resolve_spot_instrument_token(symbol)
+        self,
+        symbol: str,
+        interval: str,
+        from_dt: datetime,
+        to_dt: datetime,
+    ) -> list[dict[str, Any]]:
+        """Fetch historical spot candles for an index or equity underlying."""
+        kite_interval = self._resolve_kite_interval(interval)
+        instrument_token = self.resolve_spot_instrument_token(symbol)
 
-            raw: list[dict[str, Any]] = self.kite.historical_data(
-                instrument_token=instrument_token,
-                from_date=from_dt,
-                to_date=to_dt,
-                interval=kite_interval,
-            )
+        raw: list[dict[str, Any]] = self.kite.historical_data(
+            instrument_token=instrument_token,
+            from_date=from_dt,
+            to_date=to_dt,
+            interval=kite_interval,
+        )
 
-            for candle in raw:
-                candle["symbol"] = symbol
-                candle["interval"] = interval
-                candle["instrument_token"] = instrument_token
+        for candle in raw:
+            candle["symbol"] = symbol
+            candle["interval"] = interval
+            candle["instrument_token"] = instrument_token
 
-            return raw
+        return raw
 
     def _resolve_kite_interval(self, interval: str) -> str:
         try:
-            return self.settings.market_data.candle_intervals[
-                interval
-            ].kite_interval
+            return self.settings.market_data.candle_intervals[interval].kite_interval
         except KeyError as exc:
-            raise ValueError(
-                f"Unsupported candle interval: {interval!r}"
-            ) from exc
+            raise ValueError(f"Unsupported candle interval: {interval!r}") from exc
 
     def _normalize_nfo_instrument(
         self,

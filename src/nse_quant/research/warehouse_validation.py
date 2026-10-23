@@ -65,9 +65,7 @@ def validate_parquet_file(
 
         if missing:
             result["status"] = "invalid"
-            result["issues"].append(
-                f"missing_columns: {sorted(missing)}"
-            )
+            result["issues"].append(f"missing_columns: {sorted(missing)}")
             return result
 
         stats = conn.execute(
@@ -103,23 +101,16 @@ def validate_parquet_file(
             result["status"] = "warning"
             result["issues"].append("unexpected_underlying")
 
-        iv_coverage = (
-            float(iv_rows) / float(row_count) if row_count else 0.0
-        )
+        iv_coverage = float(iv_rows) / float(row_count) if row_count else 0.0
         result["iv_coverage"] = round(iv_coverage, 4)
 
         if snapshot_count < min_snapshots:
             result["status"] = "warning"
-            result["issues"].append(
-                f"low_snapshot_count: {snapshot_count} "
-                f"< {min_snapshots}"
-            )
+            result["issues"].append(f"low_snapshot_count: {snapshot_count} < {min_snapshots}")
 
         if iv_coverage < min_iv_coverage:
             result["status"] = "warning"
-            result["issues"].append(
-                f"low_iv_coverage: {iv_coverage:.2%}"
-            )
+            result["issues"].append(f"low_iv_coverage: {iv_coverage:.2%}")
 
         duplicate_result = conn.execute(
             f"""
@@ -147,9 +138,7 @@ def validate_parquet_file(
 
         if duplicate_rows:
             result["status"] = "warning"
-            result["issues"].append(
-                f"duplicate_rows: {duplicate_rows}"
-            )
+            result["issues"].append(f"duplicate_rows: {duplicate_rows}")
 
         return result
 
@@ -173,10 +162,7 @@ def validate_warehouse(
 
     warehouse_path = Path(warehouse_dir)
 
-    pattern = (
-        f"underlying={underlying}/year=*/month=*"
-        "/option_stream_*.parquet"
-    )
+    pattern = f"underlying={underlying}/year=*/month=*/option_stream_*.parquet"
 
     files = sorted(warehouse_path.glob(pattern))
 

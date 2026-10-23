@@ -40,19 +40,12 @@ def summarize_by_regime(
     for regime, regime_outcomes in grouped.items():
         trade_count = len(regime_outcomes)
         pnl = sum(outcome.realized_pnl for outcome in regime_outcomes)
-        wins = sum(
-            outcome.realized_pnl > 0
-            for outcome in regime_outcomes
-        )
+        wins = sum(outcome.realized_pnl > 0 for outcome in regime_outcomes)
         gross_profit = sum(
-            outcome.realized_pnl
-            for outcome in regime_outcomes
-            if outcome.realized_pnl > 0
+            outcome.realized_pnl for outcome in regime_outcomes if outcome.realized_pnl > 0
         )
         gross_loss = sum(
-            abs(outcome.realized_pnl)
-            for outcome in regime_outcomes
-            if outcome.realized_pnl < 0
+            abs(outcome.realized_pnl) for outcome in regime_outcomes if outcome.realized_pnl < 0
         )
 
         metrics[regime] = {
@@ -62,11 +55,7 @@ def summarize_by_regime(
             "avg_pnl": pnl / trade_count if trade_count else 0.0,
             "win_rate": wins / trade_count if trade_count else 0.0,
             "profit_factor": (
-                gross_profit / gross_loss
-                if gross_loss
-                else float("inf")
-                if gross_profit
-                else 0.0
+                gross_profit / gross_loss if gross_loss else float("inf") if gross_profit else 0.0
             ),
         }
 
@@ -85,8 +74,7 @@ def select_regime_policy(
     allowed = {
         regime
         for regime, metrics in regime_metrics.items()
-        if int(metrics["trades"]) >= min_trades
-        and float(metrics["avg_pnl"]) > min_avg_pnl
+        if int(metrics["trades"]) >= min_trades and float(metrics["avg_pnl"]) > min_avg_pnl
     }
 
     if not outcomes:

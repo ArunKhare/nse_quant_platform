@@ -31,8 +31,7 @@ def black_scholes_price(
 
     sqrt_t = math.sqrt(time_to_expiry_years)
     d1 = (
-        math.log(spot / strike)
-        + (risk_free_rate + 0.5 * volatility**2) * time_to_expiry_years
+        math.log(spot / strike) + (risk_free_rate + 0.5 * volatility**2) * time_to_expiry_years
     ) / (volatility * sqrt_t)
     d2 = d1 - volatility * sqrt_t
 
@@ -42,9 +41,9 @@ def black_scholes_price(
         ) * _normal_cdf(d2)
 
     if option_type == "PE":
-        return strike * math.exp(
-            -risk_free_rate * time_to_expiry_years
-        ) * _normal_cdf(-d2) - spot * _normal_cdf(-d1)
+        return strike * math.exp(-risk_free_rate * time_to_expiry_years) * _normal_cdf(
+            -d2
+        ) - spot * _normal_cdf(-d1)
 
     raise ValueError(f"Unsupported option type: {option_type}")
 

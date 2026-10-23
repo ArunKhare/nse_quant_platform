@@ -33,11 +33,7 @@ def make_frame() -> pd.DataFrame:
                             "option_type": option_type,
                             "ltp": 40.0,
                             "spot": 22800.0,
-                            "delta": (
-                                -0.20
-                                if option_type == "PE"
-                                else 0.20
-                            ),
+                            "delta": (-0.20 if option_type == "PE" else 0.20),
                         }
                     )
 

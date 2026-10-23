@@ -52,9 +52,7 @@ def parse_args() -> argparse.Namespace:
 def main() -> int:
     args = parse_args()
 
-    warehouse = ParquetWarehouse(
-        args.warehouse_dir
-    )
+    warehouse = ParquetWarehouse(args.warehouse_dir)
 
     frame = warehouse.load_option_stream(
         underlying=args.underlying,
@@ -63,10 +61,7 @@ def main() -> int:
     )
 
     if frame.empty:
-        print(
-            "No warehouse data found for "
-            "the requested range."
-        )
+        print("No warehouse data found for the requested range.")
         return 1
 
     frame["ts"] = pd.to_datetime(
@@ -74,37 +69,21 @@ def main() -> int:
         utc=True,
     )
 
-    frame["market_ts"] = frame[
-        "ts"
-    ].dt.tz_convert("Asia/Kolkata")
+    frame["market_ts"] = frame["ts"].dt.tz_convert("Asia/Kolkata")
 
-    frame["trade_date"] = frame[
-        "market_ts"
-    ].dt.date
+    frame["trade_date"] = frame["market_ts"].dt.date
 
     reports: list[dict[str, object]] = []
 
-    for trade_date, day in frame.groupby(
-        "trade_date"
-    ):
-        timestamps = (
-            day["market_ts"]
-            .drop_duplicates()
-            .sort_values()
-        )
+    for trade_date, day in frame.groupby("trade_date"):
+        timestamps = day["market_ts"].drop_duplicates().sort_values()
 
-        expiry_counts = day.groupby(
-            "market_ts"
-        )["expiry"].nunique()
+        expiry_counts = day.groupby("market_ts")["expiry"].nunique()
 
-        aligned_timestamps = expiry_counts[
-            expiry_counts >= 2
-        ]
+        aligned_timestamps = expiry_counts[expiry_counts >= 2]
 
         gaps = timestamps.diff().dt.total_seconds() / 60
-        large_gaps = gaps[
-            gaps > args.max_gap_minutes
-        ]
+        large_gaps = gaps[gaps > args.max_gap_minutes]
 
         reports.append(
             {
@@ -113,36 +92,21 @@ def main() -> int:
                 "snapshots": len(timestamps),
                 "first_snapshot": timestamps.min(),
                 "last_snapshot": timestamps.max(),
-                "aligned_snapshots": len(
-                    aligned_timestamps
-                ),
+                "aligned_snapshots": len(aligned_timestamps),
                 "aligned_pct": round(
-                    len(aligned_timestamps)
-                    / len(timestamps)
-                    * 100,
+                    len(aligned_timestamps) / len(timestamps) * 100,
                     2,
                 )
                 if len(timestamps)
                 else 0.0,
-                "large_gaps": len(
-                    large_gaps
-                ),
+                "large_gaps": len(large_gaps),
                 "largest_gap_minutes": round(
-                    float(gaps.max())
-                    if not gaps.empty
-                    else 0.0,
+                    float(gaps.max()) if not gaps.empty else 0.0,
                     2,
                 ),
-                "missing_ltp": int(
-                    day["ltp"].isna().sum()
-                ),
-                "missing_delta": int(
-                    day["delta"].isna().sum()
-                ),
-                "zero_or_negative_ltp": int(
-                    (day["ltp"] <= 0)
-                    .sum()
-                ),
+                "missing_ltp": int(day["ltp"].isna().sum()),
+                "missing_delta": int(day["delta"].isna().sum()),
+                "zero_or_negative_ltp": int((day["ltp"] <= 0).sum()),
             }
         )
 
@@ -154,14 +118,7 @@ def main() -> int:
         exist_ok=True,
     )
 
-    output_path = (
-        output_dir
-        / (
-            f"warehouse_quality_"
-            f"{args.underlying}_"
-            f"{args.start}_{args.end}.csv"
-        )
-    )
+    output_path = output_dir / (f"warehouse_quality_{args.underlying}_{args.start}_{args.end}.csv")
 
     report.to_csv(
         output_path,

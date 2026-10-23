@@ -88,20 +88,9 @@ def summarize_outcomes(
 ) -> dict[str, Any]:
     trade_count = len(outcomes)
     pnl = sum(outcome.realized_pnl for outcome in outcomes)
-    wins = sum(
-        outcome.realized_pnl > 0
-        for outcome in outcomes
-    )
-    gross_profit = sum(
-        outcome.realized_pnl
-        for outcome in outcomes
-        if outcome.realized_pnl > 0
-    )
-    gross_loss = sum(
-        abs(outcome.realized_pnl)
-        for outcome in outcomes
-        if outcome.realized_pnl < 0
-    )
+    wins = sum(outcome.realized_pnl > 0 for outcome in outcomes)
+    gross_profit = sum(outcome.realized_pnl for outcome in outcomes if outcome.realized_pnl > 0)
+    gross_loss = sum(abs(outcome.realized_pnl) for outcome in outcomes if outcome.realized_pnl < 0)
 
     return {
         "trades": trade_count,
@@ -110,10 +99,6 @@ def summarize_outcomes(
         "win_rate": wins / trade_count if trade_count else 0.0,
         "avg_pnl": pnl / trade_count if trade_count else 0.0,
         "profit_factor": (
-            gross_profit / gross_loss
-            if gross_loss
-            else float("inf")
-            if gross_profit
-            else 0.0
+            gross_profit / gross_loss if gross_loss else float("inf") if gross_profit else 0.0
         ),
     }

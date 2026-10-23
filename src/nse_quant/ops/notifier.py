@@ -1,4 +1,3 @@
-
 """Telegram notifier.
 
 Telegram credentials are secrets and must be supplied through `.env`:
@@ -18,6 +17,7 @@ from nse_quant.core.settings import get_settings
 load_dotenv()
 logger = structlog.get_logger(__name__)
 settings = get_settings()
+
 
 class Notifier:
     """Send operational notifications through Telegram."""
@@ -90,7 +90,6 @@ class Notifier:
 
         logger.info("telegram_notifier_sent")
         return True
-
 
     def _truncate(self, message: str) -> str:
         if len(message) <= self.notifier_settings.telegram.message_length_limit:

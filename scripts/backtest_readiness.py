@@ -11,16 +11,11 @@ from nse_quant.research.backtest_readiness import evaluate_backtest_readiness, w
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
-        description="Evaluate Parquet warehouse backtest readiness"
-    )
+    parser = argparse.ArgumentParser(description="Evaluate Parquet warehouse backtest readiness")
 
     parser.add_argument(
         "--warehouse-glob",
-        default=(
-            "data/exports/underlying=NIFTY/"
-            "year=*/month=*/option_stream_*.parquet"
-        ),
+        default=("data/exports/underlying=NIFTY/year=*/month=*/option_stream_*.parquet"),
     )
     parser.add_argument("--underlying", default="NIFTY")
 
@@ -31,10 +26,7 @@ def parse_args() -> argparse.Namespace:
 
     parser.add_argument(
         "--regime-glob",
-        default=(
-            "data/exports/underlying=NIFTY/"
-            "year=*/month=*/market_regime_*.parquet"
-        ),
+        default=("data/exports/underlying=NIFTY/year=*/month=*/market_regime_*.parquet"),
     )
     return parser.parse_args()
 

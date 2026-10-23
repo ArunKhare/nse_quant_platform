@@ -16,9 +16,7 @@ class ReplayMarketDataProvider:
         spot_instrument_tokens: dict[str, int] | None = None,
     ) -> None:
         if not snapshots:
-            raise ValueError(
-                "ReplayMarketDataProvider requires snapshots"
-            )
+            raise ValueError("ReplayMarketDataProvider requires snapshots")
 
         self._snapshots = snapshots
         self._index = 0
@@ -26,9 +24,7 @@ class ReplayMarketDataProvider:
 
     def get_chain_snapshot(self) -> ChainSnapshot:
         if self._index >= len(self._snapshots):
-            raise ReplayExhaustedError(
-                "Replay snapshots exhausted"
-            )
+            raise ReplayExhaustedError("Replay snapshots exhausted")
 
         snapshot = self._snapshots[self._index]
         self._index += 1
@@ -41,10 +37,7 @@ class ReplayMarketDataProvider:
         token = self._spot_instrument_tokens.get(symbol)
 
         if token is None:
-            raise ValueError(
-                f"No spot instrument token configured for replay "
-                f"symbol '{symbol}'"
-            )
+            raise ValueError(f"No spot instrument token configured for replay symbol '{symbol}'")
 
         return token
 
@@ -59,14 +52,9 @@ class ReplayMarketDataProvider:
         *,
         spot_instrument_tokens: dict[str, int] | None = None,
     ) -> "ReplayMarketDataProvider":
-        payload = json.loads(
-            Path(path).read_text(encoding="utf-8")
-        )
+        payload = json.loads(Path(path).read_text(encoding="utf-8"))
 
-        snapshots = [
-            ChainSnapshot.model_validate(item)
-            for item in payload["snapshots"]
-        ]
+        snapshots = [ChainSnapshot.model_validate(item) for item in payload["snapshots"]]
 
         underlying = payload.get("underlying")
         embedded_token = payload.get("spot_instrument_token")

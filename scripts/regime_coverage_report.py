@@ -24,9 +24,7 @@ def coverage_tier(trade_count: int) -> str:
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
-        description="Report performance by market regime"
-    )
+    parser = argparse.ArgumentParser(description="Report performance by market regime")
     parser.add_argument("--symbol", default="NIFTY")
     return parser.parse_args()
 
@@ -91,6 +89,7 @@ def main() -> int:
             for regime_ts, label in zip(
                 regime_times,
                 regime_labels,
+                strict=False,
             ):
                 if regime_ts <= decision_ts:
                     regime = label
@@ -161,9 +160,7 @@ def main() -> int:
             rejections = int(bucket["risk_rejections"])
             decisions = int(bucket["decisions"])
 
-            win_rate = (
-                bucket["wins"] / trades if trades else 0.0
-            )
+            win_rate = bucket["wins"] / trades if trades else 0.0
             avg_pnl = bucket["pnl"] / trades if trades else 0.0
             profit_factor = (
                 bucket["gross_profit"] / bucket["gross_loss"]
@@ -172,12 +169,8 @@ def main() -> int:
                 if bucket["gross_profit"]
                 else 0.0
             )
-            proposal_rate = (
-                proposals / decisions if decisions else 0.0
-            )
-            rejection_rate = (
-                rejections / decisions if decisions else 0.0
-            )
+            proposal_rate = proposals / decisions if decisions else 0.0
+            rejection_rate = rejections / decisions if decisions else 0.0
 
             print(
                 f"{regime},{decisions},{proposals},{rejections},"
@@ -186,9 +179,7 @@ def main() -> int:
                 f"{rejection_rate:.2%},{coverage_tier(trades)}"
             )
 
-        missing = sorted(
-            required_regimes - set(stats)
-        )
+        missing = sorted(required_regimes - set(stats))
 
         if missing:
             print("\nMissing required coverage:")

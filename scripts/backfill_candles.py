@@ -19,9 +19,7 @@ KITE_MAX_RANGE_DAYS = {
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
-        description="Backfill NSE spot candles in Kite request chunks"
-    )
+    parser = argparse.ArgumentParser(description="Backfill NSE spot candles in Kite request chunks")
 
     parser.add_argument("--symbol", required=True)
     parser.add_argument("--interval", required=True)

@@ -1,0 +1,48 @@
+repos:
+  - repo: local
+    hooks:
+      # 1. Runs the Ruff Linter via uv (With cache disabled)
+      - id: ruff-check
+        name: ruff check
+        entry: uv run ruff check
+        language: system
+        types: [python]
+        args: [--fix, --no-cache] # <-- Added --no-cache here
+
+      # 2. Runs the Ruff Formatter via uv (With cache disabled)
+      - id: ruff-format
+        name: ruff format
+        entry: uv run ruff format
+        language: system
+        types: [python]
+        args: [--no-cache] # <-- Added --no-cache here
+
+      # 3. Verifies that your uv.lock stays completely updated
+      - id: uv-lock-check
+        name: uv lock check
+        entry: uv lock --check
+        language: system
+        pass_filenames: false
+        files: ^(uv\.lock|pyproject\.toml)$
+
+      # 4. Runs mypy through your local uv installation environment
+      - id: mypy
+        name: mypy
+        entry: uv run mypy
+        language: system
+        types: [python]
+        pass_filenames: false
+
+      # 5. Validates TOML formatting safely
+      - id: check-toml
+        name: check toml
+        entry: uv run python -c "import sys, tomllib; [tomllib.load(open(f, 'rb')) for f in sys.argv[1:]]"
+        language: system
+        files: \.toml$
+
+      # 6. Validates YAML syntax safely
+      - id: check-yaml
+        name: check yaml
+        entry: uv run python -c "import sys, yaml; [yaml.safe_load(open(f)) for f in sys.argv[1:]]"
+        language: system
+        files: \.ya?ml$

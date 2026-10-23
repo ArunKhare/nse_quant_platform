@@ -64,10 +64,13 @@ def test_special_session_excluded_by_default() -> None:
     )
 
     assert calendar.is_trading_day(special_day) is False
-    assert calendar.is_trading_day(
-        special_day,
-        include_special=True,
-    ) is True
+    assert (
+        calendar.is_trading_day(
+            special_day,
+            include_special=True,
+        )
+        is True
+    )
     assert calendar.session_for_date(special_day) is None
 
 

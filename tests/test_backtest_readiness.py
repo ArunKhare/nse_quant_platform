@@ -23,9 +23,10 @@ def test_regime_export_path_uses_hive_partitions():
     )
 
     assert path == Path(
-        "data/exports/underlying=NIFTY/year=2026/month=10/"
-        "market_regime_2026-10-21.parquet"
+        "data/exports/underlying=NIFTY/year=2026/month=10/market_regime_2026-10-21.parquet"
     )
+
+
 def test_build_export_path_uses_hive_partitions():
     path = build_export_path(
         export_dir=Path("data/exports"),
@@ -34,9 +35,9 @@ def test_build_export_path_uses_hive_partitions():
     )
 
     assert path == Path(
-        "data/exports/underlying=NIFTY/year=2026/month=10/"
-        "option_stream_2026-10-21.parquet"
+        "data/exports/underlying=NIFTY/year=2026/month=10/option_stream_2026-10-21.parquet"
     )
+
 
 def write_option_parquet(
     path: Path,
@@ -83,7 +84,7 @@ def test_empty_warehouse_is_not_ready(tmp_path):
     regime_path = tmp_path / "missing_regimes_*.parquet"
     report = evaluate_backtest_readiness(
         warehouse_glob=str(parquet_path),
-        regime_glob = str(regime_path),
+        regime_glob=str(regime_path),
         underlying="NIFTY",
         min_complete_days=1,
         min_iv_rv_aligned_days=1,
@@ -92,10 +93,7 @@ def test_empty_warehouse_is_not_ready(tmp_path):
 
     assert report.ready is False
     assert report.complete_option_days == 0
-    assert any(
-        blocker.startswith("warehouse_empty:")
-        for blocker in report.blockers
-    )
+    assert any(blocker.startswith("warehouse_empty:") for blocker in report.blockers)
 
 
 def test_not_ready_with_insufficient_days(tmp_path):
@@ -105,7 +103,7 @@ def test_not_ready_with_insufficient_days(tmp_path):
 
     report = evaluate_backtest_readiness(
         warehouse_glob=str(parquet_path),
-        regime_glob= str(regime_path),
+        regime_glob=str(regime_path),
         underlying="NIFTY",
         min_complete_days=2,
         min_iv_rv_aligned_days=1,
@@ -115,14 +113,8 @@ def test_not_ready_with_insufficient_days(tmp_path):
     assert report.ready is False
     assert report.complete_option_days == 1
     assert report.iv_rv_aligned_days == 1
-    assert any(
-        blocker.startswith("complete_option_days=")
-        for blocker in report.blockers
-    )
-    assert any(
-        blocker.startswith("regime_days=")
-        for blocker in report.blockers
-    )
+    assert any(blocker.startswith("complete_option_days=") for blocker in report.blockers)
+    assert any(blocker.startswith("regime_days=") for blocker in report.blockers)
 
 
 def test_option_days_are_counted(tmp_path):
@@ -135,7 +127,7 @@ def test_option_days_are_counted(tmp_path):
 
     report = evaluate_backtest_readiness(
         warehouse_glob=str(parquet_path),
-        regime_glob= str(regime_path),
+        regime_glob=str(regime_path),
         underlying="NIFTY",
         min_complete_days=2,
         min_iv_rv_aligned_days=2,
@@ -146,6 +138,7 @@ def test_option_days_are_counted(tmp_path):
     assert report.iv_rv_aligned_days == 2
     assert report.ready is True
     assert report.blockers == []
+
 
 def test_regime_days_are_counted(tmp_path):
     option_path = tmp_path / "option_stream.parquet"
@@ -173,10 +166,7 @@ def test_regime_days_are_counted(tmp_path):
 
     conn = duckdb.connect()
     conn.register("regimes", regime_df)
-    conn.execute(
-        f"COPY regimes TO '{regime_path.as_posix()}' "
-        "(FORMAT PARQUET)"
-    )
+    conn.execute(f"COPY regimes TO '{regime_path.as_posix()}' (FORMAT PARQUET)")
     conn.close()
 
     report = evaluate_backtest_readiness(
@@ -190,6 +180,7 @@ def test_regime_days_are_counted(tmp_path):
 
     assert report.regime_days == 2
     assert report.ready is True
+
 
 def test_export_parquet_writes_selected_day(tmp_path: Path):
     store = DuckDBStore(tmp_path / "test.duckdb")

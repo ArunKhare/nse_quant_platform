@@ -12,9 +12,7 @@ from nse_quant.persistence.duckdb_store import DuckDBStore
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
-        description="Generate a decision-quality report"
-    )
+    parser = argparse.ArgumentParser(description="Generate a decision-quality report")
 
     parser.add_argument("--run-id", default=None)
     parser.add_argument("--from", dest="from_ts", default=None)
@@ -30,9 +28,7 @@ def parse_args() -> argparse.Namespace:
 def main() -> int:
     args = parse_args()
 
-    from_ts = (
-        datetime.fromisoformat(args.from_ts) if args.from_ts else None
-    )
+    from_ts = datetime.fromisoformat(args.from_ts) if args.from_ts else None
     to_ts = datetime.fromisoformat(args.to_ts) if args.to_ts else None
 
     store = DuckDBStore(read_only=True)

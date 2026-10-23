@@ -55,6 +55,7 @@ def test_enforced_mode_passes_sufficient_rank():
     assert result.passed
     assert result.details["mode"] == "ENFORCED"
 
+
 def test_atm_iv_observation_is_derived():
     rows = [
         (
@@ -121,6 +122,7 @@ def test_iv_is_computed_for_atm_call():
     assert iv is not None
     assert 0.01 < iv < 5.0
 
+
 def test_write_option_stream_computes_iv(
     test_store,
     snapshot_factory,
@@ -152,9 +154,4 @@ def test_write_option_stream_computes_iv(
     assert len(rows) == 2
     assert all(row[0] is not None for row in rows)
 
-    assert (
-        test_store.count_underlying_iv_observations(
-            underlying="NIFTY"
-        )
-        == 1
-    )
+    assert test_store.count_underlying_iv_observations(underlying="NIFTY") == 1

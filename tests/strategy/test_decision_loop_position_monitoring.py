@@ -29,10 +29,8 @@ def test_open_position_is_marked_and_exit_evaluated(
 
     outcomes = second["position_outcomes"]
     assert outcomes
-    assert strategy_position_id in [
-        outcome["strategy_position_id"]
-        for outcome in outcomes
-    ]
+    assert strategy_position_id in [outcome["strategy_position_id"] for outcome in outcomes]
+
 
 def test_position_closes_when_exit_triggers(
     decision_loop_environment,
@@ -49,14 +47,12 @@ def test_position_closes_when_exit_triggers(
     result = loop.run_once()
 
     outcomes = result["position_outcomes"]
-    closed = [
-        outcome
-        for outcome in outcomes
-        if outcome["status"] == "closed"
-    ]
+    closed = [outcome for outcome in outcomes if outcome["status"] == "closed"]
 
     assert closed
     assert closed[0]["selected_exit_reason"] is not None
+
+
 def test_new_entry_blocked_at_max_open_positions(
     decision_loop_environment,
     entry_snapshots,
@@ -94,9 +90,9 @@ def test_new_entry_blocked_at_max_open_positions(
 
     first = loop.run_once()
     print(
-    "EXIT SETTINGS:",
-    loop.exit_engine.exit_settings,
-)
+        "EXIT SETTINGS:",
+        loop.exit_engine.exit_settings,
+    )
     print("FIRST:", first["status"])
     print("FIRST EXIT:", first.get("exit_reason"))
 
@@ -107,31 +103,27 @@ def test_new_entry_blocked_at_max_open_positions(
     assert first.get("exit_reason") is None
     assert len(open_after_first) == 1
     print(
-    "SECOND SNAPSHOT:",
-    entry_snapshots["snapshots"][1].quotes[0].iv,
-)
+        "SECOND SNAPSHOT:",
+        entry_snapshots["snapshots"][1].quotes[0].iv,
+    )
     second = loop.run_once()
     print(
-    "EXIT SETTINGS:",
-    loop.exit_engine.exit_settings,
-)
+        "EXIT SETTINGS:",
+        loop.exit_engine.exit_settings,
+    )
     print("SECOND:", second["status"])
     print("SECOND OUTCOMES:", second["position_outcomes"])
 
     assert second["status"] == "max_open_positions"
     second_snapshot = entry_snapshots["snapshots"][1]
-    assert any(
-        quote.iv is not None
-        for quote in second_snapshot.quotes
-    )
+    assert any(quote.iv is not None for quote in second_snapshot.quotes)
+
 
 def test_run_once_persists_chain_snapshot(
     decision_loop_environment,
     replay_snapshots,
 ):
-    provider = ReplayMarketDataProvider(
-        replay_snapshots["snapshots"]
-    )
+    provider = ReplayMarketDataProvider(replay_snapshots["snapshots"])
 
     loop = decision_loop_environment.build_loop(
         provider,
@@ -140,20 +132,17 @@ def test_run_once_persists_chain_snapshot(
 
     result = loop.run_once()
 
-    rows = loop.store.conn.execute(
-        "SELECT COUNT(*) FROM option_stream"
-    ).fetchone()[0]
+    rows = loop.store.conn.execute("SELECT COUNT(*) FROM option_stream").fetchone()[0]
 
     assert rows > 0
     assert result["persisted_option_rows"] > 0
+
 
 def test_missing_regime_policy_blocks_new_entry(
     decision_loop_environment,
     replay_snapshots,
 ):
-    provider = ReplayMarketDataProvider(
-        replay_snapshots["snapshots"]
-    )
+    provider = ReplayMarketDataProvider(replay_snapshots["snapshots"])
 
     loop = decision_loop_environment.build_loop(
         provider,
@@ -166,6 +155,7 @@ def test_missing_regime_policy_blocks_new_entry(
 
     assert result["status"] == "regime_policy_rejected"
 
+
 def test_ready_policy_allows_matching_regime() -> None:
     policy = {
         "allowed_regimes": {"RANGE|HIGH"},
@@ -174,14 +164,17 @@ def test_ready_policy_allows_matching_regime() -> None:
     }
 
     current_regime = "RANGE|HIGH"
+    allowed_regimes = policy["allowed_regimes"]
+    assert isinstance(allowed_regimes, set)
 
     policy_allows = (
         policy is not None
         and policy["selection_status"] == "READY"
-        and current_regime in policy["allowed_regimes"]
+        and current_regime in allowed_regimes
     )
 
     assert policy_allows is True
+
 
 def test_position_closes_on_iv_collapse(
     decision_loop_environment,
@@ -209,8 +202,4 @@ def test_position_closes_on_iv_collapse(
 
     assert outcomes
     assert outcomes[0]["status"] == "closed"
-    assert (
-        outcomes[0]["selected_exit_reason"]
-        == "IV_COLLAPSE"
-    )
-
+    assert outcomes[0]["selected_exit_reason"] == "IV_COLLAPSE"

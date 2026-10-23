@@ -50,20 +50,17 @@ class SpotFeatureGate:
             return FeatureGateResult(False, reasons, checks)
 
         age = datetime.now(UTC) - snapshot.ts.tz_convert(UTC)
-        checks["feature_snapshot_fresh"] = (
-            age <= timedelta(seconds=self._max_age_seconds)
-        )
+        checks["feature_snapshot_fresh"] = age <= timedelta(seconds=self._max_age_seconds)
 
         if not checks["feature_snapshot_fresh"]:
             reasons.append("spot_features_stale")
 
         rv = snapshot.rv_1m_30
-        if rv is not None and rv <=0:
+        if rv is not None and rv <= 0:
             rv = None
         checks["realized_vol_available"] = rv is not None
         checks["realized_vol_in_range"] = (
-            rv is not None
-            and self._min_realized_vol <= rv <= self._max_realized_vol
+            rv is not None and self._min_realized_vol <= rv <= self._max_realized_vol
         )
         if not checks["realized_vol_in_range"]:
             reasons.append("realized_vol_out_of_range")
@@ -79,8 +76,7 @@ class SpotFeatureGate:
         else:
             checks["vwap_distance_available"] = vwap_distance is not None
             checks["vwap_distance_acceptable"] = (
-                vwap_distance is not None
-                and abs(vwap_distance) <= self._max_vwap_distance
+                vwap_distance is not None and abs(vwap_distance) <= self._max_vwap_distance
             )
 
             if not checks["vwap_distance_acceptable"]:
@@ -89,9 +85,7 @@ class SpotFeatureGate:
         trend_15m = snapshot.trend_15m
         trend_60m = snapshot.trend_60m
 
-        checks["trend_context_available"] = (
-            trend_15m is not None and trend_60m is not None
-        )
+        checks["trend_context_available"] = trend_15m is not None and trend_60m is not None
 
         if self._require_trend_alignment:
             checks["trend_aligned"] = (
@@ -117,11 +111,7 @@ class SpotFeatureGate:
         if self._require_trend_alignment:
             required_checks.add("trend_aligned")
 
-        passed = all(
-            value
-            for key, value in checks.items()
-            if key in required_checks
-        )
+        passed = all(value for key, value in checks.items() if key in required_checks)
 
         return FeatureGateResult(
             passed=passed,

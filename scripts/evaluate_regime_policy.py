@@ -13,9 +13,7 @@ from nse_quant.research.regime_policy_evaluation import evaluate_regime_policy, 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description=(
-            "Evaluate the configured regime policy for a strategy"
-        )
+        description=("Evaluate the configured regime policy for a strategy")
     )
 
     parser.add_argument("--symbol", default="NIFTY")

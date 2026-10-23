@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 from datetime import UTC, datetime
+from typing import Any
 
 from nse_quant.core.settings import get_settings
 from nse_quant.persistence.duckdb_store import DuckDBStore
@@ -27,13 +28,18 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def load_json(value: object) -> object:
+def load_json(value: object) -> dict[str, Any]:
     if isinstance(value, str):
         try:
-            return json.loads(value)
+            parsed = json.loads(value)
         except json.JSONDecodeError:
-            return value
-    return value
+            raise ValueError("Decision payload is not valid JSON") from None
+    else:
+        parsed = value
+
+    if not isinstance(parsed, dict):
+        raise ValueError("Decision payload must be a JSON object")
+    return parsed
 
 
 def latest_decision(
@@ -140,10 +146,7 @@ def main() -> int:
 
         for gate in data.get("gates", []):
             status = "PASS" if gate.get("passed") else "FAIL"
-            print(
-                f"{status} {gate.get('gate')}: "
-                f"{gate.get('reason')}"
-            )
+            print(f"{status} {gate.get('gate')}: {gate.get('reason')}")
 
         proposal = data.get("proposal")
         if proposal:
@@ -156,9 +159,7 @@ def main() -> int:
                 proposal.get("metadata", {}).get("net_credit"),
             )
 
-        expected = (
-            data.get("proposal", {}).get("metadata", {})
-        )
+        expected = data.get("proposal", {}).get("metadata", {})
         print(f"Expected move: {expected.get('expected_move_points')}")
     else:
         print("No signal decision found.")
@@ -178,7 +179,7 @@ def main() -> int:
         data = load_json(diagnostics_row[1])
         gates = data.get("gates", [])
 
-        diagnostics = next(
+        diagnostics: dict[str, Any] = next(
             (
                 gate.get("details", {}).get("diagnostics", {})
                 for gate in gates
@@ -224,9 +225,7 @@ def main() -> int:
     print_header("Paper execution counts")
     for table in ["orders", "positions", "risk_decisions", "exit_events"]:
         try:
-            count = store.conn.execute(
-                f"SELECT COUNT(*) FROM {table}"
-            ).fetchone()[0]
+            count = store.conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
             print(f"{table}: {count}")
         except Exception as exc:  # noqa: BLE001
             print(f"{table}: unavailable ({exc})")

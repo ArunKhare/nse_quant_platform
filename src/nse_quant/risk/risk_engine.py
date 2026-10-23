@@ -89,9 +89,7 @@ class RiskEngine:
             (leg.lots for leg in proposal.legs),
             default=0,
         )
-        lots_ok = (
-            0 < max_lots <= regime_limits.max_lots_per_order
-        )
+        lots_ok = 0 < max_lots <= regime_limits.max_lots_per_order
 
         checks.append(
             GateResult(
@@ -108,13 +106,8 @@ class RiskEngine:
         if not lots_ok:
             reasons.append("regime_max_lots_exceeded")
 
-        notional = sum(
-            abs(leg.quantity) * features.spot / 10
-            for leg in proposal.legs
-        )
-        notional_ok = (
-            notional <= regime_limits.max_notional_exposure
-        )
+        notional = sum(abs(leg.quantity) * features.spot / 10 for leg in proposal.legs)
+        notional_ok = notional <= regime_limits.max_notional_exposure
 
         checks.append(
             GateResult(
@@ -233,9 +226,7 @@ class RiskEngine:
         checks: list[GateResult],
         reasons: list[str],
     ) -> None:
-        notional = sum(
-            abs(leg.quantity) * features.spot / 10 for leg in proposal.legs
-        )
+        notional = sum(abs(leg.quantity) * features.spot / 10 for leg in proposal.legs)
         passed = notional <= self.limits.max_notional_exposure
 
         checks.append(
@@ -259,12 +250,8 @@ class RiskEngine:
         checks: list[GateResult],
         reasons: list[str],
     ) -> None:
-        short_legs = [
-            leg for leg in proposal.legs if leg.side.value == "SELL"
-        ]
-        long_legs = [
-            leg for leg in proposal.legs if leg.side.value == "BUY"
-        ]
+        short_legs = [leg for leg in proposal.legs if leg.side.value == "SELL"]
+        long_legs = [leg for leg in proposal.legs if leg.side.value == "BUY"]
 
         passed = len(short_legs) == 0 or len(long_legs) >= len(short_legs)
 

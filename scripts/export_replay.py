@@ -10,9 +10,7 @@ from nse_quant.persistence.duckdb_store import DuckDBStore
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
-        description="Export NSE chain snapshots for replay"
-    )
+    parser = argparse.ArgumentParser(description="Export NSE chain snapshots for replay")
 
     parser.add_argument(
         "--underlying",
@@ -41,11 +39,7 @@ def parse_args() -> argparse.Namespace:
         help="End datetime in ISO format, e.g. 2026-10-16T15:30:00+05:30",
     )
 
-    default_output = (
-        "data/replays/"
-        f"{datetime.now(UTC).strftime('%Y%m%d_%H%M%S')}"
-        "_replay.json"
-    )
+    default_output = f"data/replays/{datetime.now(UTC).strftime('%Y%m%d_%H%M%S')}_replay.json"
 
     parser.add_argument(
         "--output",
@@ -60,14 +54,10 @@ def main() -> int:
     args = parse_args()
 
     if args.minutes is None and not (args.from_dt and args.to_dt):
-        raise SystemExit(
-            "Provide either --minutes or both --from and --to"
-        )
+        raise SystemExit("Provide either --minutes or both --from and --to")
 
     if args.minutes is not None and (args.from_dt or args.to_dt):
-        raise SystemExit(
-            "Use either --minutes or --from/--to, not both"
-        )
+        raise SystemExit("Use either --minutes or --from/--to, not both")
 
     store = DuckDBStore(read_only=True)
     exporter = ReplayExporter(store)

@@ -60,16 +60,10 @@ class ExitEngine:
         current_price = strategy_position.current_price
 
         if current_price is not None:
-            if (
-                proposal.stop_loss_price is not None
-                and current_price >= proposal.stop_loss_price
-            ):
+            if proposal.stop_loss_price is not None and current_price >= proposal.stop_loss_price:
                 triggered.append(ExitReason.STOP_LOSS)
 
-            if (
-                proposal.target_price is not None
-                and current_price <= proposal.target_price
-            ):
+            if proposal.target_price is not None and current_price <= proposal.target_price:
                 triggered.append(ExitReason.TARGET_PROFIT)
 
         exit_settings = self.exit_settings
@@ -93,8 +87,7 @@ class ExitEngine:
             features.expected_move_points is not None
             and proposal.expected_move_points is not None
             and features.expected_move_points
-            > proposal.expected_move_points
-            * exit_settings.expected_move_violation_buffer
+            > proposal.expected_move_points * exit_settings.expected_move_violation_buffer
         ):
             triggered.append(ExitReason.EXPECTED_MOVE_VIOLATION)
 

@@ -15,10 +15,6 @@ print(
 )
 
 print("\nOverall range:")
-print(
-    store.conn.execute(
-        "SELECT MIN(ts), MAX(ts), COUNT(*) FROM option_stream"
-    ).fetchone()
-)
+print(store.conn.execute("SELECT MIN(ts), MAX(ts), COUNT(*) FROM option_stream").fetchone())
 
 store.close()

@@ -98,9 +98,7 @@ def safety_banner(snapshot: dict[str, Any]) -> html.Div:
         eligibility_label = "ELIGIBLE"
         eligibility_color = GREEN
     elif eligibility_passed is False:
-        eligibility_label = str(
-            eligibility_reason or "REJECTED"
-        ).upper()
+        eligibility_label = str(eligibility_reason or "REJECTED").upper()
         eligibility_color = RED
     else:
         eligibility_label = "UNKNOWN"
@@ -169,15 +167,14 @@ def safety_banner(snapshot: dict[str, Any]) -> html.Div:
         },
     )
 
+
 def strategy_eligibility_section(
     snapshot: dict[str, Any],
 ) -> html.Div:
     eligibility = snapshot.get("strategy_eligibility")
 
     if not eligibility:
-        return empty_state(
-            "No strategy eligibility evaluation available yet."
-        )
+        return empty_state("No strategy eligibility evaluation available yet.")
 
     details = eligibility.get("details") or {}
     reason = eligibility.get("reason", "—")
@@ -187,12 +184,7 @@ def strategy_eligibility_section(
     iv_rank = details.get("iv_rank")
 
     regime_list = (
-        html.Ul(
-            [
-                html.Li(str(regime).replace("_", " "))
-                for regime in allowed_regimes
-            ]
-        )
+        html.Ul([html.Li(str(regime).replace("_", " ")) for regime in allowed_regimes])
         if allowed_regimes
         else empty_state("No allowed regimes configured.")
     )
@@ -239,6 +231,7 @@ def strategy_eligibility_section(
         ]
     )
 
+
 def data_quality_section(snapshot: dict[str, Any]) -> html.Div:
     quality = snapshot.get("data_quality", {})
 
@@ -247,7 +240,16 @@ def data_quality_section(snapshot: dict[str, Any]) -> html.Div:
 
     if not issues and not warnings:
         return html.Div("Market data quality is healthy.")
-    
+
+    return html.Div(
+        [
+            html.H3("Market data quality"),
+            html.Ul([html.Li(str(issue)) for issue in issues]),
+            html.Ul([html.Li(str(warning)) for warning in warnings]),
+        ]
+    )
+
+
 def metric_card(
     label: str,
     value: Any,
@@ -304,9 +306,7 @@ def market_metric_cards(snapshot: dict[str, Any]) -> html.Div:
 
     iv_rank = features.get("iv_rank")
     iv_rank_color = (
-        GREEN
-        if iv_rank is not None and iv_rank >= settings.analytics.min_iv_rank
-        else AMBER
+        GREEN if iv_rank is not None and iv_rank >= settings.analytics.min_iv_rank else AMBER
     )
 
     expected_move = features.get("expected_move_points")
@@ -434,15 +434,9 @@ def data_table(
                         "padding": "10px 12px",
                         "borderBottom": f"1px solid {CARD_BORDER}",
                         "fontFamily": (
-                            "Consolas, monospace"
-                            if isinstance(cell, (int, float))
-                            else "inherit"
+                            "Consolas, monospace" if isinstance(cell, (int, float)) else "inherit"
                         ),
-                        "textAlign": (
-                            "right"
-                            if isinstance(cell, (int, float))
-                            else "left"
-                        ),
+                        "textAlign": ("right" if isinstance(cell, (int, float)) else "left"),
                         "color": TEXT_PRIMARY,
                     },
                 )
@@ -476,7 +470,7 @@ def empty_state(message: str) -> html.Div:
     )
 
 
-def market_features_table(snapshot: dict[str, Any]) -> html.Div:
+def market_features_table(snapshot: dict[str, Any]) -> html.Div | html.Table:
     features = snapshot.get("features")
 
     if not features:
@@ -506,11 +500,7 @@ def iv_smile_figure(snapshot: dict[str, Any]) -> go.Figure:
     figure = go.Figure()
 
     for option_type, color in (("CE", GREEN), ("PE", RED)):
-        selected = [
-            row
-            for row in smile_rows
-            if row.get("option_type") == option_type
-        ]
+        selected = [row for row in smile_rows if row.get("option_type") == option_type]
 
         figure.add_trace(
             go.Scatter(
@@ -550,7 +540,7 @@ def iv_smile_figure(snapshot: dict[str, Any]) -> go.Figure:
     return figure
 
 
-def positions_table(snapshot: dict[str, Any]) -> html.Div:
+def positions_table(snapshot: dict[str, Any]) -> html.Div | html.Table:
     positions = snapshot.get("open_positions", [])
 
     if not positions:
@@ -668,9 +658,7 @@ app.layout = html.Div(
         html.Div(id="market-metrics"),
         section_card(
             "Strategy eligibility",
-            html.Div(
-                id="strategy-eligibility"
-            ),
+            html.Div(id="strategy-eligibility"),
             "Latest iron_condor_monitor regime and IV-rank eligibility",
         ),
         html.Div(id="data-quality"),

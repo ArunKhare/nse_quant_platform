@@ -42,6 +42,7 @@ def make_candles(ts_values: list[str], close: float) -> pd.DataFrame:
         }
     )
 
+
 def test_higher_timeframe_feature_available_only_after_close() -> None:
     minute = make_candles(
         [

@@ -69,7 +69,6 @@ def test_paper_flow_persists_full_lifecycle(tmp_path, seed_spot_features):
         settings=get_settings(),
         spot_instrument_token_resolver=lambda symbol: 256265,
         live_snapshot_path=live_snapshot_path,
-
     )
     loop.settings.research.enforce_strategy_eligibility = False
     result = loop.run_once()
@@ -81,19 +80,13 @@ def test_paper_flow_persists_full_lifecycle(tmp_path, seed_spot_features):
         "paper_filled",
     }
 
-    feature_count_row = store.conn.execute(
-        "SELECT COUNT(*) FROM feature_snapshots"
-    ).fetchone()
+    feature_count_row = store.conn.execute("SELECT COUNT(*) FROM feature_snapshots").fetchone()
     feature_count = feature_count_row[0] if feature_count_row is not None else 0
 
-    decision_count_row = store.conn.execute(
-        "SELECT COUNT(*) FROM decisions"
-    ).fetchone()
+    decision_count_row = store.conn.execute("SELECT COUNT(*) FROM decisions").fetchone()
     decision_count = decision_count_row[0] if decision_count_row is not None else 0
 
-    gate_count_row = store.conn.execute(
-        "SELECT COUNT(*) FROM gate_results"
-    ).fetchone()
+    gate_count_row = store.conn.execute("SELECT COUNT(*) FROM gate_results").fetchone()
     gate_count = gate_count_row[0] if gate_count_row is not None else 0
 
     assert feature_count == 1
@@ -149,11 +142,9 @@ def test_dry_run_does_not_create_paper_order(tmp_path, seed_spot_features):
     result = loop.run_once()
 
     if result["status"] == "dry_run":
-        order_count_row = store.conn.execute(
-            "SELECT COUNT(*) FROM orders"
-        ).fetchone()
+        order_count_row = store.conn.execute("SELECT COUNT(*) FROM orders").fetchone()
         order_count = order_count_row[0] if order_count_row is not None else 0
         assert order_count == 0
-        assert broker.positions == []
+        assert broker.positions() == []
 
     store.close()

@@ -55,13 +55,14 @@ class SyntheticProvider:
             quotes=quotes,
         )
 
+
 def test_decision_loop_persists_feature_and_decision(
     tmp_path,
     seed_spot_features,
 ):
     store = DuckDBStore(tmp_path / "loop.duckdb")
     seed_spot_features(store)
-    settings= get_settings()
+    settings = get_settings()
     settings.research.enforce_feature_availability = False
     live_snapshot_path = tmp_path / "live_snapshot.json"
     loop = DecisionLoop(
@@ -76,20 +77,22 @@ def test_decision_loop_persists_feature_and_decision(
     loop.settings.research.enforce_strategy_eligibility = False
     try:
         result = loop.run_once()
-        assert result["status"] in {"no_proposal", "risk_rejected", "dry_run",  "strategy_eligibility_rejected",}
+        assert result["status"] in {
+            "no_proposal",
+            "risk_rejected",
+            "dry_run",
+            "strategy_eligibility_rejected",
+        }
 
-        feature_count = store.conn.execute(
-            "SELECT COUNT(*) FROM feature_snapshots"
-        ).fetchone()[0]
+        feature_count = store.conn.execute("SELECT COUNT(*) FROM feature_snapshots").fetchone()[0]
 
-        decision_count = store.conn.execute(
-            "SELECT COUNT(*) FROM decisions"
-        ).fetchone()[0]
+        decision_count = store.conn.execute("SELECT COUNT(*) FROM decisions").fetchone()[0]
 
         assert feature_count == 1
         assert decision_count >= 1
     finally:
         store.close()
+
 
 def test_feature_gate_rejection_does_not_call_chain_provider(
     decision_loop,

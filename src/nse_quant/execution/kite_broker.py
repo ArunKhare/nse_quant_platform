@@ -26,21 +26,13 @@ class KiteBroker(BrokerInterface):
         )
 
     def modify_order(self, order_id: str, payload: dict[str, object]) -> None:
-        raise LiveTradingDisabledError(
-            "Live Kite order modification is disabled in v0.3.0."
-        )
+        raise LiveTradingDisabledError("Live Kite order modification is disabled in v0.3.0.")
 
     def cancel_order(self, order_id: str) -> None:
-        raise LiveTradingDisabledError(
-            "Live Kite order cancellation is disabled in v0.3.0."
-        )
+        raise LiveTradingDisabledError("Live Kite order cancellation is disabled in v0.3.0.")
 
     def positions(self) -> list[PaperPosition]:
-        raise LiveTradingDisabledError(
-            "Live Kite position access is disabled in v0.3.0."
-        )
+        raise LiveTradingDisabledError("Live Kite position access is disabled in v0.3.0.")
 
     def order_status(self, order_id: str) -> OrderStatus:
-        raise LiveTradingDisabledError(
-            "Live Kite order-status access is disabled in v0.3.0."
-        )
+        raise LiveTradingDisabledError("Live Kite order-status access is disabled in v0.3.0.")

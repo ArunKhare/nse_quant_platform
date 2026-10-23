@@ -18,10 +18,7 @@ def main() -> int:
     parser.add_argument("--symbol", default="NIFTY")
     parser.add_argument(
         "--output",
-        default=(
-            "data/research/milestone2/"
-            "single_expiry_iv_snapshots_NIFTY.csv"
-        ),
+        default=("data/research/milestone2/single_expiry_iv_snapshots_NIFTY.csv"),
     )
     args = parser.parse_args()
 
@@ -35,48 +32,31 @@ def main() -> int:
     if report.empty:
         raise SystemExit("No valid IV observations found")
 
-    daily = (
-        report.groupby("trade_date", as_index=False)
-        .agg(
-            underlying=("underlying", "first"),
-            expiry=("expiry", "first"),
-            median_spot=("spot", "median"),
-            median_atm_iv=("atm_iv", "median"),
-            mean_atm_iv=("atm_iv", "mean"),
-            min_atm_iv=("atm_iv", "min"),
-            max_atm_iv=("atm_iv", "max"),
-            median_put_call_skew=(
-                "put_call_skew", "median"
-            ),
-            median_risk_reversal=(
-                "risk_reversal_25d", "median"
-            ),
-            median_butterfly=(
-                "butterfly_25d", "median"
-            ),
-            snapshots=("ts", "nunique"),
-        )
+    daily = report.groupby("trade_date", as_index=False).agg(
+        underlying=("underlying", "first"),
+        expiry=("expiry", "first"),
+        median_spot=("spot", "median"),
+        median_atm_iv=("atm_iv", "median"),
+        mean_atm_iv=("atm_iv", "mean"),
+        min_atm_iv=("atm_iv", "min"),
+        max_atm_iv=("atm_iv", "max"),
+        median_put_call_skew=("put_call_skew", "median"),
+        median_risk_reversal=("risk_reversal_25d", "median"),
+        median_butterfly=("butterfly_25d", "median"),
+        snapshots=("ts", "nunique"),
     )
-
 
     output = Path(args.output)
 
-    daily_path = output.with_name(
-        output.name.replace(
-            "snapshots", "daily"
-        )
-    )
+    daily_path = output.with_name(output.name.replace("snapshots", "daily"))
 
     daily_path.parent.mkdir(parents=True, exist_ok=True)
 
     daily.to_csv(daily_path, index=False)
 
-    print(
-        f"Built {len(daily)} single-expiry IV snapshots "
-        f"for {args.symbol}"
-    )
+    print(f"Built {len(daily)} single-expiry IV snapshots for {args.symbol}")
     print(f"Saved daily summary: {daily_path}")
-    
+
     return 0
 
 

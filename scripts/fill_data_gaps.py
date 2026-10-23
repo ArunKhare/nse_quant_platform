@@ -26,9 +26,7 @@ KITE_INTERVALS = {
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
-        description="Identify and fill historical spot-candle gaps"
-    )
+    parser = argparse.ArgumentParser(description="Identify and fill historical spot-candle gaps")
 
     parser.add_argument(
         "--symbol",
@@ -62,8 +60,7 @@ def parse_args() -> argparse.Namespace:
         type=int,
         default=1,
         help=(
-            "Minimum expected candles per trading day; days below this "
-            "are treated as incomplete"
+            "Minimum expected candles per trading day; days below this are treated as incomplete"
         ),
     )
 
@@ -105,9 +102,7 @@ def main() -> int:
     provider.underlying = args.symbol
 
     try:
-        spot_token = provider.resolve_spot_instrument_token(
-            args.symbol
-        )
+        spot_token = provider.resolve_spot_instrument_token(args.symbol)
 
         print(
             "Spot instrument token:",
@@ -152,16 +147,10 @@ def main() -> int:
             candle_count = existing.get(trading_day, 0)
 
             if candle_count >= args.min_candles:
-                print(
-                    f"{trading_day}: OK "
-                    f"({candle_count} {args.interval} candles)"
-                )
+                print(f"{trading_day}: OK ({candle_count} {args.interval} candles)")
                 continue
 
-            print(
-                f"{trading_day}: GAP "
-                f"({candle_count} {args.interval} candles found)"
-            )
+            print(f"{trading_day}: GAP ({candle_count} {args.interval} candles found)")
 
             from_dt = datetime.combine(
                 trading_day,
@@ -183,15 +172,11 @@ def main() -> int:
                     to_dt=to_dt,
                 )
             except Exception as exc:  # noqa: BLE001
-                print(
-                    f"{trading_day}: Kite download failed: {exc}"
-                )
+                print(f"{trading_day}: Kite download failed: {exc}")
                 continue
 
             if not candles:
-                print(
-                    f"{trading_day}: No historical candles returned by Kite"
-                )
+                print(f"{trading_day}: No historical candles returned by Kite")
                 continue
 
             rows_written = store.write_spot_candles(
@@ -203,10 +188,7 @@ def main() -> int:
 
             repaired_dates.append(trading_day)
 
-            print(
-                f"{trading_day}: downloaded={len(candles)} "
-                f"persisted={rows_written}"
-            )
+            print(f"{trading_day}: downloaded={len(candles)} persisted={rows_written}")
 
         print()
         print("Gap-fill summary")

@@ -32,16 +32,20 @@ def _as_json_object(value: Any) -> Any:
     except (TypeError, json.JSONDecodeError):
         return {}
 
+
 class DuckDBStore:
     """Owns the DuckDB connection and schema."""
 
-    def __init__(self, path: str | Path | None = None,*, read_only:bool = False) -> None:
+    def __init__(self, path: str | Path | None = None, *, read_only: bool = False) -> None:
         settings = get_settings()
         self.path = Path(path or settings.storage.db_path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.history_limit = settings.evidence.plugins.multi_timeframe.history_limit
-        self.conn = duckdb.connect(str(self.path), read_only=read_only,)
-        self.conn.execute(  f"SET memory_limit = '{settings.storage.db_memory_limit}'")
+        self.conn = duckdb.connect(
+            str(self.path),
+            read_only=read_only,
+        )
+        self.conn.execute(f"SET memory_limit = '{settings.storage.db_memory_limit}'")
         self.conn.execute(f"SET threads = {settings.storage.db_threads}")
         if not read_only:
             self._create_schema()
@@ -401,7 +405,7 @@ class DuckDBStore:
             """
         self.conn.execute(IV_OBSERVATIONS_SQL)
 
-        DAILY_IV= """
+        DAILY_IV = """
             CREATE TABLE IF NOT EXISTS daily_rv_observations (
                 symbol VARCHAR NOT NULL,
                 trading_date DATE NOT NULL,
@@ -549,11 +553,7 @@ class DuckDBStore:
         snapshot: ChainSnapshot,
         rows: list[tuple[Any, ...]],
     ) -> None:
-        valid_ivs = [
-            (row[4], row[15])
-            for row in rows
-            if row[15] is not None
-        ]
+        valid_ivs = [(row[4], row[15]) for row in rows if row[15] is not None]
 
         if not valid_ivs or snapshot.spot is None:
             return
@@ -563,11 +563,7 @@ class DuckDBStore:
             key=lambda item: abs(item[0] - snapshot.spot),
         )[0]
 
-        atm_ivs = [
-            iv
-            for strike, iv in valid_ivs
-            if strike == atm_strike
-        ]
+        atm_ivs = [iv for strike, iv in valid_ivs if strike == atm_strike]
 
         if not atm_ivs:
             return
@@ -676,6 +672,7 @@ class DuckDBStore:
         )
 
         return output_path
+
     def write_spot_candles(
         self,
         candles: list[dict[str, Any]],
@@ -813,7 +810,6 @@ class DuckDBStore:
         reasons: list[str],
         checks: dict[str, bool],
     ) -> None:
-
         self.conn.execute(
             """
             INSERT OR REPLACE INTO gate_results VALUES (
@@ -832,6 +828,7 @@ class DuckDBStore:
                 json.dumps(checks),
             ],
         )
+
     def write_feature_availability_result(
         self,
         gate_result_id: str,
@@ -872,7 +869,6 @@ class DuckDBStore:
         regime: str,
         features: dict[str, Any],
     ) -> None:
-
         self.conn.execute(
             """
             INSERT OR REPLACE INTO market_regimes VALUES (
@@ -922,6 +918,7 @@ class DuckDBStore:
             "regime": row[3],
             "features": json.loads(row[4]) if row[4] else {},
         }
+
     def save_regime_policy(
         self,
         *,
@@ -1002,7 +999,7 @@ class DuckDBStore:
 
             if row is None:
                 return None
-            status = 'STALE'
+            status = "STALE"
 
         allowed_regimes = _as_json_object(row[1])
         risk_limits = _as_json_object(row[4])
@@ -1012,18 +1009,10 @@ class DuckDBStore:
 
         return {
             "policy_id": row[0],
-            "allowed_regimes": set(
-                allowed_regimes
-                if isinstance(allowed_regimes, list)
-                else []
-            ),
+            "allowed_regimes": set(allowed_regimes if isinstance(allowed_regimes, list) else []),
             "selection_status": status,
             "test_end": row[3],
-            "risk_limits": (
-                risk_limits
-                if isinstance(risk_limits, dict)
-                else {}
-            ),
+            "risk_limits": (risk_limits if isinstance(risk_limits, dict) else {}),
         }
 
     def write_underlying_iv_observation(
@@ -1090,7 +1079,8 @@ class DuckDBStore:
             query += " AND expiry = ?"
             params.append(expiry)
 
-        return self.conn.execute(query, params).fetchone()[0]
+        row = self.conn.execute(query, params).fetchone()
+        return row[0] if row is not None else 0
 
     def count_aligned_iv_rv_observations(
         self,
@@ -1126,7 +1116,6 @@ class DuckDBStore:
         rv: float,
         observation_count: int,
     ) -> int:
-
         self.conn.execute(
             """
             INSERT OR REPLACE INTO daily_rv_observations VALUES (
@@ -1235,11 +1224,7 @@ class DuckDBStore:
             "trend_regime": row[1],
             "volatility_regime": row[2],
             "iv_regime": row[3],
-            "features": (
-                json.loads(row[4])
-                if row[4]
-                else {}
-            ),
+            "features": (json.loads(row[4]) if row[4] else {}),
         }
 
     def refresh_latest_spot_feature(
@@ -1299,9 +1284,7 @@ class DuckDBStore:
         range_position_60m = None
 
         if len(closes) >= 2 and closes[-2]:
-            return_1m = (
-                closes[-1] / closes[-2]
-            ) - 1
+            return_1m = (closes[-1] / closes[-2]) - 1
 
         if len(closes) >= 3:
             returns = [
@@ -1313,14 +1296,9 @@ class DuckDBStore:
             if len(returns) >= 2:
                 mean_return = sum(returns) / len(returns)
 
-                variance = sum(
-                    (value - mean_return) ** 2
-                    for value in returns
-                ) / (len(returns) - 1)
+                variance = sum((value - mean_return) ** 2 for value in returns) / (len(returns) - 1)
 
-                rv_1m_30 = (variance ** 0.5) * (
-                    (252 * 375) ** 0.5
-                )
+                rv_1m_30 = (variance**0.5) * ((252 * 375) ** 0.5)
 
         if len(rows) >= 2:
             true_ranges = []
@@ -1341,56 +1319,37 @@ class DuckDBStore:
             recent_true_ranges = true_ranges[-14:]
 
             if recent_true_ranges:
-                atr_1m_14 = (
-                    sum(recent_true_ranges)
-                    / len(recent_true_ranges)
-                )
+                atr_1m_14 = sum(recent_true_ranges) / len(recent_true_ranges)
 
         if latest_volume > 0:
             weighted_prices = []
 
             for index in range(len(rows)):
-                typical_price = (
-                    highs[index]
-                    + lows[index]
-                    + closes[index]
-                ) / 3
+                typical_price = (highs[index] + lows[index] + closes[index]) / 3
 
-                weighted_prices.append(
-                    typical_price * volumes[index]
-                )
+                weighted_prices.append(typical_price * volumes[index])
 
             total_volume = sum(volumes)
 
             if total_volume > 0:
-                vwap_1m = (
-                    sum(weighted_prices) / total_volume
-                )
+                vwap_1m = sum(weighted_prices) / total_volume
 
-                vwap_distance_1m = (
-                    latest_close - vwap_1m
-                ) / vwap_1m
+                vwap_distance_1m = (latest_close - vwap_1m) / vwap_1m
 
         if len(volumes) >= 2:
             recent_volumes = volumes[-30:]
 
-            mean_volume = (
-                sum(recent_volumes) / len(recent_volumes)
-            )
+            mean_volume = sum(recent_volumes) / len(recent_volumes)
 
             if mean_volume > 0:
-                variance = sum(
-                    (value - mean_volume) ** 2
-                    for value in recent_volumes
-                ) / len(recent_volumes)
+                variance = sum((value - mean_volume) ** 2 for value in recent_volumes) / len(
+                    recent_volumes
+                )
 
-                std_volume = variance ** 0.5
+                std_volume = variance**0.5
 
                 if std_volume > 0:
-                    volume_zscore_1m_30 = (
-                        (latest_volume - mean_volume)
-                        / std_volume
-                    )
+                    volume_zscore_1m_30 = (latest_volume - mean_volume) / std_volume
 
         if len(closes) >= 16:
             trend_15m = closes[-1] - closes[-16]
@@ -1403,9 +1362,7 @@ class DuckDBStore:
             high_low_range = max(recent_highs) - min(recent_lows)
 
             if high_low_range > 0:
-                range_position_15m = (
-                    latest_close - min(recent_lows)
-                ) / high_low_range
+                range_position_15m = (latest_close - min(recent_lows)) / high_low_range
 
             true_ranges = []
 
@@ -1423,9 +1380,7 @@ class DuckDBStore:
                 )
 
             if true_ranges:
-                atr_15m_14 = (
-                    sum(true_ranges) / len(true_ranges)
-                )
+                atr_15m_14 = sum(true_ranges) / len(true_ranges)
 
         if len(closes) >= 61:
             trend_60m = closes[-1] - closes[-61]
@@ -1438,9 +1393,7 @@ class DuckDBStore:
             high_low_range = max(recent_highs) - min(recent_lows)
 
             if high_low_range > 0:
-                range_position_60m = (
-                    latest_close - min(recent_lows)
-                ) / high_low_range
+                range_position_60m = (latest_close - min(recent_lows)) / high_low_range
 
             true_ranges = []
 
@@ -1458,9 +1411,7 @@ class DuckDBStore:
                 )
 
             if true_ranges:
-                atr_60m_14 = (
-                    sum(true_ranges) / len(true_ranges)
-                )
+                atr_60m_14 = sum(true_ranges) / len(true_ranges)
         previous_feature = self.conn.execute(
             """
             SELECT
@@ -1476,14 +1427,11 @@ class DuckDBStore:
             [symbol, latest_ts],
         ).fetchone()
 
-
         if previous_feature:
             prior_trend_15m, prior_trend_60m = previous_feature
 
-
             if trend_15m is None:
                 trend_15m = prior_trend_15m
-
 
             if trend_60m is None:
                 trend_60m = prior_trend_60m
@@ -1527,6 +1475,7 @@ class DuckDBStore:
                 range_position_60m,
             ],
         )
+
     def write_decision_evidence(
         self,
         *,

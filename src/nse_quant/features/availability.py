@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 
-class FeatureAvailability(str, Enum):
+class FeatureAvailability(StrEnum):
     READY = "READY"
     WARMING_UP = "WARMING_UP"
     UNAVAILABLE = "UNAVAILABLE"

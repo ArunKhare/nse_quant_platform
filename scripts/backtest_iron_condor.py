@@ -17,9 +17,7 @@ from nse_quant.research.parquet_warehouse import ParquetWarehouse
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
-        description="Backtest NIFTY iron condors"
-    )
+    parser = argparse.ArgumentParser(description="Backtest NIFTY iron condors")
 
     parser.add_argument(
         "--underlying",
@@ -105,10 +103,7 @@ def main() -> int:
     args = parse_args()
     settings = get_settings()
 
-    warehouse_dir = (
-        args.warehouse_dir
-        or settings.storage.parquet_dir
-    )
+    warehouse_dir = args.warehouse_dir or settings.storage.parquet_dir
 
     warehouse = ParquetWarehouse(warehouse_dir)
 
@@ -143,20 +138,14 @@ def main() -> int:
     print(backtester.diagnostics.as_dict())
     trades_frame = trades_to_frame(trades)
 
-    rv_regimes_path = Path(
-        "data/research/milestone2/rv_regimes_NIFTY.csv"
-    )
+    rv_regimes_path = Path("data/research/milestone2/rv_regimes_NIFTY.csv")
 
-    iv_regimes_path = Path(
-        "data/research/milestone2/iv_regimes_NIFTY.csv"
-    )
+    iv_regimes_path = Path("data/research/milestone2/iv_regimes_NIFTY.csv")
 
     if rv_regimes_path.exists():
         rv_regimes = pd.read_csv(rv_regimes_path)
 
-        rv_regimes["trade_date"] = pd.to_datetime(
-            rv_regimes["trade_date"]
-        ).dt.date
+        rv_regimes["trade_date"] = pd.to_datetime(rv_regimes["trade_date"]).dt.date
 
         trades_frame["trade_date"] = pd.to_datetime(
             trades_frame["exit_ts"],
@@ -179,9 +168,7 @@ def main() -> int:
     if iv_regimes_path.exists():
         iv_regimes = pd.read_csv(iv_regimes_path)
 
-        iv_regimes["trade_date"] = pd.to_datetime(
-            iv_regimes["trade_date"]
-        ).dt.date
+        iv_regimes["trade_date"] = pd.to_datetime(iv_regimes["trade_date"]).dt.date
 
         trades_frame = trades_frame.merge(
             iv_regimes[
@@ -200,10 +187,7 @@ def main() -> int:
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    trades_path = (
-        output_dir
-        / f"iron_condor_{args.underlying}_{args.start}_{args.end}.csv"
-    )
+    trades_path = output_dir / f"iron_condor_{args.underlying}_{args.start}_{args.end}.csv"
 
     trades_frame.to_csv(trades_path, index=False)
 
@@ -213,22 +197,16 @@ def main() -> int:
             utc=True,
         ).dt.date
 
-        daily = (
-            trades_frame.groupby("trade_date", as_index=False)
-            .agg(
-                pnl=("pnl", "sum"),
-                trades=("pnl", "count"),
-            )
+        daily = trades_frame.groupby("trade_date", as_index=False).agg(
+            pnl=("pnl", "sum"),
+            trades=("pnl", "count"),
         )
 
         daily["capital_base"] = 100000.0
-        daily["daily_return"] = (
-            daily["pnl"] / daily["capital_base"]
-        )
+        daily["daily_return"] = daily["pnl"] / daily["capital_base"]
 
         returns_path = (
-            output_dir
-            / f"iron_condor_daily_returns_{args.underlying}_{args.start}_{args.end}.csv"
+            output_dir / f"iron_condor_daily_returns_{args.underlying}_{args.start}_{args.end}.csv"
         )
 
         daily.to_csv(returns_path, index=False)
@@ -240,17 +218,9 @@ def main() -> int:
             }
         )
 
-    total_pnl = (
-        trades_frame["pnl"].sum()
-        if not trades_frame.empty
-        else 0.0
-    )
+    total_pnl = trades_frame["pnl"].sum() if not trades_frame.empty else 0.0
 
-    win_rate = (
-        (trades_frame["pnl"] > 0).mean()
-        if not trades_frame.empty
-        else 0.0
-    )
+    win_rate = (trades_frame["pnl"] > 0).mean() if not trades_frame.empty else 0.0
 
     print(
         {

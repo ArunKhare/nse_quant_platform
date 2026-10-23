@@ -22,7 +22,7 @@ def derive_atm_iv_observations(
     iv, delta, gamma, vega, theta
     """
     by_snapshot: dict[
-        tuple[datetime, float | None, date],
+        tuple[datetime, float, date],
         list[tuple[float, float]],
     ] = defaultdict(list)
 
@@ -67,11 +67,7 @@ def derive_atm_iv_observations(
             key=lambda item: abs(item[0] - spot),
         )[0]
 
-        atm_ivs = [
-            iv
-            for strike, iv in quote_ivs
-            if strike == atm_strike
-        ]
+        atm_ivs = [iv for strike, iv in quote_ivs if strike == atm_strike]
 
         if not atm_ivs:
             continue

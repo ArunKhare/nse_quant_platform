@@ -20,12 +20,8 @@ def make_outcome(regime: str, pnl: float) -> TradeOutcome:
 
 
 def test_regime_requires_minimum_trades_and_positive_pnl() -> None:
-    outcomes = [
-        make_outcome("RANGE|HIGH", 100)
-        for _ in range(10)
-    ] + [
-        make_outcome("BULL|NORMAL", -50)
-        for _ in range(10)
+    outcomes = [make_outcome("RANGE|HIGH", 100) for _ in range(10)] + [
+        make_outcome("BULL|NORMAL", -50) for _ in range(10)
     ]
 
     policy = select_regime_policy(outcomes)
@@ -61,19 +57,24 @@ def test_policy_allowlist_check() -> None:
 
     assert policy.allows("RANGE|HIGH")
     assert not policy.allows("BEAR|HIGH")
+
+
 def test_stale_policy_is_not_actionable() -> None:
-    policy = {
-        "allowed_regimes": {"RANGE|HIGH"},
+    allowed_regimes = {"RANGE|HIGH"}
+    policy: dict[str, str | set[str] | date | None] = {
+        "allowed_regimes": allowed_regimes,
         "selection_status": "STALE",
         "test_end": date(2026, 1, 1),
     }
 
     current_regime = "RANGE|HIGH"
+    policy_regimes = policy["allowed_regimes"]
+    assert isinstance(policy_regimes, set)
 
     policy_allows = (
         policy is not None
         and policy["selection_status"] == "READY"
-        and current_regime in policy["allowed_regimes"]
+        and current_regime in policy_regimes
     )
 
     assert policy_allows is False

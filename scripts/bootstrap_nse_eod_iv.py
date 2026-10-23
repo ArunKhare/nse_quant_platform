@@ -20,10 +20,7 @@ from nse_quant.persistence.duckdb_store import DuckDBStore
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description=(
-            "Build daily NIFTY ATM IV observations from NSE F&O "
-            "EOD bhavcopy CSV files."
-        )
+        description=("Build daily NIFTY ATM IV observations from NSE F&O EOD bhavcopy CSV files.")
     )
     parser.add_argument("--data-dir", required=True)
     parser.add_argument("--underlying", default="NIFTY")
@@ -42,30 +39,20 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-
-
 def load_bhavcopy(path: Path) -> pd.DataFrame:
     frames: list[pd.DataFrame] = []
 
     with zipfile.ZipFile(path) as archive:
-        csv_names = [
-            name
-            for name in archive.namelist()
-            if name.lower().endswith(".csv")
-        ]
+        csv_names = [name for name in archive.namelist() if name.lower().endswith(".csv")]
 
         if not csv_names:
-            raise ValueError(
-                f"{path.name}: no CSV files inside ZIP"
-            )
+            raise ValueError(f"{path.name}: no CSV files inside ZIP")
 
         for name in csv_names:
             with archive.open(name) as handle:
                 frame = pd.read_csv(handle)
 
-            frame.columns = [
-                column.strip() for column in frame.columns
-            ]
+            frame.columns = [column.strip() for column in frame.columns]
             frames.append(frame)
 
     if not frames:
@@ -77,9 +64,7 @@ def load_bhavcopy(path: Path) -> pd.DataFrame:
 def normalise_frame(frame: pd.DataFrame) -> pd.DataFrame:
     frame = frame.copy()
 
-    frame.columns = [
-        column.strip() for column in frame.columns
-    ]
+    frame.columns = [column.strip() for column in frame.columns]
 
     frame["TradDt"] = pd.to_datetime(
         frame["TradDt"],
@@ -102,18 +87,8 @@ def normalise_frame(frame: pd.DataFrame) -> pd.DataFrame:
         errors="coerce",
     )
 
-    frame["TckrSymb"] = (
-        frame["TckrSymb"]
-        .astype(str)
-        .str.strip()
-        .str.upper()
-    )
-    frame["OptnTp"] = (
-        frame["OptnTp"]
-        .astype(str)
-        .str.strip()
-        .str.upper()
-    )
+    frame["TckrSymb"] = frame["TckrSymb"].astype(str).str.strip().str.upper()
+    frame["OptnTp"] = frame["OptnTp"].astype(str).str.strip().str.upper()
 
     return frame
 
@@ -138,6 +113,7 @@ def load_all_nifty_udiff(data_dir: Path) -> pd.DataFrame:
         return pd.DataFrame()
 
     return pd.concat(frames, ignore_index=True)
+
 
 def select_atm_iv(
     frame: pd.DataFrame,
@@ -221,6 +197,7 @@ def select_atm_iv(
         spot,
     )
 
+
 def main() -> int:
     args = parse_args()
 
@@ -259,8 +236,7 @@ def main() -> int:
 
         for trading_date, spot in spot_row:
             day = all_nifty[
-                (all_nifty["TckrSymb"] == "NIFTY")
-                & (all_nifty["TradDt"].dt.date == trading_date)
+                (all_nifty["TckrSymb"] == "NIFTY") & (all_nifty["TradDt"].dt.date == trading_date)
             ]
 
             if day.empty:
@@ -276,9 +252,7 @@ def main() -> int:
             ]
 
             if valid_day.empty:
-                print(
-                    f"{trading_date}: SKIP no_valid_future_expiry_or_price"
-                )
+                print(f"{trading_date}: SKIP no_valid_future_expiry_or_price")
                 skipped += 1
                 continue
 
@@ -290,19 +264,13 @@ def main() -> int:
             )
 
             if observation is None:
-                print(
-                    f"{trading_date}: SKIP iv_calculation_failed "
-                    f"spot={spot}"
-                )
+                print(f"{trading_date}: SKIP iv_calculation_failed spot={spot}")
                 skipped += 1
                 continue
 
             observed_date, expiry, iv, spot_price = observation
 
-            print(
-                f"{observed_date}: expiry={expiry} "
-                f"atm_iv={iv:.4f} spot={spot_price:.2f}"
-            )
+            print(f"{observed_date}: expiry={expiry} atm_iv={iv:.4f} spot={spot_price:.2f}")
 
             if args.dry_run:
                 continue
@@ -320,9 +288,7 @@ def main() -> int:
                 source="nse_eod_bhavcopy_bootstrap",
             )
 
-        print(
-            f"Bootstrap complete: written={written}, skipped={skipped}"
-        )
+        print(f"Bootstrap complete: written={written}, skipped={skipped}")
         return 0
 
     finally:

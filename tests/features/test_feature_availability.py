@@ -29,8 +29,8 @@ def test_partial_htf_history_warms_up() -> None:
 
     responses = [
         [100],  # 1m
-        [20],   # 15m
-        [20],   # 60m
+        [20],  # 15m
+        [20],  # 60m
         [300],  # IV observations
         [300],  # daily spot observations
     ]

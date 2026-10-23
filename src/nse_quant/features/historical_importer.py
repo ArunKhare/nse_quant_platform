@@ -16,6 +16,7 @@ def _is_sqlite(path: Path) -> bool:
     with path.open("rb") as handle:
         return handle.read(16) == b"SQLite format 3\x00"
 
+
 class LegacyOptionsImporter:
     """Maps legacy option-stream rows into the canonical DuckDB option_stream table."""
 
@@ -35,7 +36,8 @@ class LegacyOptionsImporter:
         "kind": "option_type",
         "symbol": "tradingsymbol",
         "option_price": "ltp",
-}
+    }
+
     def __init__(self, duckdb_conn: Any, legacy_db_path: str | Path) -> None:
         self.conn = duckdb_conn
         self.legacy_db_path = Path(legacy_db_path)
@@ -73,22 +75,14 @@ class LegacyOptionsImporter:
         connection, cursor = self._open_legacy_connection(table_name)
 
         try:
-            source_columns = {
-                description[0].lower()
-                for description in cursor.description
-            }
+            source_columns = {description[0].lower() for description in cursor.description}
 
-            mapped_columns = {
-                self.COLUMN_ALIASES.get(column, column)
-                for column in source_columns
-            }
+            mapped_columns = {self.COLUMN_ALIASES.get(column, column) for column in source_columns}
 
             missing = self.REQUIRED_COLUMNS - mapped_columns
 
             if missing:
-                raise ValueError(
-                    f"Legacy table missing required columns: {sorted(missing)}"
-                )
+                raise ValueError(f"Legacy table missing required columns: {sorted(missing)}")
 
             inserted = 0
             skipped = 0
@@ -102,10 +96,7 @@ class LegacyOptionsImporter:
                 prepared: list[tuple[Any, ...]] = []
 
                 for row in rows:
-                    record = {
-                        key.lower(): value
-                        for key, value in dict(row).items()
-                    }
+                    record = {key.lower(): value for key, value in dict(row).items()}
 
                     normalized = self._normalize(record)
 
@@ -139,10 +130,7 @@ class LegacyOptionsImporter:
 
     def _normalize(self, record: dict[str, Any]) -> tuple[Any, ...] | None:
         try:
-            record = {
-                self.COLUMN_ALIASES.get(key, key): value
-                for key, value in record.items()
-            }
+            record = {self.COLUMN_ALIASES.get(key, key): value for key, value in record.items()}
 
             ts = self._parse_datetime(record["timestamp"])
             expiry = self._parse_date(record["expiry"])
@@ -184,6 +172,7 @@ class LegacyOptionsImporter:
 
         except (TypeError, ValueError, KeyError):
             return None
+
     def validate_import(
         self,
         underlying: str,
@@ -217,9 +206,7 @@ class LegacyOptionsImporter:
             "underlying": underlying,
             "observation_count": observation_count,
             "minimum_observations": minimum_observations,
-            "ready_for_iv_rank": (
-                observation_count >= minimum_observations
-            ),
+            "ready_for_iv_rank": (observation_count >= minimum_observations),
             "first_observation": row[1],
             "last_observation": row[2],
             "average_iv": float(row[3]) if row[3] is not None else None,
@@ -246,18 +233,19 @@ class LegacyOptionsImporter:
 
             return connection, cursor
 
-        connection = duckdb.connect(
+        duck_connection = duckdb.connect(
             str(self.legacy_db_path),
             read_only=True,
         )
 
-        cursor = (
-            connection.execute(f'SELECT * FROM "{table_name}"')
+        duck_cursor = (
+            duck_connection.execute(f'SELECT * FROM "{table_name}"')
             if table_name
-            else connection.execute("SELECT 1")
+            else duck_connection.execute("SELECT 1")
         )
 
-        return connection, cursor
+        return duck_connection, duck_cursor
+
     @staticmethod
     def _parse_datetime(value: Any) -> datetime:
         if isinstance(value, datetime):
@@ -289,12 +277,12 @@ class LegacyOptionsImporter:
             return ""
 
         return match.group(1)
+
+
 def main() -> int:
     import argparse
 
-    parser = argparse.ArgumentParser(
-        description="Import legacy options market data"
-    )
+    parser = argparse.ArgumentParser(description="Import legacy options market data")
     parser.add_argument(
         "--legacy-db",
         required=True,
