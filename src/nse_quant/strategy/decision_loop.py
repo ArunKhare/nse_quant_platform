@@ -560,6 +560,22 @@ class DecisionLoop:
             snapshot=snapshot,
         )
 
+        # print(
+        #     "Spread mark diagnostics:",
+        #     "entry=", strategy_position.entry_price,
+        #     "current=", strategy_position.current_price,
+        #     "legs=", [
+        #         {
+        #             "symbol": leg.instrument.tradingsymbol,
+        #             "side": leg.side.value,
+        #             "entry": leg.entry_price,
+        #             "current": leg.current_price,
+        #             "quantity": leg.quantity,
+        #         }
+        #         for leg in leg_positions
+        #     ],
+        # )
+
         exit_evaluation = self.exit_engine.evaluate(
             proposal,
             strategy_position,
@@ -606,12 +622,16 @@ class DecisionLoop:
         )
         spot_history = self.store.latest_spot_closes(
             instrument_token=instrument_token,
-            interval="minute",
+            interval="1m",
             limit=60,
         )
 
-        if not spot_history:
-            spot_history = [snapshot.spot] * 30
+        spot_history = self.store.latest_spot_closes(
+            instrument_token=instrument_token,
+            interval="1m",
+            limit=60,
+        )
+
 
         features = build_features(
             snapshot,
@@ -821,9 +841,11 @@ class DecisionLoop:
                 * (1 if leg_position.side == OrderSide.BUY else -1)
             )
 
-        strategy_position.current_price = strategy_mark
+        close_cost = -strategy_mark
+
+        strategy_position.current_price = close_cost
         strategy_position.unrealized_pnl = (
-            strategy_position.entry_price - strategy_mark
+            strategy_position.entry_price - close_cost
         )
 
         self.positions.update_strategy_position(strategy_position)

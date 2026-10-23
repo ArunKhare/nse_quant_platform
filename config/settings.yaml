@@ -16,7 +16,7 @@ runtime:
   loop_interval_seconds: 15
   market_closed_wait_seconds: 60
   enforce_market_hours: true
-  allow_out_of_hours_testing: true
+  allow_out_of_hours_testing: false
 
 storage:
   db_path: data/nse_quant.duckdb

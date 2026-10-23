@@ -58,6 +58,8 @@ class SpotFeatureGate:
             reasons.append("spot_features_stale")
 
         rv = snapshot.rv_1m_30
+        if rv is not None and rv <=0:
+            rv = None
         checks["realized_vol_available"] = rv is not None
         checks["realized_vol_in_range"] = (
             rv is not None

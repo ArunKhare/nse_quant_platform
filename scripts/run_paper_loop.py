@@ -268,6 +268,7 @@ def main() -> int:
             )
 
         end_time = time.monotonic() + args.seconds
+        result = {}
 
         while time.monotonic() < end_time:
             if kill_switch.is_active():
@@ -347,17 +348,50 @@ def main() -> int:
                     status_path = Path("logs/live_status.json")
                     status_path.parent.mkdir(parents=True, exist_ok=True)
 
-                    status_path.write_text(
-                        json.dumps(
-                            {
-                                "updated_at": now.isoformat(),
-                                "symbol": primary_symbol,
-                                "latest_candle": candle_minute.isoformat(),
-                                "latest_close": spot_price,
-                                "candles_written_today": rows_written,
+                    current_status = {}
+
+                    if status_path.exists():
+                        try:
+                            current_status = json.loads(
+                                status_path.read_text(encoding="utf-8")
+                            )
+                        except (json.JSONDecodeError, OSError):
+                            current_status = {}
+
+
+                    current_status["candles_written_this_session"] = (
+                        current_status.get("candles_written_this_session", 0)
+                        + rows_written
+                    )
+
+
+                    eligibility = result.get("strategy_eligibility", {})
+                    features = result.get("features", {})
+
+
+                    current_status.update(
+                        {
+                            "updated_at": datetime.now(UTC).isoformat(),
+                            "symbol": primary_symbol,
+                            "loop_status": result.get("status"),
+                            "latest_candle": candle_minute.isoformat(),
+                            "latest_close": spot_price,
+                            "regime": features.get("regime"),
+                            "realized_vol": features.get("realized_vol"),
+                            "iv_rank": features.get("iv_rank"),
+                            "strategy_eligibility": {
+                                "passed": eligibility.get("passed"),
+                                "reason": eligibility.get("reason"),
                             },
-                            indent=2,
-                        ),
+                            "open_positions": result.get("open_positions", []),
+                            "latest_orders": result.get("latest_orders", []),
+                            "latest_exits": result.get("latest_exits", []),
+                        }
+                    )
+
+
+                    status_path.write_text(
+                        json.dumps(current_status, indent=2, default=str),
                         encoding="utf-8",
                     )
 

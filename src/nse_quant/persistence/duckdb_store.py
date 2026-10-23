@@ -1449,6 +1449,32 @@ class DuckDBStore:
                 atr_60m_14 = (
                     sum(true_ranges) / len(true_ranges)
                 )
+        previous_feature = self.conn.execute(
+            """
+            SELECT
+                trend_15m,
+                trend_60m
+            FROM spot_features
+            WHERE symbol = ?
+              AND ts < ?
+              AND trend_60m IS NOT NULL
+            ORDER BY ts DESC
+            LIMIT 1
+            """,
+            [symbol, latest_ts],
+        ).fetchone()
+
+
+        if previous_feature:
+            prior_trend_15m, prior_trend_60m = previous_feature
+
+
+            if trend_15m is None:
+                trend_15m = prior_trend_15m
+
+
+            if trend_60m is None:
+                trend_60m = prior_trend_60m
 
         self.conn.execute(
             """
