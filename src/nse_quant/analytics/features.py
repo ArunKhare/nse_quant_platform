@@ -26,12 +26,24 @@ def realized_volatility(returns: Iterable[float], window: int | None = None) -> 
 
 
 def iv_rank(current: float, history: Iterable[float]) -> float | None:
-    v = np.asarray(list(history), float)
-    v = v[np.isfinite(v) & (v > 0)]
-    if not v.size:
+    """Return IV rank in the inclusive range 0-100, or None if unavailable."""
+    if not np.isfinite(current) or current <= 0:
         return None
-    lo, hi = float(v.min()), float(v.max())
-    return 50.0 if hi <= lo else float((current - lo) / (hi - lo) * 100)
+
+    values = np.asarray(list(history), dtype=float)
+    values = values[np.isfinite(values) & (values > 0)]
+
+    if values.size == 0:
+        return None
+
+    lo = float(values.min())
+    hi = float(values.max())
+
+    if hi <= lo:
+        return 50.0
+
+    raw_rank = ((current - lo) / (hi - lo)) * 100.0
+    return float(max(0.0, min(100.0, raw_rank)))
 
 
 def iv_percentile(current: float, history: Iterable[float]) -> float | None:

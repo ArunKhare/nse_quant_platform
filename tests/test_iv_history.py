@@ -2,10 +2,41 @@ from datetime import UTC, date, datetime, timedelta
 
 import pytest
 
+from nse_quant.analytics.features import iv_rank
 from nse_quant.analytics.implied_volatility import implied_volatility
 from nse_quant.analytics.iv_history import derive_atm_iv_observations
 from nse_quant.core.models import MarketFeatures
 from nse_quant.strategy.gates import IvRegimeGate
+
+
+def test_iv_rank_below_history_minimum_is_zero():
+    assert iv_rank(10.0, [15.0, 18.0, 20.0]) == 0.0
+
+
+def test_iv_rank_above_history_maximum_is_hundred():
+    assert iv_rank(25.0, [15.0, 18.0, 20.0]) == 100.0
+
+
+def test_iv_rank_midpoint_is_fifty():
+    assert iv_rank(17.5, [15.0, 20.0]) == 50.0
+
+
+def test_iv_rank_invalid_current_returns_none():
+    assert iv_rank(float("nan"), [15.0, 20.0]) is None
+    assert iv_rank(0.0, [15.0, 20.0]) is None
+    assert iv_rank(-1.0, [15.0, 20.0]) is None
+
+
+def test_iv_rank_flat_history_returns_fifty():
+    assert iv_rank(18.0, [18.0, 18.0, 18.0]) == 50.0
+
+
+def test_iv_rank_ignores_invalid_history():
+    assert iv_rank(17.5, [0.0, -5.0, float("nan"), 15.0, 20.0]) == 50.0
+
+
+def test_iv_rank_empty_history_returns_none():
+    assert iv_rank(18.0, []) is None
 
 
 def make_features(iv_rank: float | None) -> MarketFeatures:
