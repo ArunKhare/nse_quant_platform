@@ -227,12 +227,10 @@ class DecisionLoop:
         )
 
         # Diagnostics
-        expected_move_inputs = self.build_expected_move_diagnostics(
+        features.diagnostics["expected_move_inputs"] = self.build_expected_move_diagnostics(
             snapshot=snapshot,
             features=features,
         )
-
-        features.diagnostics["expected_move_inputs"] = expected_move_inputs
 
         quality: DataQualityReport = self.quality_checker.assess(snapshot)
         position_outcomes = self._monitor_open_positions(
@@ -260,7 +258,7 @@ class DecisionLoop:
             data_quality,
         )
 
-        iv_smile = [
+        features.diagnostics["iv_smile"] = [
             {
                 "strike": quote.instrument.strike,
                 "option_type": quote.instrument.option_type.value,
@@ -269,8 +267,6 @@ class DecisionLoop:
             for quote in snapshot.quotes
             if quote.iv is not None
         ]
-
-        features.diagnostics["iv_smile"] = iv_smile
 
         iv_history = {
             "observation_count": iv_history_count,
@@ -553,22 +549,6 @@ class DecisionLoop:
             snapshot=snapshot,
         )
 
-        # print(
-        #     "Spread mark diagnostics:",
-        #     "entry=", strategy_position.entry_price,
-        #     "current=", strategy_position.current_price,
-        #     "legs=", [
-        #         {
-        #             "symbol": leg.instrument.tradingsymbol,
-        #             "side": leg.side.value,
-        #             "entry": leg.entry_price,
-        #             "current": leg.current_price,
-        #             "quantity": leg.quantity,
-        #         }
-        #         for leg in leg_positions
-        #     ],
-        # )
-
         return self._finish_cycle(
             status="paper_filled",
             features=features,
@@ -656,10 +636,11 @@ class DecisionLoop:
         features: MarketFeatures,
         data_quality: dict[str, Any],
         iv_history: dict[str, Any],
-        proposal: TradeProposal | None = None,
-        gates: list[Any] | None = None,
-        extra: dict[str, Any] | None = None,
+        **details: Any,
     ) -> dict[str, Any]:
+        proposal = details.get("proposal")
+        gates = cast(list[Any] | None, details.get("gates"))
+        extra = cast(dict[str, Any] | None, details.get("extra"))
 
         kill_switch_active = self.kill_switch.is_active()
 
@@ -748,6 +729,10 @@ class DecisionLoop:
         filled_at = order.filled_at or datetime.now(UTC)
         entry_price = order.filled_price or proposal.entry_limit_price
 
+        for leg in proposal.legs:
+            if leg.entry_price is None or leg.entry_price <= 0:
+                raise ValueError(f"Missing entry premium for leg {leg.instrument.tradingsymbol}")
+
         proposal_payload = proposal.model_dump(mode="json")
 
         metadata = {
@@ -772,6 +757,7 @@ class DecisionLoop:
         leg_positions: list[LegPosition] = []
 
         for leg in proposal.legs:
+            assert leg.entry_price is not None
             leg_position = LegPosition(
                 leg_position_id=(
                     f"{strategy_position.strategy_position_id}:{leg.instrument.tradingsymbol}"
@@ -783,8 +769,8 @@ class DecisionLoop:
                 side=leg.side,
                 lots=leg.lots,
                 opened_at=filled_at,
-                entry_price=proposal.entry_limit_price / len(proposal.legs),
-                current_price=proposal.entry_limit_price / len(proposal.legs),
+                entry_price=leg.entry_price,
+                current_price=leg.entry_price,
             )
 
             self.positions.create_leg_position(leg_position)
@@ -798,8 +784,10 @@ class DecisionLoop:
         leg_positions: list[LegPosition],
         snapshot: ChainSnapshot,
     ) -> None:
+        """Update position marks and unrealized P&L from the latest chain snapshot."""
         quote_lookup = self._quote_lookup(snapshot)
-        strategy_mark = 0.0
+        remaining_credit = 0.0
+        unrealized_pnl = 0.0
 
         for leg_position in leg_positions:
             quote = quote_lookup.get(
@@ -816,22 +804,20 @@ class DecisionLoop:
 
             leg_position.current_price = mark
 
-            direction = 1 if leg_position.side == OrderSide.BUY else -1
+            if leg_position.side == OrderSide.SELL:
+                leg_pnl = (leg_position.entry_price - mark) * leg_position.quantity
+                remaining_credit += mark * leg_position.quantity
+            else:
+                leg_pnl = (mark - leg_position.entry_price) * leg_position.quantity
+                remaining_credit -= mark * leg_position.quantity
 
-            leg_position.unrealized_pnl = (
-                (mark - leg_position.entry_price) * leg_position.quantity * direction
-            )
+            leg_position.unrealized_pnl = leg_pnl
+            unrealized_pnl += leg_pnl
 
             self.positions.update_leg_position(leg_position)
 
-            strategy_mark += (
-                mark * leg_position.quantity * (1 if leg_position.side == OrderSide.BUY else -1)
-            )
-
-        close_cost = -strategy_mark
-
-        strategy_position.current_price = close_cost
-        strategy_position.unrealized_pnl = strategy_position.entry_price - close_cost
+        strategy_position.current_price = remaining_credit
+        strategy_position.unrealized_pnl = unrealized_pnl
 
         self.positions.update_strategy_position(strategy_position)
 

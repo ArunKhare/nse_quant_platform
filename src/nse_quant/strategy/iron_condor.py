@@ -94,7 +94,7 @@ class IronCondorMonitor:
             return None, gates
 
         valid_legs = [leg for leg in legs if leg is not None]
-        credit = self._net_credit(valid_legs, quote_lookup)
+        credit = self._net_credit(valid_legs)
 
         if credit < self.config.min_credit:
             gates.append(
@@ -173,7 +173,6 @@ class IronCondorMonitor:
     @staticmethod
     def _net_credit(
         legs: list[Leg],
-        quote_lookup: dict[tuple[str, float], Any],
     ) -> float:
         credit = 0.0
 
