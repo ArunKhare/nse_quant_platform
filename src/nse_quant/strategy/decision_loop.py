@@ -818,10 +818,19 @@ class DecisionLoop:
 
         strategy_position.current_price = remaining_credit
         strategy_position.unrealized_pnl = unrealized_pnl
+        leg_pnl_total = sum(leg_position.unrealized_pnl for leg_position in leg_positions)
+
+        if abs(leg_pnl_total - strategy_position.unrealized_pnl) > 0.01:
+            raise ValueError(
+                "Strategy unrealized P&L does not match leg-level P&L: "
+                f"strategy={strategy_position.unrealized_pnl}, "
+                f"legs={leg_pnl_total}"
+            )
 
         self.positions.update_strategy_position(strategy_position)
 
     def handle_kill_switch(self) -> dict[str, Any]:
+        """Handle a dashboard or CLI kill switch signal."""
         kill_switch_active = self.kill_switch.is_active()
 
         write_live_snapshot(

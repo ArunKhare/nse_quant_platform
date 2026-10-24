@@ -1677,6 +1677,39 @@ class DuckDBStore:
             [],
         )
 
+        latest_parent = self.conn.execute(
+            """
+            SELECT
+                strategy_position_id,
+                entry_price,
+                current_price,
+                unrealized_pnl,
+                status
+            FROM strategy_positions
+            ORDER BY opened_at DESC
+            LIMIT 1
+            """
+        ).fetchone()
+
+        latest_legs = self.conn.execute(
+            """
+            SELECT
+                tradingsymbol,
+                side,
+                entry_price,
+                current_price,
+                unrealized_pnl
+            FROM positions
+            WHERE strategy_position_id = (
+                SELECT strategy_position_id
+                FROM strategy_positions
+                ORDER BY opened_at DESC
+                LIMIT 1
+            )
+            ORDER BY tradingsymbol
+            """
+        ).fetchall()
+
         return {
             "date": summary_date.isoformat(),
             "decision_cycles": int(decision_cycles),
@@ -1695,4 +1728,21 @@ class DuckDBStore:
             "evidence_complete": int(evidence_rows[3]) if evidence_rows else 0,
             "realized_pnl": float(realized_pnl),
             "unrealized_pnl": float(unrealized_pnl),
+            "latest_position": {
+                "strategy_position_id": latest_parent[0] if latest_parent else None,
+                "entry_price": float(latest_parent[1]) if latest_parent else None,
+                "current_price": float(latest_parent[2]) if latest_parent else None,
+                "unrealized_pnl": float(latest_parent[3]) if latest_parent else None,
+                "status": latest_parent[4] if latest_parent else None,
+                "legs": [
+                    {
+                        "tradingsymbol": row[0],
+                        "side": row[1],
+                        "entry_price": float(row[2]),
+                        "current_price": float(row[3]),
+                        "unrealized_pnl": float(row[4]),
+                    }
+                    for row in latest_legs
+                ],
+            },
         }
