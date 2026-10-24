@@ -4,10 +4,20 @@ from unittest.mock import Mock
 
 import pytest
 
-from nse_quant.core.models import ExitEvaluation, ExitReason
+from nse_quant.core.models import (
+    ExitEvaluation,
+    ExitReason,
+    Instrument,
+    LegPosition,
+    OptionType,
+    OrderSide,
+    StrategyPosition,
+    StrategyPositionStatus,
+)
 from nse_quant.market_data.replay_provider import (
     ReplayMarketDataProvider,
 )
+from nse_quant.persistence.repositories import PositionRepository
 
 
 def test_new_position_rejects_missing_leg_entry_premium(
@@ -279,3 +289,79 @@ def test_exit_engine_runs_on_next_cycle_after_fill(
     assert strategy_position_id not in {
         position.strategy_position_id for position in loop.positions.get_open_strategy_positions()
     }
+
+
+def _instrument(token: int, strike: float, option_type: OptionType) -> Instrument:
+    return Instrument(
+        tradingsymbol=f"NIFTY{strike}{option_type.value}",
+        instrument_token=token,
+        underlying="NIFTY",
+        expiry=datetime.now(UTC).date(),
+        strike=strike,
+        option_type=option_type,
+        lot_size=75,
+    )
+
+
+def _leg_position(
+    strategy_position_id: str,
+    token: int,
+    strike: float,
+    option_type: OptionType,
+    side: OrderSide,
+) -> LegPosition:
+    return LegPosition(
+        leg_position_id=f"{strategy_position_id}:NIFTY{strike}{option_type.value}",
+        strategy_position_id=strategy_position_id,
+        proposal_id="proposal-1",
+        strategy="iron_condor_monitor",
+        instrument=_instrument(token, strike, option_type),
+        side=side,
+        lots=1,
+        opened_at=datetime.now(UTC),
+        entry_price=100.0,
+        current_price=100.0,
+        status=StrategyPositionStatus.OPEN,
+        mark_stale=False,
+    )
+
+
+def test_stale_mark_is_persisted_and_restored(test_store):
+    repository = PositionRepository(test_store.conn)
+
+    strategy_position = StrategyPosition(
+        proposal_id="proposal-1",
+        strategy="iron_condor_monitor",
+        underlying="NIFTY",
+        expiry=datetime.now(UTC).date(),
+        opened_at=datetime.now(UTC),
+        entry_price=6000.0,
+        current_price=6000.0,
+        status=StrategyPositionStatus.OPEN,
+    )
+
+    repository.create_strategy_position(strategy_position)
+
+    leg = _leg_position(
+        strategy_position.strategy_position_id,
+        token=1,
+        strike=24100,
+        option_type=OptionType.PE,
+        side=OrderSide.SELL,
+    )
+
+    repository.create_leg_position(leg)
+
+    leg.mark_stale = True
+    repository.update_leg_position(leg)
+
+    restored = repository.get_leg_positions(strategy_position.strategy_position_id)[0]
+
+    assert restored.mark_stale is True
+
+    leg.mark_stale = False
+    repository.update_leg_position(leg)
+
+    restored = repository.get_leg_positions(strategy_position.strategy_position_id)[0]
+
+    assert restored.mark_stale is False

@@ -303,7 +303,7 @@ class PositionRepository:
                 unrealized_pnl = ?,
                 status = ?,
                 closed_at = ?,
-                exit_reason = ?
+                exit_reason = ?,
                 mark_stale = ?
             WHERE position_id = ?
             """,
@@ -314,8 +314,8 @@ class PositionRepository:
                 position.status.value,
                 position.closed_at,
                 position.exit_reason.value if position.exit_reason else None,
-                position.leg_position_id,
                 position.mark_stale,
+                position.leg_position_id,
             ],
         )
 
