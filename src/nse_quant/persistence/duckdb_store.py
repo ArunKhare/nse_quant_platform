@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import json
-from datetime import UTC, date, datetime, time
+from datetime import UTC, date, datetime, time, timedelta
 from pathlib import Path
 from typing import Any
+from uuid import uuid4
 
 import duckdb
 import pandas as pd
@@ -424,7 +425,8 @@ class DuckDBStore:
                 symbol TEXT NOT NULL,
                 plugin TEXT NOT NULL,
                 available BOOLEAN NOT NULL,
-                payload_json TEXT NOT NULL
+                payload_json TEXT NOT NULL,
+                UNIQUE (run_id, ts, symbol, plugin)
             )
             """
         self.conn.execute(DECISION_EVIDENCE)
@@ -1482,23 +1484,33 @@ class DuckDBStore:
         run_id: str,
         ts: Any,
         symbol: str,
+        plugin: str,
         evidence: dict[str, Any],
     ) -> None:
-        import json
-        from uuid import uuid4
 
         self.conn.execute(
             """
-            INSERT OR REPLACE INTO decision_evidence VALUES (
+            INSERT INTO decision_evidence (
+                evidence_id,
+                run_id,
+                ts,
+                symbol,
+                plugin,
+                available,
+                payload_json
+            ) VALUES (
                 ?, ?, ?, ?, ?, ?, ?
             )
+            ON CONFLICT (run_id, ts, symbol, plugin) DO UPDATE SET
+                        available = excluded.available,
+                        payload_json = excluded.payload_json
             """,
             [
                 str(uuid4()),
                 run_id,
                 ts,
                 symbol,
-                "multi_timeframe",
+                plugin,
                 bool(evidence.get("available", False)),
                 json.dumps(evidence, default=str),
             ],
@@ -1536,3 +1548,151 @@ class DuckDBStore:
             }
             for row in reversed(rows)
         ]
+
+    def daily_paper_summary(self, summary_date: date) -> dict[str, Any]:
+        """Return an operational summary for one UTC calendar day."""
+        start = datetime.combine(summary_date, time.min, tzinfo=UTC)
+        end = start + timedelta(days=1)
+
+        def scalar(query: str, params: list[Any]) -> int | float:
+            row = self.conn.execute(query, params).fetchone()
+            value = row[0] if row else None
+            return value if value is not None else 0
+
+        decision_cycles = scalar(
+            """
+            SELECT count(*)
+            FROM decisions
+            WHERE ts >= ? AND ts < ?
+            """,
+            [start, end],
+        )
+
+        option_rows = scalar(
+            """
+            SELECT count(*)
+            FROM option_stream
+            WHERE ts >= ? AND ts < ?
+            """,
+            [start, end],
+        )
+
+        proposals = scalar(
+            """
+            SELECT count(DISTINCT proposal_id)
+            FROM decisions
+            WHERE ts >= ? AND ts < ?
+            AND proposal_id IS NOT NULL
+            """,
+            [start, end],
+        )
+
+        paper_fills = scalar(
+            """
+            SELECT count(*)
+            FROM strategy_positions
+            WHERE opened_at >= ? AND opened_at < ?
+            """,
+            [start, end],
+        )
+
+        open_positions = scalar(
+            """
+            SELECT count(*)
+            FROM strategy_positions
+            WHERE status = 'open'
+            """,
+            [],
+        )
+
+        exits = scalar(
+            """
+            SELECT count(*)
+            FROM strategy_positions
+            WHERE closed_at >= ? AND closed_at < ?
+            """,
+            [start, end],
+        )
+
+        rejection_rows = self.conn.execute(
+            """
+            SELECT
+                reason,
+                count(*) AS rejection_count
+            FROM gate_results
+            WHERE ts >= ? AND ts < ?
+            AND gate = 'strategy_eligibility'
+            AND passed = false
+            GROUP BY reason
+            ORDER BY rejection_count DESC
+            """,
+            [start, end],
+        ).fetchall()
+
+        exit_rows = self.conn.execute(
+            """
+            SELECT
+                exit_reason,
+                count(*) AS exit_count
+            FROM strategy_positions
+            WHERE closed_at >= ? AND closed_at < ?
+            GROUP BY exit_reason
+            ORDER BY exit_count DESC
+            """,
+            [start, end],
+        ).fetchall()
+
+        evidence_rows = self.conn.execute(
+            """
+            SELECT
+                count(*) AS evidence_rows,
+                count(*) FILTER (WHERE available) AS evidence_available,
+                count(*) FILTER (WHERE NOT available) AS evidence_failures,
+                count(*) FILTER (
+                    WHERE available
+                        AND JSON_EXTRACT_STRING(payload_json, '$.complete') = 'true'
+                ) AS evidence_complete
+
+            FROM decision_evidence
+            WHERE ts >= ? AND ts < ?
+            """,
+            [start, end],
+        ).fetchone()
+
+        realized_pnl = scalar(
+            """
+            SELECT coalesce(sum(realized_pnl), 0)
+            FROM strategy_positions
+            WHERE closed_at >= ? AND closed_at < ?
+            """,
+            [start, end],
+        )
+
+        unrealized_pnl = scalar(
+            """
+            SELECT coalesce(sum(unrealized_pnl), 0)
+            FROM strategy_positions
+            WHERE status = 'open'
+            """,
+            [],
+        )
+
+        return {
+            "date": summary_date.isoformat(),
+            "decision_cycles": int(decision_cycles),
+            "option_rows_persisted": int(option_rows),
+            "proposals_generated": int(proposals),
+            "paper_fills": int(paper_fills),
+            "open_positions": int(open_positions),
+            "exits": int(exits),
+            "rejection_reason_counts": {
+                (row[0] or "unknown"): int(row[1]) for row in rejection_rows
+            },
+            "exit_reason_counts": {(row[0] or "unknown"): int(row[1]) for row in exit_rows},
+            "evidence_rows": int(evidence_rows[0]) if evidence_rows else 0,
+            "evidence_available": int(evidence_rows[1]) if evidence_rows else 0,
+            "evidence_failures": int(evidence_rows[2]) if evidence_rows else 0,
+            "evidence_complete": int(evidence_rows[3]) if evidence_rows else 0,
+            "realized_pnl": float(realized_pnl),
+            "unrealized_pnl": float(unrealized_pnl),
+        }

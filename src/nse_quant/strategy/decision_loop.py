@@ -334,11 +334,21 @@ class DecisionLoop:
                 regime_policy=regime_policy,
             )
 
+            self.decisions.save_gate_result(
+                self.run_id,
+                eligibility,
+                strategy="iron_condor_monitor",
+            )
             self.decisions.save_decision(
                 self.run_id,
                 "strategy_eligibility",
                 None,
                 {"gate": eligibility.model_dump(mode="json")},
+            )
+            self.decisions.save_gate_result(
+                self.run_id,
+                eligibility,
+                strategy=strategy_id,
             )
 
             self.eligibility_alerts.evaluate(
@@ -627,7 +637,16 @@ class DecisionLoop:
             spot_instrument_token=instrument_token,
         )
 
-        evidence = self.evidence_runner.run(context)
+        evidence_results = self.evidence_runner.run(context)
+        evidence = {result.plugin: result.payload for result in evidence_results}
+        for result in evidence_results:
+            self.store.write_decision_evidence(
+                run_id=self.run_id,
+                ts=context.ts,
+                symbol=context.symbol,
+                plugin=result.plugin,
+                evidence=result.payload,
+            )
 
         return features, len(iv_history), evidence
 

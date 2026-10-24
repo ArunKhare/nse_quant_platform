@@ -86,6 +86,30 @@ class DecisionRepository:
                 rows,
             )
 
+    def save_gate_result(
+        self,
+        run_id: str,
+        gate: GateResult,
+        *,
+        strategy: str | None = None,
+    ) -> None:
+        self.conn.execute(
+            """
+            INSERT INTO gate_results VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            [
+                uuid4().hex,
+                _utcnow(),
+                run_id,
+                None,
+                strategy,
+                gate.gate,
+                gate.passed,
+                gate.reason,
+                _json(gate.details),
+            ],
+        )
+
     def save_risk_decision(
         self,
         run_id: str,

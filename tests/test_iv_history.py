@@ -206,7 +206,7 @@ def test_build_features_records_iv_diagnostics(snapshot_factory):
     assert features.iv_analytics.iv_min == pytest.approx(current_iv * 0.75)
     assert features.iv_analytics.iv_max == pytest.approx(current_iv * 1.25)
     assert features.iv_analytics.valid_history_count == 40
-    assert features.iv_analytics.iv_rank == 50.0
+    assert features.iv_analytics.iv_rank == pytest.approx(50.0)
 
 
 def test_build_features_iv_rank_at_floor(snapshot_factory):
