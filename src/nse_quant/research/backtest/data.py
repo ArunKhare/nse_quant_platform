@@ -85,19 +85,20 @@ class HistoricalDataLoader:
         quotes: list[OptionQuote] = []
 
         for row in group.itertuples(index=False):
+            instrument_token = int(str(row.instrument_token))
             instrument = Instrument(
                 tradingsymbol=str(row.tradingsymbol),
-                instrument_token=int(row.instrument_token),
+                instrument_token=instrument_token,
                 underlying=str(row.underlying),
-                expiry=row.expiry.date() if hasattr(row.expiry, "date") else row.expiry,
-                strike=float(row.strike),
+                expiry=pd.Timestamp(str(row.expiry)).date(),
+                strike=float(str(row.strike)),
                 option_type=OPTION_TYPE_MAP[str(row.option_type).upper()],
-                lot_size=int(row.lot_size),
+                lot_size=int(str(row.lot_size)),
             )
 
             quotes.append(
                 OptionQuote(
-                    instrument_token=int(row.instrument_token),
+                    instrument_token=instrument_token,
                     instrument=instrument,
                     ltp=self._optional_float(row.ltp),
                     bid=self._optional_float(row.bid),
@@ -105,7 +106,7 @@ class HistoricalDataLoader:
                     volume=self._optional_int(row.volume),
                     oi=self._optional_int(row.oi),
                     iv=self._optional_float(row.iv),
-                    received_at=row.ts,
+                    received_at=pd.Timestamp(str(row.ts)).to_pydatetime(),
                 )
             )
 

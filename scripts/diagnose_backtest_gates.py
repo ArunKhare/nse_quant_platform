@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from collections import Counter
+from collections import Counter, deque
 from datetime import date, datetime
 from pathlib import Path
 
-from nse_quant.core.models import MarketFeatures
+from nse_quant.analytics.features import build_features
 from nse_quant.research.backtest.config import BacktestConfig
 from nse_quant.research.backtest.data import HistoricalDataLoader
 from nse_quant.research.backtest.engine import BacktestEngine
@@ -23,18 +23,21 @@ engine = BacktestEngine(config)
 failures: Counter[tuple[str, str]] = Counter()
 examples: dict[tuple[str, str], datetime] = {}
 
+iv_history: deque[float] = deque(maxlen=500)
+spot_history: deque[float] = deque(maxlen=60)
+
+
 for snapshot in loader.load_market_hour_snapshots():
-    features = MarketFeatures(
-        ts=snapshot.ts,
-        underlying=snapshot.underlying,
-        spot=snapshot.spot,
-        expiry=snapshot.expiry,
+    features = build_features(
+        snapshot,
+        iv_history=iv_history,
+        close_history=spot_history,
     )
 
     proposal, gates = engine.strategy.evaluate(
         snapshot,
         features,
-        iv_history_count=0,
+        iv_history_count=len(iv_history),
     )
 
     for gate in gates:
@@ -42,6 +45,11 @@ for snapshot in loader.load_market_hour_snapshots():
             key = (gate.gate, gate.reason)
             failures[key] += 1
             examples.setdefault(key, snapshot.ts)
+
+    if features.atm_iv and features.atm_iv > 0:
+        iv_history.append(features.atm_iv)
+
+    spot_history.append(snapshot.spot)
 
 for (gate, reason), count in failures.most_common():
     print(f"{count:5d}  {gate:30s}  {reason:50s}  first={examples[(gate, reason)]}")

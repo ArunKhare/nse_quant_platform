@@ -24,3 +24,6 @@ class BacktestConfig(BaseModel):
     min_iv_coverage: float = 0.80
 
     run_id: str = Field(default_factory=lambda: date.today().isoformat())
+
+    max_open_positions: int = 1
+    entry_cooldown_minutes: int = 15
