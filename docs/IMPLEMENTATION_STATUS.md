@@ -14,11 +14,12 @@ and observability foundation.
 - [x] Per-leg iron-condor entry-premium persistence
 - [x] Net-credit strategy valuation and leg-level P&L reconciliation
 - [x] Stale option-mark persistence and alert events
-- [ ] End-to-end paper-order proposal, fill, position, marking, exit, and post-trade-review validation
-- [ ] Kill-switch order-block validation
-- [ ] Replay/live decision parity checks
+- [x] End-to-end paper-order proposal, fill, position, marking, exit, and post-trade-review validation
+- [x] Remove redundant post-proposal regime-policy gate
+- [x] Replay/live decision parity checks
+- [x] Kill-switch order-block validation
 - [ ] Multi-complete-trading-day paper-loop reliability run
-- [ ] Remove redundant post-proposal regime-policy gate
+
 
 ## Completed
 

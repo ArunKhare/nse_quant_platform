@@ -24,14 +24,14 @@ Completed:
 - Per-leg iron-condor entry-premium persistence.
 - Net-credit strategy marking and leg-level unrealized P&L reconciliation.
 - Stale option-mark persistence, cycle-level reporting, and stale-mark alert events.
-
-Remaining for full Milestone 1 closure:
-
+- stabilize replay/live decision parity checks.
+- Removed the redundant post-proposal regime-policy gate
 - Run and stabilize the end-to-end paper-order proposal, fill, position, marking, exit, and post-trade-review validation.
 - Run and stabilize kill-switch order-block validation.
-- Implement and stabilize replay/live decision parity checks.
+
+Remaining for full Milestone 1 closure:
 - Run the paper loop reliably across multiple complete trading days.
-- Remove the redundant post-proposal regime-policy gate, if still present.
+
 
 ## Milestone 2 — Research depth
 
