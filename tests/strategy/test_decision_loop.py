@@ -1,4 +1,6 @@
 from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
+from unittest.mock import Mock
 
 from nse_quant.core.models import (
     ChainSnapshot,
@@ -8,6 +10,9 @@ from nse_quant.core.models import (
 )
 from nse_quant.core.settings import get_settings
 from nse_quant.execution.broker import PaperBroker
+from nse_quant.market_data.replay_provider import (
+    ReplayMarketDataProvider,
+)
 from nse_quant.persistence.duckdb_store import DuckDBStore
 from nse_quant.strategy.decision_loop import DecisionLoop
 
@@ -122,3 +127,39 @@ def test_feature_gate_rejection_does_not_call_chain_provider(
     assert result["status"] == "feature_gate_rejected"
     assert result["reasons"] == ["spot_features_unavailable"]
     assert provider_calls == 0
+
+
+def test_active_kill_switch_blocks_order_submission(
+    decision_loop_environment,
+    replay_snapshots,
+    tmp_path,
+    monkeypatch,
+):
+    provider = ReplayMarketDataProvider(replay_snapshots["snapshots"])
+    loop = decision_loop_environment.build_loop(
+        provider,
+        proposal=replay_snapshots["proposal"],
+        approve_regime_risk=True,
+    )
+
+    monkeypatch.setattr(
+        loop,
+        "kill_switch",
+        SimpleNamespace(
+            is_active=lambda: True,
+            status=lambda: {
+                "active": True,
+                "reason": "test_kill_switch",
+                "updated_at": datetime.now(UTC).isoformat(),
+            },
+        ),
+    )
+
+    submit = Mock()
+    monkeypatch.setattr(loop.broker, "submit", submit)
+
+    result = loop.run_once()
+
+    assert result["status"] == "kill_switch_active"
+    assert result["kill_switch_active"] is True
+    submit.assert_not_called()
