@@ -961,6 +961,40 @@ class DecisionLoop:
                 snapshot=snapshot,
             )
             total_stale_marks += stale_marks
+
+            if stale_marks:
+                stale_legs = [
+                    leg_position.instrument.tradingsymbol
+                    for leg_position in leg_positions
+                    if leg_position.mark_stale
+                ]
+
+                self.decisions.save_system_event(
+                    run_id=self.run_id,
+                    event_type="stale_position_marks",
+                    payload={
+                        "strategy_position_id": strategy_position.strategy_position_id,
+                        "proposal_id": strategy_position.proposal_id,
+                        "strategy": strategy_position.strategy,
+                        "underlying": strategy_position.underlying,
+                        "snapshot_ts": snapshot.ts.isoformat(),
+                        "stale_mark_count": stale_marks,
+                        "stale_legs": stale_legs,
+                    },
+                    proposal=None,
+                )
+
+                outcome = {
+                    "strategy_position_id": strategy_position.strategy_position_id,
+                    "status": "monitored",
+                    "stale_marks": stale_marks,
+                    "stale_legs": [
+                        leg_position.instrument.tradingsymbol
+                        for leg_position in leg_positions
+                        if leg_position.mark_stale
+                    ],
+                }
+
             logger.info(
                 "position_marks_completed",
                 extra={
