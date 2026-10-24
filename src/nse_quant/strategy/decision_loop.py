@@ -803,6 +803,8 @@ class DecisionLoop:
         stale_marks = 0
 
         for leg_position in leg_positions:
+            leg_position.mark_stale = False
+
             quote = quote_lookup.get(
                 (
                     leg_position.instrument.option_type.value,
@@ -814,6 +816,7 @@ class DecisionLoop:
 
             if mark is None:
                 mark = leg_position.current_price or leg_position.entry_price
+                leg_position.mark_stale = True
                 stale_marks += 1
 
             leg_position.current_price = mark

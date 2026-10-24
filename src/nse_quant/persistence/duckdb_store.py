@@ -214,8 +214,16 @@ class DuckDBStore:
                 unrealized_pnl DOUBLE,
                 status VARCHAR,
                 closed_at TIMESTAMPTZ,
-                exit_reason VARCHAR
+                exit_reason VARCHAR,
+                mark_stale BOOLEAN DEFAULT FALSE
             )
+            """
+        )
+
+        self.conn.execute(
+            """
+            ALTER TABLE positions
+            ADD COLUMN IF NOT EXISTS mark_stale BOOLEAN DEFAULT FALSE
             """
         )
 
@@ -1677,6 +1685,16 @@ class DuckDBStore:
             [],
         )
 
+        stale_leg_marks = scalar(
+            """
+            SELECT count(*)
+            FROM positions
+            WHERE status = 'OPEN'
+            AND mark_stale
+            """,
+            [],
+        )
+
         latest_parent = self.conn.execute(
             """
             SELECT
@@ -1717,6 +1735,7 @@ class DuckDBStore:
             "proposals_generated": int(proposals),
             "paper_fills": int(paper_fills),
             "open_positions": int(open_positions),
+            "stale_leg_marks": int(stale_leg_marks),
             "exits": int(exits),
             "rejection_reason_counts": {
                 (row[0] or "unknown"): int(row[1]) for row in rejection_rows

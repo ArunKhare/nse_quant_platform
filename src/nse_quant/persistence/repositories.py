@@ -11,7 +11,10 @@ from nse_quant.core.models import (
     ExitEvaluation,
     ExitReason,
     GateResult,
+    Instrument,
     LegPosition,
+    OptionType,
+    OrderSide,
     PostTradeReview,
     RiskDecision,
     StrategyPosition,
@@ -199,7 +202,7 @@ class PositionRepository:
         self.conn.execute(
             """
             INSERT INTO positions VALUES (
-                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
             )
             """,
             [
@@ -224,6 +227,7 @@ class PositionRepository:
                 position.status.value,
                 position.closed_at,
                 position.exit_reason.value if position.exit_reason else None,
+                position.mark_stale,
             ],
         )
 
@@ -300,6 +304,7 @@ class PositionRepository:
                 status = ?,
                 closed_at = ?,
                 exit_reason = ?
+                mark_stale = ?
             WHERE position_id = ?
             """,
             [
@@ -310,6 +315,7 @@ class PositionRepository:
                 position.closed_at,
                 position.exit_reason.value if position.exit_reason else None,
                 position.leg_position_id,
+                position.mark_stale,
             ],
         )
 
@@ -370,7 +376,6 @@ class PositionRepository:
         )
 
     def _leg_position_from_row(self, row: tuple[Any, ...]) -> LegPosition:
-        from nse_quant.core.models import Instrument, OptionType, OrderSide
 
         lots = int(row[11])
         quantity = int(row[12])
@@ -400,4 +405,5 @@ class PositionRepository:
             status=row[18],
             closed_at=row[19],
             exit_reason=ExitReason(row[20]) if row[20] else None,
+            mark_stale=bool(row[21]) if len(row) > 21 else False,
         )

@@ -261,6 +261,7 @@ class LegPosition(BaseModel):
     status: StrategyPositionStatus = StrategyPositionStatus.OPEN
     closed_at: datetime | None = None
     exit_reason: ExitReason | None = None
+    mark_stale: bool = False
 
     @property
     def quantity(self) -> int:
