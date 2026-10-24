@@ -159,10 +159,15 @@ class IronCondorMonitor:
         if quote is None:
             return None
 
+        entry_price = quote.mid or quote.ltp
+        if entry_price is None or entry_price <= 0:
+            return None
+
         return Leg(
             instrument=quote.instrument,
             side=side,
             lots=1,
+            entry_price=entry_price,
         )
 
     @staticmethod
@@ -173,25 +178,12 @@ class IronCondorMonitor:
         credit = 0.0
 
         for leg in legs:
-            quote = quote_lookup.get(
-                (
-                    leg.instrument.option_type.value,
-                    leg.instrument.strike,
-                )
-            )
-
-            if quote is None:
+            if leg.entry_price is None:
                 return 0.0
 
-            price = quote.mid or quote.ltp
-
-            if price is None:
-                return 0.0
-
-            signed_quantity = leg.quantity
             if leg.side == OrderSide.SELL:
-                credit += price * signed_quantity
+                credit += leg.entry_price * leg.quantity
             else:
-                credit -= price * signed_quantity
+                credit -= leg.entry_price * leg.quantity
 
         return credit

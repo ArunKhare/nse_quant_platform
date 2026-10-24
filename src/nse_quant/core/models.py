@@ -144,10 +144,15 @@ class Leg(BaseModel):
     instrument: Instrument
     side: OrderSide
     lots: int
+    entry_price: float | None = None
 
     @property
     def quantity(self) -> int:
         return self.lots * self.instrument.lot_size
+
+    @property
+    def signed_quantity(self):
+        return self.quantity if self.side == OrderSide.BUY else -self.quantity
 
 
 class TradeProposal(BaseModel):

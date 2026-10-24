@@ -137,7 +137,10 @@ class PaperBroker(BrokerInterface):
         proposal: TradeProposal,
         leg: Any,
     ) -> float:
-        """Use an equal premium allocation until leg-level fills are available."""
+        """Use the leg fill when available, otherwise fall back to equal allocation."""
+        if leg.entry_price is not None:
+            return leg.entry_price
+
         leg_count = len(proposal.legs)
         return proposal.entry_limit_price / leg_count if leg_count else 0.0
 
@@ -183,7 +186,7 @@ class PaperBroker(BrokerInterface):
                     0.0,
                 ),
             )
-            direction = 1 if leg.side == OrderSide.BUY else -1
+            direction = 1 if leg.side == OrderSide.SELL else -1
             net_value += price * leg.quantity * direction
 
         return net_value
