@@ -15,8 +15,8 @@ def parse_args() -> argparse.Namespace:
 
     parser.add_argument(
         "--run-id",
-        required=True,
-        help="Backtest run ID under data/research/backtests.",
+        default=None,
+        help="Optional explicit backtest run ID. Defaults to today's date.",
     )
     parser.add_argument(
         "--backtest-dir",

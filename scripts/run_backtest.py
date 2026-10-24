@@ -30,8 +30,8 @@ def main() -> None:
         start_date=date.fromisoformat(args.start_date),
         end_date=date.fromisoformat(args.end_date),
         initial_capital=args.initial_capital,
+        **({"run_id": args.run_id} if args.run_id else {}),
     )
-
     engine = BacktestEngine(config)
     result = engine.run()
     output_dir = engine.save(result)
