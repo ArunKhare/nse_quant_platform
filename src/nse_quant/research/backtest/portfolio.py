@@ -125,8 +125,8 @@ class BacktestPortfolio:
                 exit_debit += price * leg.signed_quantity
 
             if complete:
-                trade.exit_debit = exit_debit
-                trade.realized_pnl = trade.entry_credit - exit_debit
+                trade.exit_debit = -exit_debit
+                trade.realized_pnl = trade.entry_credit - trade.exit_debit
 
     def close_position(
         self,
@@ -173,6 +173,9 @@ class BacktestPortfolio:
         if proposal is None:
             return None
 
+        # Never evaluate an exit on the trade's entry snapshot.
+        if snapshot.ts <= trade.opened_at:
+            return None
         # 1. Expiry force-close.
         if snapshot.ts.astimezone(UTC).date() >= proposal.expiry:
             return ExitReason.EXPIRY_FORCE_CLOSE
@@ -242,12 +245,13 @@ class BacktestPortfolio:
 
     @staticmethod
     def _net_credit(legs: list[Leg]) -> float:
-        credit = 0.0
+        net_signed_value = 0.0
 
         for leg in legs:
             if leg.entry_price is None:
                 continue
 
-            credit += leg.entry_price * leg.signed_quantity
-
-        return credit
+            net_signed_value += leg.entry_price * leg.signed_quantity
+        # A sold leg has negative signed quantity, so a net-credit structure
+        # produces a negative signed value. Normalize it to positive credit.
+        return -net_signed_value
