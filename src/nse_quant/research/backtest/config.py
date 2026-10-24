@@ -27,3 +27,7 @@ class BacktestConfig(BaseModel):
 
     max_open_positions: int = 1
     entry_cooldown_minutes: int = 15
+
+    iv_collapse_pct: float = 20.0
+    expected_move_buffer: float = 1.25
+    force_close_eod: bool = True

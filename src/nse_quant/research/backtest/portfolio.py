@@ -11,13 +11,14 @@ from nse_quant.core.models import (
     OrderSide,
     TradeProposal,
 )
+from nse_quant.research.backtest.config import BacktestConfig
 
 
 @dataclass
 class BacktestTrade:
     strategy_position_id: str
     proposal_id: str
-    proposal: TradeProposal | None
+    proposal: TradeProposal
     opened_at: datetime
     closed_at: datetime | None = None
     entry_credit: float = 0.0
@@ -25,11 +26,20 @@ class BacktestTrade:
     realized_pnl: float = 0.0
     exit_reason: ExitReason | None = None
     legs: list[Leg] = field(default_factory=list)
+    entry_spot: float | None = None
+    exit_spot: float | None = None
+    entry_atm_iv: float | None = None
+    entry_expected_move_points: float | None = None
 
 
 class BacktestPortfolio:
-    def __init__(self, initial_capital: float) -> None:
+    def __init__(
+        self,
+        initial_capital: float,
+        config: BacktestConfig,
+    ) -> None:
         self.initial_capital = initial_capital
+        self.config = config
         self.cash = initial_capital
         self.open_positions: list[BacktestTrade] = []
         self.closed_trades: list[BacktestTrade] = []
@@ -39,6 +49,7 @@ class BacktestPortfolio:
         self,
         proposal: TradeProposal,
         snapshot: ChainSnapshot,
+        features: MarketFeatures,
         slippage_pct: float,
     ) -> BacktestTrade:
         filled_legs: list[Leg] = []
@@ -65,6 +76,9 @@ class BacktestPortfolio:
             opened_at=snapshot.ts.astimezone(UTC),
             entry_credit=entry_credit,
             legs=filled_legs,
+            entry_spot=snapshot.spot,
+            entry_atm_iv=features.atm_iv,
+            entry_expected_move_points=features.expected_move_points,
         )
 
         self.open_positions.append(trade)
@@ -119,9 +133,11 @@ class BacktestPortfolio:
         trade: BacktestTrade,
         exit_reason: ExitReason,
         closed_at: datetime,
+        exit_spot: float | None = None,
     ) -> None:
         trade.exit_reason = exit_reason
         trade.closed_at = closed_at.astimezone(UTC)
+        trade.exit_spot = exit_spot
 
         self.cash += trade.realized_pnl
         self.closed_trades.append(trade)
@@ -150,28 +166,31 @@ class BacktestPortfolio:
     def evaluate_exit(
         self,
         trade: BacktestTrade,
+        snapshot: ChainSnapshot,
         features: MarketFeatures,
     ) -> ExitReason | None:
         proposal = trade.proposal
-
         if proposal is None:
             return None
 
-        entry_credit = trade.entry_credit
-        exit_value = trade.exit_debit
+        # 1. Expiry force-close.
+        if snapshot.ts.astimezone(UTC).date() >= proposal.expiry:
+            return ExitReason.EXPIRY_FORCE_CLOSE
 
+        # 2. Target and stop-loss.
+        exit_value = trade.exit_debit
         target_price = proposal.target_price
         stop_loss_price = proposal.stop_loss_price
 
-        if entry_credit > 0:
-            # Net credit received at entry.
+        if trade.entry_credit > 0:
             if target_price is not None and exit_value <= target_price:
                 return ExitReason.TARGET_PROFIT
+
             if stop_loss_price is not None and exit_value >= stop_loss_price:
                 return ExitReason.STOP_LOSS
+
         else:
-            # Net debit paid at entry.
-            entry_debit = -entry_credit
+            entry_debit = -trade.entry_credit
             current_pnl = -exit_value - entry_debit
 
             if target_price is not None and current_pnl >= target_price:
@@ -180,7 +199,46 @@ class BacktestPortfolio:
             if stop_loss_price is not None and current_pnl <= -stop_loss_price:
                 return ExitReason.STOP_LOSS
 
+        # 3. IV collapse.
+        if (
+            trade.entry_atm_iv is not None
+            and features.atm_iv is not None
+            and trade.entry_atm_iv > 0
+        ):
+            iv_change_pct = (features.atm_iv - trade.entry_atm_iv) / trade.entry_atm_iv * 100
+
+            if iv_change_pct <= -self.config.iv_collapse_pct:
+                return ExitReason.IV_COLLAPSE
+
+        # 4. Expected-move violation.
+        if (
+            trade.entry_expected_move_points is not None
+            and features.expected_move_points is not None
+        ):
+            allowed_move = trade.entry_expected_move_points * self.config.expected_move_buffer
+
+            if abs(snapshot.spot - trade.entry_spot) > allowed_move:
+                return ExitReason.EXPECTED_MOVE_VIOLATION
+
         return None
+
+    def force_close_eod(
+        self,
+        snapshot: ChainSnapshot,
+    ) -> list[BacktestTrade]:
+        closed: list[BacktestTrade] = []
+
+        for trade in list(self.open_positions):
+            self.close_position(
+                trade=trade,
+                exit_reason=ExitReason.EXPIRY_FORCE_CLOSE,
+                closed_at=snapshot.ts,
+                exit_spot=snapshot.spot,
+            )
+
+            closed.append(trade)
+
+        return closed
 
     @staticmethod
     def _net_credit(legs: list[Leg]) -> float:

@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from collections import deque
 from dataclasses import dataclass, field
+from datetime import time
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -37,7 +38,10 @@ class BacktestEngine:
         self.config = config
         self.loader = HistoricalDataLoader(config)
         self.strategy = strategy or IronCondorMonitor()
-        self.portfolio = BacktestPortfolio(self.config.initial_capital)
+        self.portfolio = BacktestPortfolio(
+            initial_capital=self.config.initial_capital,
+            config=self.config,
+        )
 
     def run(self) -> BacktestResult:
         snapshots = self.loader.load_market_hour_snapshots()
@@ -70,6 +74,7 @@ class BacktestEngine:
                 self.portfolio.open_position(
                     proposal=proposal,
                     snapshot=snapshot,
+                    features=features,
                     slippage_pct=self.config.slippage_pct,
                 )
 
@@ -79,14 +84,25 @@ class BacktestEngine:
                 trade = self.portfolio.open_positions[0]
 
                 if snapshot.ts > trade.opened_at:
-                    exit_reason = self.portfolio.evaluate_exit(trade, features)
+                    exit_reason = self.portfolio.evaluate_exit(
+                        trade=trade,
+                        snapshot=snapshot,
+                        features=features,
+                    )
 
                     if exit_reason is not None:
                         self.portfolio.close_position(
                             trade=trade,
                             exit_reason=exit_reason,
                             closed_at=snapshot.ts,
+                            exit_spot=snapshot.spot,
                         )
+
+            if self.config.force_close_eod and self.portfolio.open_positions:
+                local_time = snapshot.ts.astimezone(ZoneInfo(self.config.timezone)).time()
+
+                if local_time >= time.fromisoformat(self.config.market_close):
+                    self.portfolio.force_close_eod(snapshot)
 
             result.decisions.append(
                 {
