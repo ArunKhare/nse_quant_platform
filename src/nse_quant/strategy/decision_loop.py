@@ -335,11 +335,6 @@ class DecisionLoop:
                 regime_policy=regime_policy,
             )
 
-            self.decisions.save_gate_result(
-                self.run_id,
-                eligibility,
-                strategy="iron_condor_monitor",
-            )
             self.decisions.save_decision(
                 self.run_id,
                 "strategy_eligibility",
@@ -410,97 +405,36 @@ class DecisionLoop:
             },
         )
 
-        regime_policy_enforced = self.settings.research.enforce_regime_policy
+        regime_limits = self._apply_regime_limits(
+            current_regime=current_regime,
+            regime_policy=regime_policy,
+        )
 
-        if regime_policy_enforced:
-            market_regime = self.store.get_market_regime_as_of(
-                symbol=symbol,
-                ts=features.ts,
-            )
-
-            current_regime = market_regime["regime"] if market_regime else "UNKNOWN"
-
-            regime_policy = self.store.latest_regime_policy(
-                symbol=symbol,
-                as_of=features.ts,
-            )
-
-            allowed_regimes = regime_policy["allowed_regimes"] if regime_policy else set()
-
-            policy_allows = (
-                regime_policy is not None
-                and regime_policy["selection_status"] != "READY"
-                and current_regime in allowed_regimes
-            )
-
-            if not policy_allows:
-                self.decisions.save_gate_results(
-                    self.run_id,
-                    proposal,
-                    [
-                        GateResult(
-                            gate="regime_policy",
-                            passed=False,
-                            reason=(
-                                "no_active_policy"
-                                if regime_policy is None
-                                else "regime_not_allowed"
-                            ),
-                            details={
-                                "regime": current_regime,
-                                "allowed_regimes": sorted(allowed_regimes),
-                                "policy_status": (
-                                    regime_policy["selection_status"] if regime_policy else None
-                                ),
-                            },
-                        )
-                    ],
-                )
-
-                return self._finish_cycle(
-                    status="regime_policy_rejected",
-                    features=features,
-                    data_quality=data_quality,
-                    iv_history=iv_history,
-                    proposal=proposal,
-                    extra={
-                        "proposal_id": proposal.proposal_id,
-                        "position_outcomes": position_outcomes,
-                        "persisted_option_rows": persisted_rows,
-                        "evidence": evidence,
-                    },
-                )
-
-            regime_limits = self._apply_regime_limits(
-                current_regime=current_regime,
-                regime_policy=regime_policy,
-            )
-
-            regime_risk_decision = self.risk.apply_regime_limits(
-                proposal=proposal,
+        regime_risk_decision = self.risk.apply_regime_limits(
+            proposal=proposal,
+            features=features,
+            regime_limits=regime_limits,
+        )
+        self.decisions.save_risk_decision(
+            self.run_id,
+            proposal,
+            regime_risk_decision,
+        )
+        if not regime_risk_decision.approved:
+            return self._finish_cycle(
+                status="regime_risk_rejected",
                 features=features,
-                regime_limits=regime_limits,
+                data_quality=data_quality,
+                iv_history=iv_history,
+                proposal=proposal,
+                extra={
+                    "proposal_id": proposal.proposal_id,
+                    "reasons": regime_risk_decision.reasons,
+                    "position_outcomes": position_outcomes,
+                    "persisted_option_rows": persisted_rows,
+                    "evidence": evidence,
+                },
             )
-            self.decisions.save_risk_decision(
-                self.run_id,
-                proposal,
-                regime_risk_decision,
-            )
-            if not regime_risk_decision.approved:
-                return self._finish_cycle(
-                    status="regime_risk_rejected",
-                    features=features,
-                    data_quality=data_quality,
-                    iv_history=iv_history,
-                    proposal=proposal,
-                    extra={
-                        "proposal_id": proposal.proposal_id,
-                        "reasons": regime_risk_decision.reasons,
-                        "position_outcomes": position_outcomes,
-                        "persisted_option_rows": persisted_rows,
-                        "evidence": evidence,
-                    },
-                )
 
         if self.settings.safety.dry_run:
             self.decisions.save_decision(
@@ -549,11 +483,13 @@ class DecisionLoop:
             order,
         )
 
-        self._mark_positions(
+        new_position_stale_marks = self._mark_positions(
             strategy_position=strategy_position,
             leg_positions=leg_positions,
             snapshot=snapshot,
         )
+
+        total_stale_marks += new_position_stale_marks
 
         return self._finish_cycle(
             status="paper_filled",
