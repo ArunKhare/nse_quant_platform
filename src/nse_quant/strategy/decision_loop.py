@@ -10,6 +10,7 @@ market data -> analytics -> feature snapshot -> open-position monitoring
 
 from __future__ import annotations
 
+import logging
 import math
 from collections.abc import Callable
 from datetime import UTC, datetime
@@ -60,6 +61,8 @@ from nse_quant.research.regime_risk_policy import RegimeRiskLimits, build_regime
 from nse_quant.risk.risk_engine import RiskEngine
 from nse_quant.strategy.exit_engine import ExitEngine
 from nse_quant.strategy.iron_condor import IronCondorMonitor
+
+logger = logging.getLogger(__name__)
 
 
 class DecisionLoop:
@@ -141,6 +144,7 @@ class DecisionLoop:
 
         current_regime = "UNKNOWN"
         regime_policy: dict[str, Any] | None = None
+        total_stale_marks = 0
 
         self.store.write_feature_availability_result(
             gate_result_id=uuid4().hex,
@@ -233,11 +237,12 @@ class DecisionLoop:
         )
 
         quality: DataQualityReport = self.quality_checker.assess(snapshot)
-        position_outcomes = self._monitor_open_positions(
+        position_outcomes, monitored_stale_marks = self._monitor_open_positions(
             snapshot=snapshot,
             features=features,
             quality=quality,
         )
+        total_stale_marks += monitored_stale_marks
 
         self.feature_store.save(self.run_id, features)
 
@@ -535,6 +540,7 @@ class DecisionLoop:
                     "position_outcomes": position_outcomes,
                     "persisted_option_rows": persisted_rows,
                     "evidence": evidence,
+                    "stale_marks": total_stale_marks,
                 },
             )
 
@@ -562,6 +568,7 @@ class DecisionLoop:
                 "position_outcomes": position_outcomes,
                 "persisted_option_rows": persisted_rows,
                 "evidence": evidence,
+                "stale_marks": total_stale_marks,
             },
         )
 
@@ -728,10 +735,16 @@ class DecisionLoop:
     ) -> tuple[StrategyPosition, list[LegPosition]]:
         filled_at = order.filled_at or datetime.now(UTC)
         entry_price = order.filled_price or proposal.entry_limit_price
+        if not proposal.legs:
+            raise ValueError("Cannot open a position without legs")
 
+        leg_entry_prices: list[float] = []
         for leg in proposal.legs:
             if leg.entry_price is None or leg.entry_price <= 0:
-                raise ValueError(f"Missing entry premium for leg {leg.instrument.tradingsymbol}")
+                raise ValueError(
+                    f"Missing or invalid entry premium for leg {leg.instrument.tradingsymbol}"
+                )
+            leg_entry_prices.append(leg.entry_price)
 
         proposal_payload = proposal.model_dump(mode="json")
 
@@ -756,8 +769,7 @@ class DecisionLoop:
 
         leg_positions: list[LegPosition] = []
 
-        for leg in proposal.legs:
-            assert leg.entry_price is not None
+        for leg, leg_entry_price in zip(proposal.legs, leg_entry_prices, strict=True):
             leg_position = LegPosition(
                 leg_position_id=(
                     f"{strategy_position.strategy_position_id}:{leg.instrument.tradingsymbol}"
@@ -769,8 +781,8 @@ class DecisionLoop:
                 side=leg.side,
                 lots=leg.lots,
                 opened_at=filled_at,
-                entry_price=leg.entry_price,
-                current_price=leg.entry_price,
+                entry_price=leg_entry_price,
+                current_price=leg_entry_price,
             )
 
             self.positions.create_leg_position(leg_position)
@@ -783,11 +795,12 @@ class DecisionLoop:
         strategy_position: StrategyPosition,
         leg_positions: list[LegPosition],
         snapshot: ChainSnapshot,
-    ) -> None:
+    ) -> int:
         """Update position marks and unrealized P&L from the latest chain snapshot."""
         quote_lookup = self._quote_lookup(snapshot)
         remaining_credit = 0.0
         unrealized_pnl = 0.0
+        stale_marks = 0
 
         for leg_position in leg_positions:
             quote = quote_lookup.get(
@@ -801,6 +814,7 @@ class DecisionLoop:
 
             if mark is None:
                 mark = leg_position.current_price or leg_position.entry_price
+                stale_marks += 1
 
             leg_position.current_price = mark
 
@@ -828,6 +842,8 @@ class DecisionLoop:
             )
 
         self.positions.update_strategy_position(strategy_position)
+
+        return stale_marks
 
     def handle_kill_switch(self) -> dict[str, Any]:
         """Handle a dashboard or CLI kill switch signal."""
@@ -926,20 +942,28 @@ class DecisionLoop:
         snapshot: ChainSnapshot,
         features: MarketFeatures,
         quality: DataQualityReport,
-    ) -> list[dict[str, Any]]:
+    ) -> tuple[list[dict[str, Any]], int]:
         kill_switch_active = self.kill_switch.is_active()
         outcomes: list[dict[str, Any]] = []
-
+        total_stale_marks = 0
         for strategy_position in self.positions.get_open_strategy_positions():
             leg_positions = self.positions.get_leg_positions(strategy_position.strategy_position_id)
 
             if not leg_positions:
                 continue
 
-            self._mark_positions(
+            stale_marks = self._mark_positions(
                 strategy_position=strategy_position,
                 leg_positions=leg_positions,
                 snapshot=snapshot,
+            )
+            total_stale_marks += stale_marks
+            logger.info(
+                "position_marks_completed",
+                extra={
+                    "strategy_position_id": strategy_position.strategy_position_id,
+                    "stale_marks": stale_marks,
+                },
             )
 
             proposal = self._load_proposal(strategy_position)
@@ -987,7 +1011,7 @@ class DecisionLoop:
 
             outcomes.append(outcome)
 
-        return outcomes
+        return outcomes, total_stale_marks
 
     def _load_proposal(
         self,
