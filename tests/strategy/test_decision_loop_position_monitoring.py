@@ -27,7 +27,11 @@ def test_new_position_rejects_missing_leg_entry_premium(
     proposal = replay_snapshots["proposal"]
     proposal.legs[0].entry_price = None
     provider = ReplayMarketDataProvider(replay_snapshots["snapshots"])
-    loop = decision_loop_environment.build_loop(provider, proposal=proposal)
+    loop = decision_loop_environment.build_loop(
+        provider,
+        proposal=proposal,
+        approve_regime_risk=True,
+    )
 
     with pytest.raises(ValueError, match="Missing or invalid entry premium"):
         loop.run_once()
@@ -41,6 +45,7 @@ def test_open_position_is_marked_and_exit_evaluated(
     loop = decision_loop_environment.build_loop(
         provider,
         proposal=replay_snapshots["proposal"],
+        approve_regime_risk=True,
     )
     loop.settings.research.enforce_strategy_eligibility = False
     first = loop.run_once()
@@ -72,6 +77,7 @@ def test_position_closes_when_exit_triggers(
     loop = decision_loop_environment.build_loop(
         provider,
         proposal=exit_trigger_snapshots["proposal"],
+        approve_regime_risk=True,
     )
 
     loop.settings.research.enforce_strategy_eligibility = False
@@ -100,6 +106,7 @@ def test_new_entry_blocked_at_max_open_positions(
     loop = decision_loop_environment.build_loop(
         provider,
         proposal=entry_snapshots["proposal"],
+        approve_regime_risk=True,
     )
 
     loop.settings.research.enforce_feature_availability = False
@@ -160,6 +167,7 @@ def test_run_once_persists_chain_snapshot(
     loop = decision_loop_environment.build_loop(
         provider,
         proposal=replay_snapshots["proposal"],
+        approve_regime_risk=True,
     )
 
     result = loop.run_once()
@@ -185,7 +193,7 @@ def test_missing_regime_policy_blocks_new_entry(
     loop.settings.research.enforce_strategy_eligibility = False
     result = loop.run_once()
 
-    assert result["status"] == "regime_policy_rejected"
+    assert result["status"] == "regime_risk_rejected"
 
 
 def test_ready_policy_allows_matching_regime() -> None:
@@ -222,6 +230,7 @@ def test_position_closes_on_iv_collapse(
     loop = decision_loop_environment.build_loop(
         provider,
         proposal=entry_snapshots["proposal"],
+        approve_regime_risk=True,
     )
     loop.settings.research.enforce_strategy_eligibility = False
     loop.settings.research.enforce_feature_availability = False
@@ -248,6 +257,7 @@ def test_exit_engine_runs_on_next_cycle_after_fill(
     loop = decision_loop_environment.build_loop(
         provider,
         proposal=replay_snapshots["proposal"],
+        approve_regime_risk=True,
     )
     loop.settings.research.enforce_strategy_eligibility = False
 

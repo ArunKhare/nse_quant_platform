@@ -23,6 +23,7 @@ from nse_quant.market_data.replay_provider import (
     ReplayMarketDataProvider,
 )
 from nse_quant.persistence.duckdb_store import DuckDBStore
+from nse_quant.research.regime_risk_policy import RegimeRiskLimits
 from nse_quant.strategy.decision_loop import DecisionLoop
 
 
@@ -210,6 +211,7 @@ def decision_loop_environment(
             proposal: TradeProposal | None = None,
             *,
             enforce_strategy_eligibility: bool = False,
+            approve_regime_risk: bool = False,
         ) -> Any:
             loop = DecisionLoop(
                 store=test_store,
@@ -223,6 +225,24 @@ def decision_loop_environment(
             loop.settings.research.enforce_feature_availability = False
             loop.settings.research.enforce_regime_policy = False
             loop.settings.research.enforce_strategy_eligibility = enforce_strategy_eligibility
+
+            if approve_regime_risk:
+                test_regime_limits = RegimeRiskLimits(
+                    regime="UNKNOWN",
+                    allowed=True,
+                    max_lots_per_order=100,
+                    max_open_positions=100,
+                    max_notional_exposure=1_000_000_000.0,
+                    max_portfolio_vega=1_000_000_000.0,
+                    max_daily_loss=1_000_000_000.0,
+                    reason="TEST_APPROVED",
+                )
+
+                monkeypatch.setattr(
+                    loop,
+                    "_apply_regime_limits",
+                    lambda *args, **kwargs: test_regime_limits,
+                )
 
             if proposal is not None:
                 gates = self._build_gates()
