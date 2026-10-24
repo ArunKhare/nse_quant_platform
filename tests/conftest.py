@@ -272,7 +272,7 @@ def test_proposal(expiry, instrument_factory) -> TradeProposal:
         strategy="iron_condor_monitor",
         underlying="NIFTY",
         expiry=expiry,
-        entry_limit_price=20.0,
+        entry_limit_price=1300.0,
         thesis="Test iron condor proposal",
         stop_loss_price=500,
         metadata={},
@@ -285,10 +285,11 @@ def test_proposal(expiry, instrument_factory) -> TradeProposal:
                 ),
                 side=side,
                 lots=1,
+                entry_price=entry_price,
             )
-            for option_type, side, token in [
-                (OptionType.CE, OrderSide.BUY, 1001),
-                (OptionType.PE, OrderSide.SELL, 1050),
+            for option_type, side, token, entry_price in [
+                (OptionType.CE, OrderSide.BUY, 1001, 100.0),
+                (OptionType.PE, OrderSide.SELL, 1050, 120.0),
             ]
         ],
     )

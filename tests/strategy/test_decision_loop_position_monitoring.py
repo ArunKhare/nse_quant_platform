@@ -2,10 +2,25 @@ from datetime import UTC, datetime
 from types import SimpleNamespace
 from unittest.mock import Mock
 
+import pytest
+
 from nse_quant.core.models import ExitEvaluation, ExitReason
 from nse_quant.market_data.replay_provider import (
     ReplayMarketDataProvider,
 )
+
+
+def test_new_position_rejects_missing_leg_entry_premium(
+    decision_loop_environment,
+    replay_snapshots,
+):
+    proposal = replay_snapshots["proposal"]
+    proposal.legs[0].entry_price = None
+    provider = ReplayMarketDataProvider(replay_snapshots["snapshots"])
+    loop = decision_loop_environment.build_loop(provider, proposal=proposal)
+
+    with pytest.raises(ValueError, match="Missing or invalid entry premium"):
+        loop.run_once()
 
 
 def test_open_position_is_marked_and_exit_evaluated(
