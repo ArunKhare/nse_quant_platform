@@ -2,7 +2,7 @@
 
 ## Milestone 1 — Paper decision loop
 
-**Status: Core live decision loop complete (V0.21.0).**
+**Status: Core live decision loop complete; closure validation in progress.**
 
 Completed:
 
@@ -19,12 +19,19 @@ Completed:
 - Paper orders, positions, P&L, and review.
 - Dash console.
 - Tests.
+- MFT evidence persistence and daily evidence health reporting.
+- IV analytics diagnostics: current IV, history bounds, valid observation count, IV rank, percentile, and calculation version.
+- Per-leg iron-condor entry-premium persistence.
+- Net-credit strategy marking and leg-level unrealized P&L reconciliation.
+- Stale option-mark persistence, cycle-level reporting, and stale-mark alert events.
 
 Remaining for full Milestone 1 closure:
 
-- End-to-end paper-order proposal, fill, position, and exit validation.
-- Kill-switch order-block validation.
-- Replay/live decision parity checks.
+- Run and stabilize the end-to-end paper-order proposal, fill, position, marking, exit, and post-trade-review validation.
+- Run and stabilize kill-switch order-block validation.
+- Implement and stabilize replay/live decision parity checks.
+- Run the paper loop reliably across multiple complete trading days.
+- Remove the redundant post-proposal regime-policy gate, if still present.
 
 ## Milestone 2 — Research depth
 

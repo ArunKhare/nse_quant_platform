@@ -1,65 +1,23 @@
-# Implementation Status
-
-This is the operational status tracker for the NSE Quant Decision Platform.
-
-It answers:
-
-- What stage are we in?
-- What is currently being implemented?
-- What is complete?
-- What is next?
-- What must be true before moving to the next stage?
-
-For long-term direction, see `ROADMAP.md`.
-For instrument expansion, see `TRADING_UNIVERSE_ROADMAP.md`.
-For event impact design, see `EVENT_IMPACT_SYNTHESIS.md`.
-
-## Current stage
-
-**Stage 2 — Evidence, event context, and NIFTY strategy expansion**
-
-The NIFTY paper-loop foundation is operational. The current focus is to add
-observational evidence plugins, event-risk context, and eventually additional
-NIFTY strategies.
-
-Live trading remains disabled.
-
-## Stage progress
-
-| Stage | Description | Status |
-|---:|---|---|
-| 1 | NIFTY paper-loop foundation | Complete |
-| 2 | Evidence, event context, NIFTY strategy expansion | In progress |
-| 3 | Multi-horizon NIFTY strategies | Not started |
-| 4 | Cash-stock track | Not started |
-| 5 | Stock-option track | Not started |
-| 6 | Broader index context and beta | Not started |
-| 7 | Additional index options | Not started |
-
 ## Current sprint
 
 ### Objective
 
-Implement the MFT parallel-evidence plugin and establish the evidence-plugin
-foundation.
+Complete Milestone 1 closure validation and harden the evidence, valuation,
+and observability foundation.
 
 ### Scope
 
-- [ ] `docs/MFT_PARALLEL_EVIDENCE.md`
-- [ ] `src/nse_quant/research/candle_resampler.py`
-- [ ] `src/nse_quant/research/evidence_plugins/__init__.py`
-- [ ] `src/nse_quant/research/evidence_plugins/base.py`
-- [ ] `src/nse_quant/research/evidence_plugins/registry.py`
-- [ ] `src/nse_quant/research/evidence_plugins/multi_timeframe.py`
-- [ ] `EvidenceSettings`
-- [ ] `MultiTimeframeEvidenceSettings`
-- [ ] `evidence` section in `config/settings.yaml`
-- [ ] `decision_evidence` DuckDB table
-- [ ] `DuckDBStore.write_decision_evidence()`
-- [ ] `DuckDBStore.latest_spot_candles()`
-- [ ] `DecisionLoop` integration
-- [ ] Resampler tests
-- [ ] Multi-timeframe plugin tests
+- [x] MFT evidence plugin and decision-loop integration
+- [x] `decision_evidence` persistence
+- [x] Evidence availability, failure, and completeness reporting
+- [x] IV analytics diagnostics and validated IV-rank eligibility checks
+- [x] Per-leg iron-condor entry-premium persistence
+- [x] Net-credit strategy valuation and leg-level P&L reconciliation
+- [x] Stale option-mark persistence and alert events
+- [ ] End-to-end paper-order proposal, fill, position, marking, exit, and post-trade-review validation
+- [ ] Kill-switch order-block validation
+- [ ] Replay/live decision parity checks
+- [ ] Multi-complete-trading-day paper-loop reliability run
 - [ ] Remove redundant post-proposal regime-policy gate
 
 ## Completed
@@ -76,6 +34,12 @@ foundation.
 - EOD maintenance.
 - Option-stream Parquet export.
 - Warehouse validation.
+- MFT evidence plugin foundation and `decision_evidence` persistence.
+- Daily evidence availability, failure, and completeness reporting.
+- IV analytics diagnostics with calculation-version traceability.
+- Per-leg iron-condor premium persistence.
+- Net-credit strategy marking and leg-level P&L reconciliation.
+- Stale option-mark tracking, persistence, and alert events.
 
 ## Next sprint candidates
 
