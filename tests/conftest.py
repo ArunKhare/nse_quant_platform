@@ -370,3 +370,32 @@ def entry_snapshots(snapshot_factory, test_proposal):
             ),
         ],
     }
+
+
+@pytest.fixture
+def backtest_proposal(expiry, instrument_factory) -> TradeProposal:
+    return TradeProposal(
+        proposal_id="backtest-proposal",
+        strategy="iron_condor_monitor",
+        underlying="NIFTY",
+        expiry=expiry,
+        thesis="Backtest proposal",
+        legs=[
+            Leg(
+                instrument=instrument_factory(23000, OptionType.CE, 1001),
+                side=OrderSide.BUY,
+                lots=1,
+                entry_price=100.0,
+            ),
+            Leg(
+                instrument=instrument_factory(23000, OptionType.PE, 1002),
+                side=OrderSide.SELL,
+                lots=1,
+                entry_price=120.0,
+            ),
+        ],
+        entry_limit_price=20.0,
+        target_price=10.0,
+        stop_loss_price=40.0,
+        metadata={"net_credit": 20.0},
+    )

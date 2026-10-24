@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import UTC, datetime, timedelta
 
 from nse_quant.core.models import (
     ChainSnapshot,
@@ -16,8 +17,9 @@ from nse_quant.core.models import (
 class BacktestTrade:
     strategy_position_id: str
     proposal_id: str
-    opened_at: object
-    closed_at: object | None = None
+    proposal: TradeProposal | None
+    opened_at: datetime
+    closed_at: datetime | None = None
     entry_credit: float = 0.0
     exit_debit: float = 0.0
     realized_pnl: float = 0.0
@@ -31,6 +33,7 @@ class BacktestPortfolio:
         self.cash = initial_capital
         self.open_positions: list[BacktestTrade] = []
         self.closed_trades: list[BacktestTrade] = []
+        self.last_closed_at: datetime | None = None
 
     def open_position(
         self,
@@ -58,7 +61,8 @@ class BacktestPortfolio:
         trade = BacktestTrade(
             strategy_position_id=proposal.proposal_id,
             proposal_id=proposal.proposal_id,
-            opened_at=snapshot.ts,
+            proposal=proposal,
+            opened_at=snapshot.ts.astimezone(UTC),
             entry_credit=entry_credit,
             legs=filled_legs,
         )
@@ -79,6 +83,10 @@ class BacktestPortfolio:
         }
 
         for trade in self.open_positions:
+            # Never mark or exit a trade on its entry snapshot.
+            if snapshot.ts <= trade.opened_at:
+                continue
+
             exit_debit = 0.0
             complete = True
 
@@ -100,30 +108,79 @@ class BacktestPortfolio:
                     complete = False
                     continue
 
-                signed_quantity = leg.signed_quantity
-                exit_debit += price * signed_quantity
+                exit_debit += price * leg.signed_quantity
 
             if complete:
                 trade.exit_debit = exit_debit
                 trade.realized_pnl = trade.entry_credit - exit_debit
 
-    def close_positions(self) -> list[BacktestTrade]:
-        closed: list[BacktestTrade] = []
+    def close_position(
+        self,
+        trade: BacktestTrade,
+        exit_reason: ExitReason,
+        closed_at: datetime,
+    ) -> None:
+        trade.exit_reason = exit_reason
+        trade.closed_at = closed_at.astimezone(UTC)
 
-        for trade in self.open_positions:
-            if trade.realized_pnl >= 0:
-                trade.exit_reason = ExitReason.TARGET_PROFIT
-            else:
-                trade.exit_reason = ExitReason.STOP_LOSS
+        self.cash += trade.realized_pnl
+        self.closed_trades.append(trade)
 
-            trade.closed_at = trade.opened_at
-            self.cash += trade.realized_pnl
-            closed.append(trade)
+        if trade in self.open_positions:
+            self.open_positions.remove(trade)
 
-        self.open_positions = []
-        self.closed_trades.extend(closed)
+        self.last_closed_at = trade.closed_at
 
-        return closed
+    def can_enter(
+        self,
+        snapshot_ts: datetime,
+        max_open_positions: int,
+        cooldown_minutes: int,
+    ) -> bool:
+        if len(self.open_positions) >= max_open_positions:
+            return False
+
+        if self.last_closed_at is None:
+            return True
+
+        cooldown: timedelta = timedelta(minutes=cooldown_minutes)
+
+        return snapshot_ts - self.last_closed_at >= cooldown
+
+    def evaluate_exit(
+        self,
+        trade: BacktestTrade,
+        features: MarketFeatures,
+    ) -> ExitReason | None:
+        proposal = trade.proposal
+
+        if proposal is None:
+            return None
+
+        entry_credit = trade.entry_credit
+        exit_value = trade.exit_debit
+
+        target_price = proposal.target_price
+        stop_loss_price = proposal.stop_loss_price
+
+        if entry_credit > 0:
+            # Net credit received at entry.
+            if target_price is not None and exit_value <= target_price:
+                return ExitReason.TARGET_PROFIT
+            if stop_loss_price is not None and exit_value >= stop_loss_price:
+                return ExitReason.STOP_LOSS
+        else:
+            # Net debit paid at entry.
+            entry_debit = -entry_credit
+            current_pnl = -exit_value - entry_debit
+
+            if target_price is not None and current_pnl >= target_price:
+                return ExitReason.TARGET_PROFIT
+
+            if stop_loss_price is not None and current_pnl <= -stop_loss_price:
+                return ExitReason.STOP_LOSS
+
+        return None
 
     @staticmethod
     def _net_credit(legs: list[Leg]) -> float:

@@ -24,7 +24,7 @@ class IronCondorConfig:
 
 
 @dataclass
-class BacktestTrade:
+class BacktestTradeSummary:
     entry_ts: pd.Timestamp
     exit_ts: pd.Timestamp
     expiry: date
@@ -105,14 +105,14 @@ class IronCondorBacktester:
         self.frame["expiry"] = pd.to_datetime(self.frame["expiry"]).dt.date
         self.frame["trade_date"] = self.frame["market_ts"].dt.date
 
-    def run(self) -> list[BacktestTrade]:
-        trades: list[BacktestTrade] = []
+    def run(self) -> list[BacktestTradeSummary]:
+        trades: list[BacktestTradeSummary] = []
 
         for trade_date, day_frame in self.frame.groupby("trade_date"):
             self.diagnostics.days += 1
 
             trade = self._backtest_day(
-                trade_date=pd.Timestamp(trade_date).date(),
+                trade_date=pd.Timestamp(str(trade_date)).date(),
                 day_frame=day_frame,
             )
 
@@ -126,7 +126,7 @@ class IronCondorBacktester:
         *,
         trade_date: date,
         day_frame: pd.DataFrame,
-    ) -> BacktestTrade | None:
+    ) -> BacktestTradeSummary | None:
         entry_frame = day_frame[day_frame["market_ts"].dt.time >= self.config.entry_time]
 
         if entry_frame.empty:
@@ -200,7 +200,7 @@ class IronCondorBacktester:
             elif exit_reason == "end_of_day":
                 self.diagnostics.end_of_day_exits += 1
 
-            return BacktestTrade(
+            return BacktestTradeSummary(
                 entry_ts=entry_ts,
                 exit_ts=exit_ts,
                 expiry=expiry,
@@ -347,7 +347,7 @@ class IronCondorBacktester:
         active = day_frame[(day_frame["expiry"] == expiry) & (day_frame["market_ts"] > entry_ts)]
 
         for ts, snapshot in active.groupby("market_ts"):
-            ts = pd.Timestamp(ts)
+            ts = pd.Timestamp(str(ts))
 
             exit_legs = self._match_exit_legs(
                 exit_snapshot=snapshot,
@@ -421,7 +421,7 @@ class IronCondorBacktester:
 
 
 def trades_to_frame(
-    trades: list[BacktestTrade],
+    trades: list[BacktestTradeSummary],
 ) -> pd.DataFrame:
     columns = [
         "entry_ts",

@@ -4,6 +4,7 @@ import json
 from collections import deque
 from dataclasses import dataclass, field
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 import pandas as pd
 
@@ -13,6 +14,8 @@ from nse_quant.strategy.iron_condor import IronCondorMonitor
 from .config import BacktestConfig
 from .data import HistoricalDataLoader
 from .portfolio import BacktestPortfolio
+
+IST = ZoneInfo("Asia/Kolkata")
 
 
 @dataclass
@@ -40,7 +43,6 @@ class BacktestEngine:
         snapshots = self.loader.load_market_hour_snapshots()
 
         result = BacktestResult()
-        equity = self.config.initial_capital
 
         iv_history: deque[float] = deque(maxlen=500)
         spot_history: deque[float] = deque(maxlen=60)
@@ -58,7 +60,13 @@ class BacktestEngine:
                 iv_history_count=len(iv_history),
             )
 
-            if proposal is not None and not self.portfolio.open_positions:
+            entry_allowed = self.portfolio.can_enter(
+                snapshot_ts=snapshot.ts,
+                max_open_positions=self.config.max_open_positions,
+                cooldown_minutes=self.config.entry_cooldown_minutes,
+            )
+
+            if proposal is not None and entry_allowed:
                 self.portfolio.open_position(
                     proposal=proposal,
                     snapshot=snapshot,
@@ -66,11 +74,19 @@ class BacktestEngine:
                 )
 
             self.portfolio.mark_to_market(snapshot, features)
-            if self.portfolio.open_positions:
-                open_trade = self.portfolio.open_positions[0]
 
-                if open_trade.realized_pnl is not None and open_trade.realized_pnl >= 0:
-                    self.portfolio.close_positions()
+            if self.portfolio.open_positions:
+                trade = self.portfolio.open_positions[0]
+
+                if snapshot.ts > trade.opened_at:
+                    exit_reason = self.portfolio.evaluate_exit(trade, features)
+
+                    if exit_reason is not None:
+                        self.portfolio.close_position(
+                            trade=trade,
+                            exit_reason=exit_reason,
+                            closed_at=snapshot.ts,
+                        )
 
             result.decisions.append(
                 {
@@ -92,7 +108,8 @@ class BacktestEngine:
             result.equity_curve.append(
                 {
                     "ts": snapshot.ts,
-                    "equity": equity,
+                    "equity": self.portfolio.cash,
+                    "open_positions": len(self.portfolio.open_positions),
                 }
             )
 
@@ -141,12 +158,21 @@ class BacktestEngine:
                 {
                     "strategy_position_id": trade.strategy_position_id,
                     "proposal_id": trade.proposal_id,
-                    "opened_at": trade.opened_at,
-                    "closed_at": trade.closed_at,
+                    "opened_at": trade.opened_at.astimezone(IST),
+                    "closed_at": trade.closed_at.astimezone(IST) if trade.closed_at else None,
                     "entry_credit": trade.entry_credit,
                     "exit_debit": trade.exit_debit,
                     "realized_pnl": trade.realized_pnl,
                     "exit_reason": (trade.exit_reason.value if trade.exit_reason else None),
+                    "proposal_net_credit": (
+                        trade.proposal.metadata.get("net_credit") if trade.proposal else None
+                    ),
+                    "proposal_target_price": (
+                        trade.proposal.target_price if trade.proposal else None
+                    ),
+                    "proposal_stop_loss_price": (
+                        trade.proposal.stop_loss_price if trade.proposal else None
+                    ),
                 }
             )
 
