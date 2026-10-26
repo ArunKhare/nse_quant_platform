@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import argparse
-from datetime import date
+from datetime import date, datetime
 
 from nse_quant.research.backtest.config import BacktestConfig
 from nse_quant.research.backtest.engine import BacktestEngine
+
+now = datetime.now()
 
 
 def parse_args() -> argparse.Namespace:
@@ -16,7 +18,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--start-date", required=True)
     parser.add_argument("--end-date", required=True)
     parser.add_argument("--initial-capital", type=float, default=1_000_000.0)
-
+    parser.add_argument("--run-id", type=str, default=None, help="Unique run identifier")
     return parser.parse_args()
 
 
