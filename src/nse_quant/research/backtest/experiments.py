@@ -10,6 +10,7 @@ import pandas as pd
 
 from nse_quant.research.backtest.config import BacktestConfig
 from nse_quant.research.backtest.engine import BacktestEngine
+from nse_quant.research.backtest.report import generate_backtest_report
 
 
 @dataclass(frozen=True)
@@ -161,7 +162,14 @@ def run_parameter_experiments(
         engine = engine_factory(config)
         result = engine.run(prepared_steps=prepared_steps)
         engine.save(result)
-
+        try:
+            generate_backtest_report(
+                run_dir=engine.config.output_dir / engine.config.run_id,
+            )
+        except Exception as exc:  # noqa: BLE001
+            print(
+                f"QuantStats report generation failed for {engine.config.run_id}: {exc}",
+            )
         experiment_result = summarize_engine_run(
             experiment_id=experiment_id,
             parameters=parameters,
@@ -178,6 +186,7 @@ def run_parameter_experiments(
             f"entry_cooldown_minutes={parameters['entry_cooldown_minutes']} "
             f"snapshots={experiment_result.snapshot_count} "
             f"trades={experiment_result.trade_count}",
+            "report=quantstats_report.html",
         )
 
     return results
