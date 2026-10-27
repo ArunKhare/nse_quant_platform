@@ -145,6 +145,11 @@ def run_parameter_experiments(
         f"running {len(grid.combinations())} experiments",
     )
 
+    warmup_engine = engine_factory(base_config)
+    prepared_steps = warmup_engine.prepare_replay(snapshots)
+
+    print(f"Prepared {len(prepared_steps)} replay steps")
+
     for experiment_id, parameters in enumerate(grid.combinations()):
         config = base_config.model_copy(
             update={
@@ -154,7 +159,7 @@ def run_parameter_experiments(
         )
 
         engine = engine_factory(config)
-        result = engine.run(snapshots=snapshots)
+        result = engine.run(prepared_steps=prepared_steps)
         engine.save(result)
 
         experiment_result = summarize_engine_run(

@@ -10,7 +10,12 @@ from zoneinfo import ZoneInfo
 import pandas as pd
 
 from nse_quant.analytics.features import build_features
-from nse_quant.core.models import ChainSnapshot
+from nse_quant.core.models import (
+    ChainSnapshot,
+    GateResult,
+    MarketFeatures,
+    TradeProposal,
+)
 from nse_quant.strategy.iron_condor import IronCondorMonitor
 
 from .config import BacktestConfig
@@ -30,6 +35,14 @@ class BacktestResult:
         return sum(1 for decision in self.decisions if decision["proposal"] is not None)
 
 
+@dataclass
+class PreparedReplayStep:
+    snapshot: ChainSnapshot
+    features: MarketFeatures
+    proposal: TradeProposal | None
+    gates: list[GateResult]
+
+
 class BacktestEngine:
     def __init__(
         self,
@@ -47,27 +60,21 @@ class BacktestEngine:
     def run(
         self,
         snapshots: list[ChainSnapshot] | None = None,
+        prepared_steps: list[PreparedReplayStep] | None = None,
     ) -> BacktestResult:
-        if snapshots is None:
-            snapshots = self.loader.load_market_hour_snapshots()
+        if prepared_steps is None:
+            if snapshots is None:
+                snapshots = self.loader.load_market_hour_snapshots()
+
+            prepared_steps = self.prepare_replay(snapshots)
 
         result = BacktestResult()
 
-        iv_history: deque[float] = deque(maxlen=500)
-        spot_history: deque[float] = deque(maxlen=60)
-
-        for snapshot in snapshots:
-            features = build_features(
-                snapshot,
-                iv_history=iv_history,
-                close_history=spot_history,
-            )
-
-            proposal, gates = self.strategy.evaluate(
-                snapshot,
-                features,
-                iv_history_count=len(iv_history),
-            )
+        for step in prepared_steps:
+            snapshot = step.snapshot
+            features = step.features
+            proposal = step.proposal
+            gates = step.gates
 
             entry_allowed = self.portfolio.can_enter(
                 snapshot_ts=snapshot.ts,
@@ -104,7 +111,9 @@ class BacktestEngine:
                         )
 
             if self.config.force_close_eod and self.portfolio.open_positions:
-                local_time = snapshot.ts.astimezone(ZoneInfo(self.config.timezone)).time()
+                local_time = snapshot.ts.astimezone(
+                    ZoneInfo(self.config.timezone),
+                ).time()
 
                 if local_time >= time.fromisoformat(self.config.market_close):
                     self.portfolio.force_close_eod(snapshot)
@@ -121,7 +130,7 @@ class BacktestEngine:
                     "expected_move_points": features.expected_move_points,
                     "regime": features.regime.value,
                     "liquidity_score": features.liquidity_score,
-                    "proposal": proposal.model_dump(mode="json") if proposal else None,
+                    "proposal": (proposal.model_dump(mode="json") if proposal else None),
                     "gates": [gate.model_dump(mode="json") for gate in gates],
                 }
             )
@@ -133,12 +142,6 @@ class BacktestEngine:
                     "open_positions": len(self.portfolio.open_positions),
                 }
             )
-
-            # Update rolling history only after evaluating the snapshot.
-            if features.atm_iv is not None and features.atm_iv > 0:
-                iv_history.append(features.atm_iv)
-
-            spot_history.append(snapshot.spot)
 
         return result
 
@@ -217,3 +220,41 @@ class BacktestEngine:
         )
 
         return output_dir
+
+    def prepare_replay(
+        self,
+        snapshots: list[ChainSnapshot],
+    ) -> list[PreparedReplayStep]:
+        iv_history: deque[float] = deque(maxlen=500)
+        spot_history: deque[float] = deque(maxlen=60)
+
+        steps: list[PreparedReplayStep] = []
+
+        for snapshot in snapshots:
+            features = build_features(
+                snapshot,
+                iv_history=iv_history,
+                close_history=spot_history,
+            )
+
+            proposal, gates = self.strategy.evaluate(
+                snapshot,
+                features,
+                iv_history_count=len(iv_history),
+            )
+
+            steps.append(
+                PreparedReplayStep(
+                    snapshot=snapshot,
+                    features=features,
+                    proposal=proposal,
+                    gates=gates,
+                )
+            )
+
+            if features.atm_iv is not None and features.atm_iv > 0:
+                iv_history.append(features.atm_iv)
+
+            spot_history.append(snapshot.spot)
+
+        return steps
