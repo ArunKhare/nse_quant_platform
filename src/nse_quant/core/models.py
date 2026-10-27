@@ -105,6 +105,10 @@ class ChainSnapshot(BaseModel):
             self.quotes, key=lambda q: abs(q.instrument.strike - self.spot)
         ).instrument.strike
 
+    @property
+    def snapshot_date(self) -> date:
+        return self.ts.date()
+
 
 class MarketFeatures(BaseModel):
     ts: datetime
