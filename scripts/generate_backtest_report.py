@@ -1,3 +1,12 @@
+"""generate Backtest Quant Report
+cmd example : python scripts\generate_backtest_report.py --run-id 2026-10-25 --risk-free-rate 0.7
+Before:  create the latest backtest report with
+cmd example : uv run python scripts/run_backtest.py `
+  --start-date 2026-10-21 `
+  --end-date 2026-10-23 `
+  --run-id 2026-10-21_2026-10-23
+"""
+
 from __future__ import annotations
 
 import argparse
@@ -140,8 +149,11 @@ def main() -> None:
     args = parse_args()
 
     run_dir = Path(args.backtest_dir) / args.run_id
-    equity_path = run_dir / "equity_curve.csv"
-    trades_path = run_dir / "trades.csv"
+    equity_path = Path(run_dir / "equity_curve.csv")
+    trades_path = Path(run_dir / "trades.csv")
+    print({"-" * 75})
+    print(f"1.Equity Curve CSV opath: {equity_path} \n2. Trades CSV path: {trades_path} ")
+    print({"-" * 75})
 
     if not equity_path.exists():
         raise FileNotFoundError(f"Equity curve not found: {equity_path}")

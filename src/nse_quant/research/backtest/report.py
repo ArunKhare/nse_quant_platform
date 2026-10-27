@@ -1,3 +1,9 @@
+"""Load backtest results, calculate performance metrics, and generate reports.
+
+The report combines an equity curve and optional realized trade data into a
+QuantStats HTML report and a JSON summary.
+"""
+
 from __future__ import annotations
 
 import json

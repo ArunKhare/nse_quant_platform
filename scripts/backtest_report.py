@@ -14,7 +14,7 @@ def main() -> int:
     parser.add_argument("--returns", required=True)
     parser.add_argument(
         "--output",
-        default=("data/research/milestone2/quantstats_report.html"),
+        default=(Path("data/research/milestone2/quantstats_report.html")),
     )
     args = parser.parse_args()
 
