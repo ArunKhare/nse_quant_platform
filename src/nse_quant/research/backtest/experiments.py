@@ -146,7 +146,6 @@ def run_parameter_experiments(
         f"running {len(grid.combinations())} experiments",
     )
 
-    warmup_engine = engine_factory(base_config)
     prepared_steps = warmup_engine.prepare_replay(snapshots)
 
     print(f"Prepared {len(prepared_steps)} replay steps")
