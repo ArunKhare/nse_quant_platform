@@ -61,7 +61,7 @@ def main() -> int:
     results = run_walk_forward_experiments(
         base_config=base_config,
         grid=grid,
-        engine_factory=lambda config: BacktestEngine(config),
+        engine_factory=BacktestEngine,
         snapshot_loader=BacktestEngine(
             base_config,
         ).loader.load_market_hour_snapshots,
