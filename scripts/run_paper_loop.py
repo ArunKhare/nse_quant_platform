@@ -171,6 +171,14 @@ def main() -> int:
 
     primary_symbol = symbols[0]
 
+    notifier.send(
+        "NSE Quant paper loop started\n"
+        f"Run ID: {run_id}\n"
+        f"Symbol: {primary_symbol}\n"
+        f"Duration: {args.seconds}s\n"
+        f"Mode: {'replay' if args.replay_file else 'live-paper'}",
+    )
+
     feature_snapshot = loop.feature_service.latest(primary_symbol)
 
     if feature_snapshot is not None:
@@ -187,6 +195,9 @@ def main() -> int:
         "Gate max age seconds:",
         loop.feature_gate._max_age_seconds,
     )
+
+    loop_failed = False
+    failure_error: BaseException | None = None
 
     try:
         if (
@@ -372,8 +383,32 @@ def main() -> int:
 
     except KeyboardInterrupt:
         print("Paper loop interrupted.")
+        notifier.send(
+            f"NSE Quant paper loop interrupted by user.\nRun ID: {run_id}",
+        )
+    except Exception as exc:  # noqa: BLE001
+        loop_failed = True
+        failure_error = exc
+        traceback.print_exc()
+
+        notifier.send(
+            "NSE Quant paper loop FAILED\n"
+            f"Run ID: {run_id}\n"
+            f"Symbol: {primary_symbol}\n"
+            f"Error type: {type(exc).__name__}\n"
+            f"Error: {exc}",
+        )
 
     finally:
+        end_status = "failed" if loop_failed and failure_error is not None else "completed"
+
+        notifier.send(
+            f"NSE Quant paper loop {end_status}\n"
+            f"Run ID: {run_id}\n"
+            f"Symbol: {primary_symbol}\n"
+            f"Ended at: {datetime.now(UTC).isoformat()}",
+        )
+
         store.conn.close()
 
     return 0
