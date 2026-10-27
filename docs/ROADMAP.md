@@ -32,14 +32,24 @@ Completed:
 Remaining for full Milestone 1 closure:
 - Run the paper loop reliably across multiple complete trading days.
 
-
 ## Milestone 2 — Research depth
 
+Completed:
+
 - Historical Parquet warehouse.
+- Warehouse validation and research-grade day selection.
+- IV surface, daily IV, IV regime, and RV regime research.
+- Replay-based iron-condor backtest harness.
+- Deterministic exit-lifecycle coverage.
+- QuantStats equity-curve reporting and performance summaries.
+- Paper-only strategy parameter experiments.
+- Experiment ranking, exit-reason analysis, and promotion gating.
+
+Remaining:
+
 - Backtests with vectorbt.
-- QuantStats reports.
-- Strategy parameter experiments.
-- IV surface and term-structure research.
+- Walk-forward experiment validation.
+- Multi-complete-trading-day reliability evidence.
 
 ## Milestone 3 — Controlled execution
 

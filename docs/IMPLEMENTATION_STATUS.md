@@ -18,7 +18,7 @@ and observability foundation.
 - [x] Remove redundant post-proposal regime-policy gate
 - [x] Replay/live decision parity checks
 - [x] Kill-switch order-block validation
-- [ ] Multi-complete-trading-day paper-loop reliability run
+- [x] Multi-complete-trading-day paper-loop reliability run
 
 
 ## Completed
@@ -42,14 +42,19 @@ and observability foundation.
 - Net-credit strategy marking and leg-level P&L reconciliation.
 - Stale option-mark tracking, persistence, and alert events.
 
-## Next sprint candidates
+- Milestone 2 parameter-experiment harness.
+- Experiment exit-reason tracking and analysis.
+- QuantStats backtest reporting.
+- Telegram operational test and lifecycle notifications.
 
-1. `event_risk` evidence plugin.
-2. `technical_indicators` evidence plugin.
-3. `volume_flow` evidence plugin.
-4. `option_positioning` evidence plugin.
-5. Event-to-instrument impact mapping.
-6. Multi-horizon NIFTY strategy profiles.
+## Next sprint candidates
+1. `Walk-forward parameter` validation.
+2. `event_risk` evidence plugin.
+3. `technical_indicators` evidence plugin.
+4. `volume_flow` evidence plugin.
+5. `option_positioning` evidence plugin.
+6. Event-to-instrument impact mapping.
+7. Multi-horizon NIFTY strategy profiles.
 
 ## Acceptance criteria for Stage 2
 
