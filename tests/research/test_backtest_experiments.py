@@ -22,6 +22,7 @@ class StubEngine:
     def __init__(self, config: BacktestConfig) -> None:
         self.config = config
         self.received_snapshots: list | None = None
+        self.received_steps: list | None = None
         self.portfolio = type(
             "Portfolio",
             (),
@@ -55,9 +56,20 @@ class StubEngine:
             },
         )()
 
-    def run(self, snapshots=None):
+    def prepare_replay(self, snapshots: list) -> list:
+        return [
+            {"snapshot": snapshot, "features": {}, "proposal": None, "gates": []}
+            for snapshot in snapshots
+        ]
+
+    def run(
+        self,
+        snapshots: list | None = None,
+        prepared_steps: list | None = None,
+    ):
         start = datetime(2026, 10, 26, 4, 15, tzinfo=UTC)
         self.received_snapshots = snapshots
+        self.received_steps = prepared_steps
 
         return type(
             "Result",
@@ -123,10 +135,17 @@ def test_run_parameter_experiments_creates_isolated_runs(tmp_path):
         entry_cooldown_minutes=(15,),
     )
 
+    engines: list[StubEngine] = []
+
+    def engine_factory(config: BacktestConfig) -> StubEngine:
+        engine = StubEngine(config)
+        engines.append(engine)
+        return engine
+
     results = run_parameter_experiments(
         base_config=base_config,
         grid=grid,
-        engine_factory=StubEngine,
+        engine_factory=engine_factory,
         snapshot_loader=stub_snapshot_loader,
     )
 
@@ -142,6 +161,19 @@ def test_run_parameter_experiments_creates_isolated_runs(tmp_path):
         "TARGET_PROFIT": 1,
         "STOP_LOSS": 1,
     }
+
+    expected_experiment_count = len(grid.combinations())
+
+    assert len(engines) == expected_experiment_count + 1
+
+    warmup_engine = engines[0]
+    experiment_engines = engines[1:]
+
+    assert warmup_engine.received_steps is None
+
+    for engine in experiment_engines:
+        assert engine.received_steps is not None
+        assert engine.received_steps is experiment_engines[0].received_steps
 
 
 def test_save_experiment_results_writes_outputs(tmp_path):
