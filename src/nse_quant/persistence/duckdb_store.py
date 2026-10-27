@@ -1258,7 +1258,7 @@ class DuckDBStore:
             FROM spot_candles
             WHERE symbol = ?
               AND instrument_token = ?
-              AND interval = 1m
+              AND interval = '1m'
               AND ts <= ?
             ORDER BY ts DESC
             LIMIT ?
