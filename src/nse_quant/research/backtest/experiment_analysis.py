@@ -18,11 +18,6 @@ REQUIRED_COLUMNS = {
     "final_equity",
     "total_return",
     "max_drawdown",
-    "exit_reason_target_profit",
-    "exit_reason_stop_loss",
-    "exit_reason_iv_collapse",
-    "exit_reason_expected_move_violation",
-    "exit_reason_expiry_force_close",
 }
 
 PARAMETER_COLUMNS = {

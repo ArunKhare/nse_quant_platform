@@ -27,8 +27,30 @@ class StubEngine:
             (),
             {
                 "closed_trades": [
-                    type("Trade", (), {"realized_pnl": 100.0})(),
-                    type("Trade", (), {"realized_pnl": -40.0})(),
+                    type(
+                        "Trade",
+                        (),
+                        {
+                            "realized_pnl": 100.0,
+                            "exit_reason": type(
+                                "Reason",
+                                (),
+                                {"value": "TARGET_PROFIT"},
+                            )(),
+                        },
+                    )(),
+                    type(
+                        "Trade",
+                        (),
+                        {
+                            "realized_pnl": -40.0,
+                            "exit_reason": type(
+                                "Reason",
+                                (),
+                                {"value": "STOP_LOSS"},
+                            )(),
+                        },
+                    )(),
                 ],
             },
         )()
@@ -116,6 +138,10 @@ def test_run_parameter_experiments_creates_isolated_runs(tmp_path):
     assert results[0].profit_factor == pytest.approx(2.5)
     assert results[0].total_return == pytest.approx(0.006)
     assert results[0].snapshot_count == 3
+    assert results[0].exit_reason_counts == {
+        "TARGET_PROFIT": 1,
+        "STOP_LOSS": 1,
+    }
 
 
 def test_save_experiment_results_writes_outputs(tmp_path):

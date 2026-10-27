@@ -13,6 +13,14 @@ from nse_quant.research.backtest.experiment_analysis import (
     save_analysis_report,
 )
 
+EXIT_REASON_COLUMNS = {
+    "exit_reason_target_profit": 1,
+    "exit_reason_stop_loss": 1,
+    "exit_reason_iv_collapse": 0,
+    "exit_reason_expected_move_violation": 0,
+    "exit_reason_expiry_force_close": 0,
+}
+
 
 def make_results() -> pd.DataFrame:
     return pd.DataFrame(
@@ -32,6 +40,7 @@ def make_results() -> pd.DataFrame:
                 "iv_collapse_pct": 20.0,
                 "expected_move_buffer": 1.25,
                 "entry_cooldown_minutes": 15,
+                **EXIT_REASON_COLUMNS,
             },
             {
                 "experiment_id": 1,
@@ -48,6 +57,7 @@ def make_results() -> pd.DataFrame:
                 "iv_collapse_pct": 15.0,
                 "expected_move_buffer": 1.25,
                 "entry_cooldown_minutes": 15,
+                **EXIT_REASON_COLUMNS,
             },
         ],
     )
@@ -92,6 +102,13 @@ def test_analysis_report_is_research_only_for_insufficient_data():
     assert report["analysis_status"] == "INSUFFICIENT_DATA_FOR_OPTIMIZATION"
     assert report["recommendation"] == "RESEARCH_ONLY_DO_NOT_PROMOTE"
     assert report["recommended_experiment_id"] == 1
+    assert report["exit_reason_totals"] == {
+        "TARGET_PROFIT": 2,
+        "STOP_LOSS": 2,
+        "IV_COLLAPSE": 0,
+        "EXPECTED_MOVE_VIOLATION": 0,
+        "EXPIRY_FORCE_CLOSE": 0,
+    }
 
 
 def test_save_analysis_report_writes_outputs(tmp_path):
@@ -111,6 +128,7 @@ def test_save_analysis_report_writes_outputs(tmp_path):
     assert report["experiment_count"] == 2
     assert report["promotion_eligible_count"] == 0
     assert report["recommendation"] == "RESEARCH_ONLY_DO_NOT_PROMOTE"
+    assert report["exit_reason_totals"]["TARGET_PROFIT"] == 2
 
 
 def test_load_experiment_results_flattens_legacy_parameters(tmp_path):
