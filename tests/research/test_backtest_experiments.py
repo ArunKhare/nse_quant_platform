@@ -144,3 +144,56 @@ def test_save_experiment_results_writes_outputs(tmp_path):
 
     summary = summary_path.read_text(encoding="utf-8")
     assert "INSUFFICIENT_DATA_FOR_OPTIMIZATION" in summary
+
+
+def test_experiment_result_records_exit_reason_counts(tmp_path):
+    base_config = BacktestConfig(
+        warehouse_dir=tmp_path / "warehouse",
+        output_dir=tmp_path / "backtests",
+        start_date=date(2026, 10, 21),
+        end_date=date(2026, 10, 23),
+        run_id="reasons",
+    )
+
+    class ReasonEngine(StubEngine):
+        def __init__(self, config: BacktestConfig) -> None:
+            super().__init__(config)
+
+            self.portfolio.closed_trades = [
+                type(
+                    "Trade",
+                    (),
+                    {
+                        "realized_pnl": 100.0,
+                        "exit_reason": type(
+                            "Reason",
+                            (),
+                            {"value": "TARGET_PROFIT"},
+                        )(),
+                    },
+                )(),
+                type(
+                    "Trade",
+                    (),
+                    {
+                        "realized_pnl": -40.0,
+                        "exit_reason": type(
+                            "Reason",
+                            (),
+                            {"value": "STOP_LOSS"},
+                        )(),
+                    },
+                )(),
+            ]
+
+    results = run_parameter_experiments(
+        base_config=base_config,
+        grid=ParameterGrid(),
+        engine_factory=ReasonEngine,
+        snapshot_loader=stub_snapshot_loader,
+    )
+
+    assert results[0].exit_reason_counts == {
+        "TARGET_PROFIT": 1,
+        "STOP_LOSS": 1,
+    }

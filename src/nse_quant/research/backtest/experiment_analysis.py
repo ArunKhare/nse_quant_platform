@@ -18,6 +18,11 @@ REQUIRED_COLUMNS = {
     "final_equity",
     "total_return",
     "max_drawdown",
+    "exit_reason_target_profit",
+    "exit_reason_stop_loss",
+    "exit_reason_iv_collapse",
+    "exit_reason_expected_move_violation",
+    "exit_reason_expiry_force_close",
 }
 
 PARAMETER_COLUMNS = {
@@ -148,6 +153,7 @@ def build_analysis_report(
             if status == "INSUFFICIENT_DATA_FOR_OPTIMIZATION"
             else "MANUAL_REVIEW_REQUIRED"
         ),
+        "exit_reason_totals": summarize_exit_reasons(ranked),
     }
 
 
@@ -183,3 +189,12 @@ def save_analysis_report(
     )
 
     return ranked_path, report_path
+
+
+def summarize_exit_reasons(frame: pd.DataFrame) -> dict[str, int]:
+    reason_columns = [column for column in frame.columns if column.startswith("exit_reason_")]
+
+    return {
+        column.removeprefix("exit_reason_").upper(): int(frame[column].sum())
+        for column in reason_columns
+    }

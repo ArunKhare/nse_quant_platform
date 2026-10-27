@@ -49,6 +49,7 @@ class ExperimentResult:
     final_equity: float
     total_return: float
     max_drawdown: float
+    exit_reason_counts: dict[str, int]
     output_dir: str
 
 
@@ -72,6 +73,7 @@ def summarize_engine_run(
     engine: BacktestEngine,
     result,
 ) -> ExperimentResult:
+
     equity = pd.Series(
         [point["equity"] for point in result.equity_curve],
         index=pd.DatetimeIndex(
@@ -88,6 +90,11 @@ def summarize_engine_run(
     gross_profit = sum(wins)
     gross_loss = abs(sum(losses))
 
+    exit_reason_counts: dict[str, int] = {}
+
+    for trade in trades:
+        reason = trade.exit_reason.value if trade.exit_reason else "UNKNOWN"
+        exit_reason_counts[reason] = exit_reason_counts.get(reason, 0) + 1
     initial_equity = engine.config.initial_capital
     final_equity = float(equity.iloc[-1]) if not equity.empty else initial_equity
 
@@ -111,6 +118,7 @@ def summarize_engine_run(
         total_return=final_equity / initial_equity - 1.0,
         max_drawdown=calculate_max_drawdown(equity),
         output_dir=str(engine.config.output_dir / engine.config.run_id),
+        exit_reason_counts=exit_reason_counts,
     )
 
 
@@ -176,16 +184,30 @@ def save_experiment_results(
 ) -> tuple[Path, Path]:
     output_dir.mkdir(parents=True, exist_ok=True)
 
+    EXIT_REASON_COLUMNS = [
+        "TARGET_PROFIT",
+        "STOP_LOSS",
+        "IV_COLLAPSE",
+        "EXPECTED_MOVE_VIOLATION",
+        "EXPIRY_FORCE_CLOSE",
+        "UNKNOWN",
+    ]
+
     rows: list[dict[str, object]] = []
 
     for result in results:
         row = asdict(result)
         parameters = row.pop("parameters")
+        reasons = row.pop("exit_reason_counts")
 
         rows.append(
             {
                 **row,
                 **parameters,
+                **{
+                    f"exit_reason_{reason.lower()}": reasons.get(reason, 0)
+                    for reason in EXIT_REASON_COLUMNS
+                },
             }
         )
 
