@@ -187,7 +187,11 @@ def save_analysis_report(
 
 
 def summarize_exit_reasons(frame: pd.DataFrame) -> dict[str, int]:
-    reason_columns = [column for column in frame.columns if column.startswith("exit_reason_")]
+    reason_columns = [
+        column
+        for column in frame.columns
+        if column.startswith("exit_reason_") and pd.api.types.is_numeric_dtype(frame[column])
+    ]
 
     return {
         column.removeprefix("exit_reason_").upper(): int(frame[column].sum())
