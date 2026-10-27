@@ -10,6 +10,7 @@ from zoneinfo import ZoneInfo
 import pandas as pd
 
 from nse_quant.analytics.features import build_features
+from nse_quant.core.models import ChainSnapshot
 from nse_quant.strategy.iron_condor import IronCondorMonitor
 
 from .config import BacktestConfig
@@ -43,8 +44,12 @@ class BacktestEngine:
             config=self.config,
         )
 
-    def run(self) -> BacktestResult:
-        snapshots = self.loader.load_market_hour_snapshots()
+    def run(
+        self,
+        snapshots: list[ChainSnapshot] | None = None,
+    ) -> BacktestResult:
+        if snapshots is None:
+            snapshots = self.loader.load_market_hour_snapshots()
 
         result = BacktestResult()
 

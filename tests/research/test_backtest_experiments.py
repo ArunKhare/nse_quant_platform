@@ -14,9 +14,14 @@ from nse_quant.research.backtest.experiments import (
 )
 
 
+def stub_snapshot_loader():
+    return [object(), object()]
+
+
 class StubEngine:
     def __init__(self, config: BacktestConfig) -> None:
         self.config = config
+        self.received_snapshots: list | None = None
         self.portfolio = type(
             "Portfolio",
             (),
@@ -28,8 +33,9 @@ class StubEngine:
             },
         )()
 
-    def run(self):
+    def run(self, snapshots=None):
         start = datetime(2026, 10, 26, 4, 15, tzinfo=UTC)
+        self.received_snapshots = snapshots
 
         return type(
             "Result",
@@ -99,6 +105,7 @@ def test_run_parameter_experiments_creates_isolated_runs(tmp_path):
         base_config=base_config,
         grid=grid,
         engine_factory=StubEngine,
+        snapshot_loader=stub_snapshot_loader,
     )
 
     assert len(results) == 2
@@ -108,6 +115,7 @@ def test_run_parameter_experiments_creates_isolated_runs(tmp_path):
     assert results[0].win_rate == pytest.approx(0.5)
     assert results[0].profit_factor == pytest.approx(2.5)
     assert results[0].total_return == pytest.approx(0.006)
+    assert results[0].snapshot_count == 3
 
 
 def test_save_experiment_results_writes_outputs(tmp_path):
@@ -123,6 +131,7 @@ def test_save_experiment_results_writes_outputs(tmp_path):
         base_config=base_config,
         grid=ParameterGrid(),
         engine_factory=StubEngine,
+        snapshot_loader=stub_snapshot_loader,
     )
 
     results_path, summary_path = save_experiment_results(

@@ -71,7 +71,7 @@ def main() -> int:
     results = run_parameter_experiments(
         base_config=base_config,
         grid=grid,
-        engine_factory=lambda config: BacktestEngine(config),
+        engine_factory=BacktestEngine,
     )
 
     results_path, summary_path = save_experiment_results(

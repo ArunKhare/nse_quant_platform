@@ -53,6 +53,7 @@ class ExperimentResult:
 
 
 EngineFactory = Callable[[BacktestConfig], BacktestEngine]
+SnapshotLoader = Callable[[], list]
 
 
 def calculate_max_drawdown(equity: pd.Series) -> float:
@@ -118,28 +119,52 @@ def run_parameter_experiments(
     base_config: BacktestConfig,
     grid: ParameterGrid,
     engine_factory: EngineFactory,
+    snapshot_loader: SnapshotLoader | None = None,
 ) -> list[ExperimentResult]:
     results: list[ExperimentResult] = []
+
+    # Load and validate the warehouse once, then reuse the same
+    # research-grade snapshot stream for every parameter combination.
+    warmup_engine = engine_factory(base_config)
+
+    if snapshot_loader is None:
+        snapshot_loader = warmup_engine.loader.load_market_hour_snapshots
+
+    snapshots = snapshot_loader()
+
+    print(
+        f"Loaded {len(snapshots)} research-grade snapshots; "
+        f"running {len(grid.combinations())} experiments",
+    )
 
     for experiment_id, parameters in enumerate(grid.combinations()):
         config = base_config.model_copy(
             update={
                 **parameters,
-                "run_id": (f"{base_config.run_id}_exp{experiment_id:03d}"),
+                "run_id": f"{base_config.run_id}_exp{experiment_id:03d}",
             },
         )
 
         engine = engine_factory(config)
-        result = engine.run()
+        result = engine.run(snapshots=snapshots)
         engine.save(result)
 
-        results.append(
-            summarize_engine_run(
-                experiment_id=experiment_id,
-                parameters=parameters,
-                engine=engine,
-                result=result,
-            ),
+        experiment_result = summarize_engine_run(
+            experiment_id=experiment_id,
+            parameters=parameters,
+            engine=engine,
+            result=result,
+        )
+
+        results.append(experiment_result)
+
+        print(
+            f"Completed experiment {experiment_id}: "
+            f"iv_collapse_pct={parameters['iv_collapse_pct']} "
+            f"expected_move_buffer={parameters['expected_move_buffer']} "
+            f"entry_cooldown_minutes={parameters['entry_cooldown_minutes']} "
+            f"snapshots={experiment_result.snapshot_count} "
+            f"trades={experiment_result.trade_count}",
         )
 
     return results
