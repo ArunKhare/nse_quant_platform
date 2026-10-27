@@ -43,29 +43,34 @@ class WalkForwardFoldResult:
     test_result: ExperimentResult | None
 
 
-def build_date_folds(
+def build_snapshot_folds(
+    snapshot_dates: list[date],
     *,
-    available_dates: list[date],
     train_days: int,
     test_days: int,
 ) -> list[WalkForwardFold]:
-    if train_days <= 0 or test_days <= 0:
-        raise ValueError("train_days and test_days must be positive")
-
-    dates = sorted(set(available_dates))
+    unique_dates = sorted(set(snapshot_dates))
     folds: list[WalkForwardFold] = []
+    cursor = 0
+    fold_id = 0
 
-    for start in range(len(dates) - train_days - test_days + 1):
-        train_dates = dates[start : start + train_days]
-        test_dates = dates[start + train_days : start + train_days + test_days]
+    while True:
+        train_dates = unique_dates[cursor : cursor + train_days]
+        test_dates = unique_dates[cursor + train_days : cursor + train_days + test_days]
+
+        if len(train_dates) < train_days or len(test_dates) < test_days:
+            break
 
         folds.append(
             WalkForwardFold(
-                fold_id=start,
+                fold_id=fold_id,
                 train_dates=train_dates,
                 test_dates=test_dates,
             )
         )
+
+        fold_id += 1
+        cursor += test_days
 
     return folds
 
@@ -95,8 +100,8 @@ def run_walk_forward_experiments(
     grouped = group_snapshots_by_date(snapshots)
     available_dates = sorted(grouped)
 
-    folds = build_date_folds(
-        available_dates=available_dates,
+    folds = build_snapshot_folds(
+        available_dates,
         train_days=train_days,
         test_days=test_days,
     )
@@ -105,11 +110,9 @@ def run_walk_forward_experiments(
 
     for fold in folds:
         train_snapshots = [
-            snapshot for train_date in fold.train_dates for snapshot in grouped[train_date]
+            snapshot for snapshot in snapshots if snapshot.ts.date in fold.train_dates
         ]
-        test_snapshots = [
-            snapshot for test_date in fold.test_dates for snapshot in grouped[test_date]
-        ]
+        test_snapshots = [snapshot for snapshot in snapshots if snapshot.ts.date in fold.test_dates]
 
         warmup_engine = engine_factory(base_config)
         prepared_train_steps = warmup_engine.prepare_replay(train_snapshots)
