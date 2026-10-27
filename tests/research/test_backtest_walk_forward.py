@@ -5,7 +5,7 @@ from datetime import UTC, date, datetime, timedelta
 from nse_quant.research.backtest.config import BacktestConfig
 from nse_quant.research.backtest.experiments import ParameterGrid
 from nse_quant.research.backtest.walk_forward import (
-    build_date_folds,
+    build_snapshot_folds,
     group_snapshots_by_date,
     run_walk_forward_experiments,
     save_walk_forward_results,
@@ -70,8 +70,8 @@ class StubEngine:
 
 
 def test_build_date_folds_is_no_lookahead():
-    folds = build_date_folds(
-        available_dates=[
+    folds = build_snapshot_folds(
+        snapshot_dates=[
             date(2026, 10, 21),
             date(2026, 10, 23),
             date(2026, 10, 27),
