@@ -176,7 +176,19 @@ def save_experiment_results(
 ) -> tuple[Path, Path]:
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    rows = [asdict(result) for result in results]
+    rows: list[dict[str, object]] = []
+
+    for result in results:
+        row = asdict(result)
+        parameters = row.pop("parameters")
+
+        rows.append(
+            {
+                **row,
+                **parameters,
+            }
+        )
+
     results_path = output_dir / "parameter_experiments.csv"
     pd.DataFrame(rows).to_csv(results_path, index=False)
 
