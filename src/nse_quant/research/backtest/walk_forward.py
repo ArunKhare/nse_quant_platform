@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Callable
+from concurrent.futures import ProcessPoolExecutor
 from dataclasses import asdict, dataclass
 from datetime import date
 from pathlib import Path
@@ -9,7 +10,12 @@ from pathlib import Path
 import pandas as pd
 
 from nse_quant.research.backtest.config import BacktestConfig
-from nse_quant.research.backtest.engine import BacktestEngine
+from nse_quant.research.backtest.engine import (
+    BacktestEngine,
+    BacktestResult,
+    PreparedFeatureStep,
+    PreparedReplayStep,
+)
 from nse_quant.research.backtest.experiment_analysis import (
     build_analysis_report,
     rank_experiments,
@@ -85,6 +91,16 @@ def group_snapshots_by_date(snapshots: list) -> dict[date, list]:
     return grouped
 
 
+def _run_train_experiment(
+    config: BacktestConfig,
+    prepared_features: list[PreparedFeatureStep],
+    engine_factory: EngineFactory | None = None,
+) -> tuple[BacktestEngine, BacktestResult]:
+    engine = engine_factory(config) if engine_factory is not None else BacktestEngine(config)
+    result = engine.run_prepared_features(prepared_features)
+    return engine, result
+
+
 def run_walk_forward_experiments(
     *,
     base_config: BacktestConfig,
@@ -95,6 +111,7 @@ def run_walk_forward_experiments(
     test_days: int = 1,
     min_train_trades: int = 10,
     min_test_trades: int = 1,
+    workers: int = 1,
 ) -> list[WalkForwardFoldResult]:
     snapshots = snapshot_loader()
     grouped = group_snapshots_by_date(snapshots)
@@ -133,6 +150,15 @@ def run_walk_forward_experiments(
 
         train_results: list[ExperimentResult] = []
 
+        warmup_engine = engine_factory(base_config)
+        prepared_train_replay, uses_feature_path = _prepare_engine_replay(
+            warmup_engine,
+            train_snapshots,
+        )
+
+        experiment_configs: list[BacktestConfig] = []
+        experiment_parameters: list[dict[str, float | int]] = []
+
         for experiment_id, parameters in enumerate(grid.combinations()):
             config = base_config.model_copy(
                 update={
@@ -143,10 +169,43 @@ def run_walk_forward_experiments(
                 },
             )
 
-            engine = engine_factory(config)
-            prepared_train_steps = engine.prepare_replay(train_snapshots)
-            result = engine.run(prepared_steps=prepared_train_steps)
-            engine.save(result)
+            experiment_configs.append(config)
+            experiment_parameters.append(parameters)
+
+        max_workers = min(len(experiment_configs), max(1, workers))
+
+        if uses_feature_path:
+            if max_workers > 1:
+                with ProcessPoolExecutor(max_workers=max_workers) as pool:
+                    futures = [
+                        pool.submit(
+                            _run_train_experiment,
+                            config=config,
+                            prepared_features=prepared_train_replay,
+                        )
+                        for config in experiment_configs
+                    ]
+                    engine_results = [future.result() for future in futures]
+            else:
+                engine_results = [
+                    _run_train_experiment(
+                        config=config,
+                        prepared_features=prepared_train_replay,
+                        engine_factory=engine_factory,
+                    )
+                    for config in experiment_configs
+                ]
+        else:
+            engine_results = []
+
+            for config in experiment_configs:
+                engine = engine_factory(config)
+                result = engine.run(prepared_steps=prepared_train_replay)
+                engine_results.append((engine, result))
+
+        for experiment_id, (parameters, (engine, result)) in enumerate(
+            zip(experiment_parameters, engine_results, strict=True)
+        ):
             train_results.append(
                 summarize_engine_run(
                     experiment_id=experiment_id,
@@ -155,19 +214,6 @@ def run_walk_forward_experiments(
                     result=result,
                 )
             )
-            print(
-                f"DEBUG train experiment={experiment_id} "
-                f"params={parameters} "
-                f"trades={train_results[-1].trade_count} "
-                f"pnl={train_results[-1].total_realized_pnl}"
-            )
-            print(
-                "DEBUG prepare_replay:",
-                f"experiment={experiment_id}",
-                f"train_snapshots={len(train_snapshots)}",
-                f"prepared_steps={len(prepared_train_steps)}",
-            )
-
         train_frame = results_to_frame(train_results)
 
         ranked, status = rank_experiments(
@@ -199,10 +245,19 @@ def run_walk_forward_experiments(
             )
 
             test_engine = engine_factory(test_config)
-            prepared_test_steps = test_engine.prepare_replay(test_snapshots)
-            test_engine_result = test_engine.run(
-                prepared_steps=prepared_test_steps,
+            prepared_test_replay, test_uses_feature_path = _prepare_engine_replay(
+                test_engine, test_snapshots
             )
+
+            if test_uses_feature_path:
+                test_engine_result = test_engine.run_prepared_features(
+                    prepared_test_replay,
+                )
+            else:
+                test_engine_result = test_engine.run(
+                    prepared_steps=prepared_test_replay,
+                )
+
             test_engine.save(test_engine_result)
 
             test_result = summarize_engine_run(
@@ -328,3 +383,17 @@ def results_to_frame(results: list[ExperimentResult]) -> pd.DataFrame:
         )
 
     return pd.DataFrame(rows)
+
+
+def _prepare_engine_replay(
+    engine: BacktestEngine,
+    snapshots: list,
+) -> tuple[
+    list[PreparedFeatureStep] | list[PreparedReplayStep],
+    bool,
+]:
+    """Return prepared replay data and whether it uses the feature path."""
+    if hasattr(engine, "prepare_features"):
+        return engine.prepare_features(snapshots), True
+
+    return engine.prepare_replay(snapshots), False

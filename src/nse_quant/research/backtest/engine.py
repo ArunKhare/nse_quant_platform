@@ -43,6 +43,13 @@ class PreparedReplayStep:
     gates: list[GateResult]
 
 
+@dataclass(frozen=True)
+class PreparedFeatureStep:
+    snapshot: ChainSnapshot
+    features: MarketFeatures
+    iv_history_count: int
+
+
 class BacktestEngine:
     def __init__(
         self,
@@ -61,7 +68,11 @@ class BacktestEngine:
         self,
         snapshots: list[ChainSnapshot] | None = None,
         prepared_steps: list[PreparedReplayStep] | None = None,
+        prepared_features: list[PreparedFeatureStep] | None = None,
     ) -> BacktestResult:
+        if prepared_features is not None:
+            return self.run_prepared_features(prepared_features)
+
         if prepared_steps is None:
             if snapshots is None:
                 snapshots = self.loader.load_market_hour_snapshots()
@@ -76,72 +87,91 @@ class BacktestEngine:
             proposal = step.proposal
             gates = step.gates
 
-            entry_allowed = self.portfolio.can_enter(
-                snapshot_ts=snapshot.ts,
-                max_open_positions=self.config.max_open_positions,
-                cooldown_minutes=self.config.entry_cooldown_minutes,
+            result = self._process_replay_step(
+                result=result,
+                snapshot=snapshot,
+                features=features,
+                proposal=proposal,
+                gates=gates,
             )
 
-            if proposal is not None and entry_allowed:
-                self.portfolio.open_position(
-                    proposal=proposal,
+        return result
+
+    def _process_replay_step(
+        self,
+        *,
+        result: BacktestResult,
+        snapshot: ChainSnapshot,
+        features: MarketFeatures,
+        proposal: TradeProposal | None,
+        gates: list[GateResult],
+    ) -> BacktestResult:
+        entry_allowed = self.portfolio.can_enter(
+            snapshot_ts=snapshot.ts,
+            max_open_positions=self.config.max_open_positions,
+            cooldown_minutes=self.config.entry_cooldown_minutes,
+        )
+
+        if proposal is not None and entry_allowed:
+            self.portfolio.open_position(
+                proposal=proposal,
+                snapshot=snapshot,
+                features=features,
+                slippage_pct=self.config.slippage_pct,
+            )
+
+        self.portfolio.mark_to_market(snapshot, features)
+
+        if self.portfolio.open_positions:
+            trade = self.portfolio.open_positions[0]
+
+            if snapshot.ts > trade.opened_at:
+                exit_reason = self.portfolio.evaluate_exit(
+                    trade=trade,
                     snapshot=snapshot,
                     features=features,
-                    slippage_pct=self.config.slippage_pct,
                 )
 
-            self.portfolio.mark_to_market(snapshot, features)
-
-            if self.portfolio.open_positions:
-                trade = self.portfolio.open_positions[0]
-
-                if snapshot.ts > trade.opened_at:
-                    exit_reason = self.portfolio.evaluate_exit(
+                if exit_reason is not None:
+                    self.portfolio.close_position(
                         trade=trade,
-                        snapshot=snapshot,
-                        features=features,
+                        exit_reason=exit_reason,
+                        closed_at=snapshot.ts,
+                        exit_spot=snapshot.spot,
                     )
 
-                    if exit_reason is not None:
-                        self.portfolio.close_position(
-                            trade=trade,
-                            exit_reason=exit_reason,
-                            closed_at=snapshot.ts,
-                            exit_spot=snapshot.spot,
-                        )
+        if self.config.force_close_eod and self.portfolio.open_positions:
+            local_time = snapshot.ts.astimezone(
+                ZoneInfo(self.config.timezone),
+            ).time()
 
-            if self.config.force_close_eod and self.portfolio.open_positions:
-                local_time = snapshot.ts.astimezone(
-                    ZoneInfo(self.config.timezone),
-                ).time()
+            if local_time >= time.fromisoformat(self.config.market_close):
+                self.portfolio.force_close_eod(snapshot)
 
-                if local_time >= time.fromisoformat(self.config.market_close):
-                    self.portfolio.force_close_eod(snapshot)
+        result.decisions.append(
+            {
+                "ts": snapshot.ts,
+                "spot": snapshot.spot,
+                "quote_count": len(snapshot.quotes),
+                "atm_iv": features.atm_iv,
+                "iv_rank": features.iv_rank,
+                "realized_vol": features.realized_vol,
+                "iv_rv_spread": features.iv_rv_spread,
+                "expected_move_points": features.expected_move_points,
+                "regime": features.regime.value,
+                "liquidity_score": features.liquidity_score,
+                "proposal": (proposal.model_dump(mode="json") if proposal else None),
+                "gates": [gate.model_dump(mode="json") for gate in gates],
+            }
+        )
 
-            result.decisions.append(
-                {
-                    "ts": snapshot.ts,
-                    "spot": snapshot.spot,
-                    "quote_count": len(snapshot.quotes),
-                    "atm_iv": features.atm_iv,
-                    "iv_rank": features.iv_rank,
-                    "realized_vol": features.realized_vol,
-                    "iv_rv_spread": features.iv_rv_spread,
-                    "expected_move_points": features.expected_move_points,
-                    "regime": features.regime.value,
-                    "liquidity_score": features.liquidity_score,
-                    "proposal": (proposal.model_dump(mode="json") if proposal else None),
-                    "gates": [gate.model_dump(mode="json") for gate in gates],
-                }
-            )
-
-            result.equity_curve.append(
-                {
-                    "ts": snapshot.ts,
-                    "equity": self.portfolio.cash,
-                    "open_positions": len(self.portfolio.open_positions),
-                }
-            )
+        result.equity_curve.append(
+            {
+                "ts": snapshot.ts,
+                "equity": self.portfolio.cash,
+                "open_positions": len(self.portfolio.open_positions),
+            }
+        )
 
         return result
 
@@ -249,6 +279,65 @@ class BacktestEngine:
                     features=features,
                     proposal=proposal,
                     gates=gates,
+                )
+            )
+
+            if features.atm_iv is not None and features.atm_iv > 0:
+                iv_history.append(features.atm_iv)
+
+            spot_history.append(snapshot.spot)
+
+        return steps
+
+    def run_prepared_features(
+        self,
+        prepared_features: list[PreparedFeatureStep],
+    ) -> BacktestResult:
+        result = BacktestResult()
+
+        for step in prepared_features:
+            proposal, gates = self.strategy.evaluate(
+                step.snapshot,
+                step.features,
+                iv_history_count=step.iv_history_count,
+            )
+
+            result = self._process_replay_step(
+                result=result,
+                snapshot=step.snapshot,
+                features=step.features,
+                proposal=proposal,
+                gates=gates,
+            )
+
+        return result
+
+    def prepare_features(
+        self,
+        snapshots: list[ChainSnapshot],
+    ) -> list[PreparedFeatureStep]:
+        """Precompute parameter-independent replay features.
+
+        Rolling IV and spot histories require sequential processing, but the
+        resulting steps can be reused by every parameter-grid experiment.
+        """
+        iv_history: deque[float] = deque(maxlen=500)
+        spot_history: deque[float] = deque(maxlen=60)
+
+        steps: list[PreparedFeatureStep] = []
+
+        for snapshot in snapshots:
+            features = build_features(
+                snapshot,
+                iv_history=iv_history,
+                close_history=spot_history,
+            )
+
+            steps.append(
+                PreparedFeatureStep(
+                    snapshot=snapshot,
+                    features=features,
+                    iv_history_count=len(iv_history),
                 )
             )
 
