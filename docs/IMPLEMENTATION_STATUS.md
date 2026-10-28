@@ -103,3 +103,8 @@ Do not place detailed implementation instructions here. Use the relevant design
 document instead.
 
 - [Future Implementation Configuration](docs/FUTURE_IMPLEMENTATION.md)
+
+Notes:
+- Implement liquidity-aware long wings	Permanent production-quality improvement
+- Restore min_iv_rank: 40 later	Once you have 20–60 days of option-chain history
+- using Views to populate the Dashboards
