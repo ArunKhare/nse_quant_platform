@@ -105,17 +105,31 @@ def run_walk_forward_experiments(
         train_days=train_days,
         test_days=test_days,
     )
+    print(
+        "DEBUG fold construction:",
+        f"available_dates={available_dates}",
+        f"fold_count={len(folds)}",
+        f"train_days={train_days}",
+        f"test_days={test_days}",
+    )
 
     results: list[WalkForwardFoldResult] = []
 
     for fold in folds:
-        train_snapshots = [
-            snapshot for snapshot in snapshots if snapshot.ts.date in fold.train_dates
-        ]
-        test_snapshots = [snapshot for snapshot in snapshots if snapshot.ts.date in fold.test_dates]
+        if snapshots:
+            print(
+                "DEBUG filter:",
+                f"first_snapshot_date= {snapshots[0].ts.date()}",
+                f"train_dates = {fold.train_dates}",
+                f"match = {snapshots[0].ts.date() in fold.train_dates}",
+            )
 
-        warmup_engine = engine_factory(base_config)
-        prepared_train_steps = warmup_engine.prepare_replay(train_snapshots)
+        train_snapshots = [
+            snapshot for snapshot in snapshots if snapshot.ts.date() in fold.train_dates
+        ]
+        test_snapshots = [
+            snapshot for snapshot in snapshots if snapshot.ts.date() in fold.test_dates
+        ]
 
         train_results: list[ExperimentResult] = []
 
@@ -130,9 +144,9 @@ def run_walk_forward_experiments(
             )
 
             engine = engine_factory(config)
+            prepared_train_steps = engine.prepare_replay(train_snapshots)
             result = engine.run(prepared_steps=prepared_train_steps)
             engine.save(result)
-
             train_results.append(
                 summarize_engine_run(
                     experiment_id=experiment_id,
@@ -140,6 +154,18 @@ def run_walk_forward_experiments(
                     engine=engine,
                     result=result,
                 )
+            )
+            print(
+                f"DEBUG train experiment={experiment_id} "
+                f"params={parameters} "
+                f"trades={train_results[-1].trade_count} "
+                f"pnl={train_results[-1].total_realized_pnl}"
+            )
+            print(
+                "DEBUG prepare_replay:",
+                f"experiment={experiment_id}",
+                f"train_snapshots={len(train_snapshots)}",
+                f"prepared_steps={len(prepared_train_steps)}",
             )
 
         train_frame = results_to_frame(train_results)

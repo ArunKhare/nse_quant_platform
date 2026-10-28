@@ -4,6 +4,8 @@ import argparse
 from datetime import date
 from pathlib import Path
 
+import pandas as pd
+
 from nse_quant.research.backtest.config import BacktestConfig
 from nse_quant.research.backtest.engine import BacktestEngine
 from nse_quant.research.backtest.experiments import ParameterGrid
@@ -50,6 +52,7 @@ def main() -> int:
         end_date=date.fromisoformat(args.end_date),
         initial_capital=args.initial_capital,
         run_id=args.run_id,
+        min_snapshots=30,
     )
 
     grid = ParameterGrid(
@@ -57,6 +60,23 @@ def main() -> int:
         expected_move_buffer=tuple(args.expected_move_buffer),
         entry_cooldown_minutes=tuple(args.entry_cooldown_minutes),
     )
+
+    # DEDUG SCRIPTS
+    snapshot_loader = BacktestEngine(base_config)
+    snapshots = snapshot_loader.loader.load_market_hour_snapshots()
+    print(f"DEBUG snapshot_count={len(snapshots)}")
+
+    if snapshots:
+        dates = sorted({pd.Timestamp(s.ts).tz_convert("UTC").date() for s in snapshots})
+        print(f"DEBUG snapshot_dates={dates}")
+    else:
+        print("DEBUG snapshot_loader returned no snapshots")
+    print(
+        "DEBUG thresholds:",
+        base_config.min_snapshots,
+        base_config.min_iv_coverage,
+    )
+    # DEDUG SCRIPTS ENDS
 
     results = run_walk_forward_experiments(
         base_config=base_config,
