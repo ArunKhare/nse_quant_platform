@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+from pathlib import Path
 
 from nse_quant.core.settings import get_settings
 from nse_quant.research.warehouse_validation import (
@@ -15,7 +16,7 @@ def parse_args() -> argparse.Namespace:
 
     parser.add_argument(
         "--warehouse-dir",
-        default=None,
+        default=Path("data/exports"),
         help="Parquet warehouse directory",
     )
 
