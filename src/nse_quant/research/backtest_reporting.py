@@ -251,6 +251,7 @@ def generate_digest(
         "warehouse_option_stream_days": warehouse_days,
         "readiness": readiness,
         "latest_experiment": latest_experiment_row,
+        "warehouse_regime_days": count_regime_days(warehouse_dir),
     }
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -273,3 +274,7 @@ def latest_experiment(registry_path: Path) -> dict[str, object] | None:
 
     latest = registry.sort_values("registered_at").iloc[-1]
     return latest.to_dict()
+
+
+def count_regime_days(warehouse_dir: Path) -> int:
+    return len(list(warehouse_dir.glob("**/market_regime_*.parquet")))

@@ -1,6 +1,6 @@
 import pandas as pd
 
-from nse_quant.research.backtest_reporting import compare_experiments
+from nse_quant.research.backtest_reporting import compare_experiments, count_regime_days
 from nse_quant.research.experiment_registry import register_walk_forward_run
 
 
@@ -89,3 +89,13 @@ def test_compare_experiments_filters_and_ranks(tmp_path):
     assert list(result["run_id"]) == ["large_better", "large_worse"]
     assert len(saved) == 2
     assert "small" not in set(saved["run_id"])
+
+
+def test_count_regime_days(tmp_path):
+    warehouse = tmp_path / "exports"
+    month_dir = warehouse / "underlying=NIFTY" / "year=2026" / "month=10"
+    month_dir.mkdir(parents=True)
+
+    (month_dir / "market_regime_2026-10-29.parquet").write_bytes(b"x")
+
+    assert count_regime_days(warehouse) == 1
