@@ -185,3 +185,42 @@ def calculate_summary(
         "volatility": metric(lambda: qs.stats.volatility(returns, periods=252, annualize=True)),
         **trade_summary,
     }
+
+
+def compare_experiments(
+    registry_path: Path,
+    *,
+    min_trades: int,
+    output_path: Path,
+) -> pd.DataFrame:
+    if not registry_path.exists():
+        raise FileNotFoundError(f"Experiment registry not found: {registry_path}")
+
+    registry = pd.read_csv(registry_path)
+
+    required_columns = {
+        "run_id",
+        "start_date",
+        "end_date",
+        "out_of_sample_trades",
+        "out_of_sample_pnl",
+        "research_grade_status",
+        "min_iv_rank",
+        "max_spread_pct",
+    }
+
+    missing = required_columns - set(registry.columns)
+    if missing:
+        raise ValueError(f"Registry is missing required columns: {sorted(missing)}")
+
+    eligible = registry[registry["out_of_sample_trades"] >= min_trades].copy()
+
+    eligible = eligible.sort_values(
+        ["out_of_sample_pnl", "out_of_sample_trades"],
+        ascending=[False, False],
+    )
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    eligible.to_csv(output_path, index=False)
+
+    return eligible
