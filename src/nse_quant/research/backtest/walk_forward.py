@@ -349,8 +349,24 @@ def save_walk_forward_results(
             }
         )
 
+    results_columns = [
+        "fold_id",
+        "train_dates",
+        "test_dates",
+        "selection_status",
+        "train_experiment_count",
+        "selected_iv_collapse_pct",
+        "selected_expected_move_buffer",
+        "selected_entry_cooldown_minutes",
+        "test_trade_count",
+        "test_total_realized_pnl",
+        "test_total_return",
+        "test_max_drawdown",
+        "test_exit_reason_counts",
+    ]
+
     results_path = output_dir / "walk_forward_results.csv"
-    pd.DataFrame(rows).to_csv(results_path, index=False)
+    pd.DataFrame(rows, columns=results_columns).to_csv(results_path, index=False)
 
     usable_test_results = [
         test_result

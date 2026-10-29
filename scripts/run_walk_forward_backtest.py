@@ -165,6 +165,36 @@ def main() -> int:
         min_test_trades=args.min_test_trades,
         workers=args.workers,
     )
+    if not results:
+        no_fold_dir = Path(args.walk_forward_dir) / args.run_id
+        no_fold_dir.mkdir(parents=True, exist_ok=True)
+
+        summary_path = no_fold_dir / "walk_forward_summary.json"
+        summary_path.write_text(
+            json.dumps(
+                {
+                    "fold_count": 0,
+                    "usable_fold_count": 0,
+                    "out_of_sample_trades": 0,
+                    "out_of_sample_pnl": 0.0,
+                    "research_grade_status": "INSUFFICIENT_DATA_FOR_OPTIMIZATION",
+                    "reason": (
+                        "Insufficient distinct trading dates for walk-forward folds; "
+                        f"requires train_days={args.train_days} plus "
+                        f"test_days={args.test_days}"
+                    ),
+                },
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
+
+        print(
+            "Walk-forward run skipped: insufficient distinct trading dates "
+            f"for {args.train_days} train day(s) and {args.test_days} test day(s)."
+        )
+        print(f"Summary: {summary_path}")
+        return 2
     results_path, summary_path = save_walk_forward_results(
         results=results,
         output_dir=Path(args.walk_forward_dir) / args.run_id,
