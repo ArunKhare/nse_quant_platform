@@ -188,10 +188,11 @@ class GateEvaluator:
         self,
         settings: Any | None = None,
         risk_limits: Any | None = None,
+        min_iv_rank: float | None = None,
     ) -> None:
         self.settings = settings or get_settings()
         self.market_open_gate = MarketOpenGate()
-        self.iv_regime_gate = IvRegimeGate(self.settings)
+        self.iv_regime_gate = IvRegimeGate(self.settings, min_iv_rank=min_iv_rank)
         self.expected_move_gate = ExpectedMoveGate(self.settings)
         self.liquidity_gate = LiquidityGate(
             self.settings,

@@ -95,10 +95,10 @@ class StrategyProfileSettings(BaseModel):
     enabled: bool = False
     strategy_type: str
     underlyings: list[str] = Field(default_factory=lambda: ["NIFTY"])
+    min_iv_rank: float | None = None
     regime_policy: RegimePolicySettings = Field(default_factory=RegimePolicySettings)
     risk: StrategyRiskSettings = Field(default_factory=StrategyRiskSettings)
     exits: StrategyExitSettings = Field(default_factory=StrategyExitSettings)
-    min_iv_rank: float | None = None
 
 
 class IronCondorProfileSettings(StrategyProfileSettings):

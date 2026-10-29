@@ -6,6 +6,7 @@ from nse_quant.analytics.features import build_features, iv_rank
 from nse_quant.analytics.implied_volatility import implied_volatility
 from nse_quant.analytics.iv_history import derive_atm_iv_observations
 from nse_quant.core.models import MarketFeatures
+from nse_quant.core.settings import get_settings
 from nse_quant.strategy.gates import IvRegimeGate
 
 
@@ -227,3 +228,35 @@ def test_build_features_iv_rank_at_floor(snapshot_factory):
     assert features.iv_analytics.current_iv == current_iv
     assert features.iv_analytics.iv_min == pytest.approx(current_iv * 1.5)
     assert features.iv_analytics.iv_max == pytest.approx(current_iv * 2.0)
+
+
+def test_iv_regime_gate_uses_strategy_specific_threshold():
+    gate = IvRegimeGate(min_iv_rank=30.0)
+
+    passing_features = make_features(iv_rank=30.0)
+    failing_features = make_features(iv_rank=25.0)
+
+    passing_result = gate.evaluate(
+        passing_features,
+        iv_history_count=30,
+    )
+
+    failing_result = gate.evaluate(
+        failing_features,
+        iv_history_count=30,
+    )
+
+    assert passing_result.passed
+    assert passing_result.details["mode"] == "ENFORCED"
+    assert passing_result.details["min_iv_rank"] == 30.0
+
+    assert not failing_result.passed
+    assert failing_result.details["mode"] == "ENFORCED"
+    assert failing_result.details["min_iv_rank"] == 30.0
+
+
+def test_iv_regime_gate_defaults_to_global_threshold():
+    settings = get_settings("config/settings.test.yaml")
+    gate = IvRegimeGate(settings)
+
+    assert gate.min_iv_rank == settings.analytics.min_iv_rank

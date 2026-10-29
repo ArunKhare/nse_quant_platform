@@ -59,3 +59,20 @@ def test_strategy_risk_spread_override():
     effective = settings.get_effective_risk_settings("iron_condor_monitor")
 
     assert effective.max_spread_pct == 0.05
+
+
+def test_min_iv_rank_defaults_to_global(test_settings):
+    profile = test_settings.strategies["iron_condor_monitor"]
+    profile.min_iv_rank = None
+
+    assert (
+        test_settings.get_effective_min_iv_rank("iron_condor_monitor")
+        == test_settings.analytics.min_iv_rank
+    )
+
+
+def test_min_iv_rank_strategy_override_wins(test_settings):
+    profile = test_settings.strategies["iron_condor_monitor"]
+    profile.min_iv_rank = 30.0
+
+    assert test_settings.get_effective_min_iv_rank("iron_condor_monitor") == 30.0
