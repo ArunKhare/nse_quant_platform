@@ -110,8 +110,24 @@ def main() -> int:
         readiness=readiness,
         allow_unready_diagnostic=args.allow_unready_diagnostic,
     )
-    print(f"Experiment permission: {permission_reason}")
 
+    permission_audit = {
+        "permission_reason": permission_reason,
+        "experiments_allowed": experiments_allowed,
+        "allow_unready_diagnostic": args.allow_unready_diagnostic,
+        "readiness": readiness,
+    }
+
+    audit_dir = Path(args.walk_forward_dir) / args.run_id
+    audit_dir.mkdir(parents=True, exist_ok=True)
+    audit_path = audit_dir / "permission_audit.json"
+    audit_path.write_text(
+        json.dumps(permission_audit, indent=2, default=str),
+        encoding="utf-8",
+    )
+
+    print(f"Experiment permission: {permission_reason}")
+    print(f"Permission audit: {audit_path}")
     if not experiments_allowed:
         raise SystemExit(
             "Parameter experiments are blocked: "
