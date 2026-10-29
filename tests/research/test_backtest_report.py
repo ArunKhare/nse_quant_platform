@@ -14,6 +14,10 @@ from nse_quant.research.backtest.report import (
     load_equity_curve,
     load_trade_performance,
 )
+from nse_quant.research.backtest_reporting import (
+    load_walk_forward_equity,
+    load_walk_forward_trade_stats,
+)
 
 
 def write_backtest_outputs(run_dir: Path) -> None:
@@ -111,3 +115,29 @@ def test_generate_backtest_report_writes_outputs(tmp_path):
     assert summary["final_equity"] == 1_020_000.0
     assert summary["total_return"] == pytest.approx(0.02)
     assert summary["cagr"] is None
+
+
+def test_report_skips_empty_trades_file(tmp_path):
+    fold = tmp_path / "run_fold000_test"
+    fold.mkdir()
+
+    pd.DataFrame(
+        {
+            "timestamp": ["2026-10-28 09:15", "2026-10-28 09:16"],
+            "equity": [100000.0, 100100.0],
+        }
+    ).to_csv(fold / "equity_curve.csv", index=False)
+
+    (fold / "trades.csv").write_text("")
+
+    equity = load_walk_forward_equity(
+        run_id="run",
+        backtest_dir=tmp_path,
+    )
+    trades = load_walk_forward_trade_stats(
+        run_id="run",
+        backtest_dir=tmp_path,
+    )
+
+    assert len(equity) == 2
+    assert trades is None
