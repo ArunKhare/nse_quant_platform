@@ -1,3 +1,5 @@
+import json
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pandas as pd
@@ -224,3 +226,50 @@ def compare_experiments(
     eligible.to_csv(output_path, index=False)
 
     return eligible
+
+
+def count_warehouse_days(warehouse_dir: Path) -> int:
+    return len(list(warehouse_dir.glob("**/option_stream_*.parquet")))
+
+
+def generate_digest(
+    *,
+    readiness_path: Path,
+    registry_path: Path,
+    warehouse_dir: Path,
+    output_path: Path,
+) -> dict[str, object]:
+    readiness = {}
+    if readiness_path.exists():
+        readiness = json.loads(readiness_path.read_text(encoding="utf-8"))
+
+    latest_experiment_row = latest_experiment(registry_path)
+    warehouse_days = count_warehouse_days(warehouse_dir)
+
+    digest = {
+        "generated_at": datetime.now(UTC).isoformat(),
+        "warehouse_option_stream_days": warehouse_days,
+        "readiness": readiness,
+        "latest_experiment": latest_experiment_row,
+    }
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(
+        json.dumps(digest, indent=2, default=str),
+        encoding="utf-8",
+    )
+
+    return digest
+
+
+def latest_experiment(registry_path: Path) -> dict[str, object] | None:
+    if not registry_path.exists():
+        return None
+
+    registry = pd.read_csv(registry_path)
+
+    if registry.empty:
+        return None
+
+    latest = registry.sort_values("registered_at").iloc[-1]
+    return latest.to_dict()

@@ -1,11 +1,15 @@
+"""daily research status digest. acquisition, backtesting, reporting,
+registry, and comparison layers are complete; this adds one consolidated
+daily health/status artifact so you can immediately see whether data
+collection and research runs are healthy
+"""
+
 from __future__ import annotations
 
 import argparse
-import json
-from datetime import UTC, datetime
 from pathlib import Path
 
-import pandas as pd
+from nse_quant.research.backtest_reporting import generate_digest
 
 
 def parse_args() -> argparse.Namespace:
@@ -37,55 +41,26 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def count_warehouse_days(warehouse_dir: Path) -> int:
-    return len(list(warehouse_dir.glob("**/option_stream_*.parquet")))
-
-
-def latest_experiment(registry_path: Path) -> dict[str, object] | None:
-    if not registry_path.exists():
-        return None
-
-    registry = pd.read_csv(registry_path)
-
-    if registry.empty:
-        return None
-
-    latest = registry.sort_values("registered_at").iloc[-1]
-    return latest.to_dict()
-
-
 def main() -> int:
     args = parse_args()
 
-    readiness = {}
-    if args.readiness.exists():
-        readiness = json.loads(args.readiness.read_text(encoding="utf-8"))
-
-    latest_experiment_row = latest_experiment(args.registry)
-    warehouse_days = count_warehouse_days(args.warehouse_dir)
-
-    digest = {
-        "generated_at": datetime.now(UTC).isoformat(),
-        "warehouse_option_stream_days": warehouse_days,
-        "readiness": readiness,
-        "latest_experiment": latest_experiment_row,
-    }
-
-    args.output.parent.mkdir(parents=True, exist_ok=True)
-    args.output.write_text(
-        json.dumps(digest, indent=2, default=str),
-        encoding="utf-8",
+    digest = generate_digest(
+        readiness_path=args.readiness,
+        registry_path=args.registry,
+        warehouse_dir=args.warehouse_dir,
+        output_path=args.output,
     )
 
     print(f"Research status digest written: {args.output}")
-    print(f"Warehouse option-stream days: {warehouse_days}")
+    print(f"Warehouse option-stream days: {digest['warehouse_option_stream_days']}")
 
-    if latest_experiment_row:
+    if digest["latest_experiment"]:
+        latest = digest["latest_experiment"]
         print(
             "Latest experiment: "
-            f"{latest_experiment_row['run_id']} | "
-            f"trades={latest_experiment_row['out_of_sample_trades']} | "
-            f"pnl={latest_experiment_row['out_of_sample_pnl']}"
+            f"{latest['run_id']} | "
+            f"trades={latest['out_of_sample_trades']} | "
+            f"pnl={latest['out_of_sample_pnl']}"
         )
 
     return 0

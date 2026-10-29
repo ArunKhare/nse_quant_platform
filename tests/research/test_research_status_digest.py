@@ -1,6 +1,6 @@
 import json
 
-from scripts.research_status_digest import count_warehouse_days
+from nse_quant.research.backtest_reporting import count_warehouse_days, generate_digest
 
 
 def test_count_warehouse_days(tmp_path):
@@ -26,13 +26,26 @@ def test_count_warehouse_days(tmp_path):
 
 
 def test_digest_writes_json(tmp_path):
-    readiness = tmp_path / "readiness.json"
-    readiness.write_text(json.dumps({"ready": False}), encoding="utf-8")
+    readiness_path = tmp_path / "readiness.json"
+    readiness_path.write_text(
+        json.dumps({"ready": False}),
+        encoding="utf-8",
+    )
 
-    output = tmp_path / "daily_status.json"
+    registry_path = tmp_path / "experiment_index.csv"
+    warehouse_dir = tmp_path / "exports"
+    output_path = tmp_path / "daily_status.json"
 
-    # Call the digest-generation function after refactoring it out of main(),
-    # or invoke the CLI with --readiness/--output pointing to tmp_path.
+    digest = generate_digest(
+        readiness_path=readiness_path,
+        registry_path=registry_path,
+        warehouse_dir=warehouse_dir,
+        output_path=output_path,
+    )
 
-    payload = json.loads(output.read_text(encoding="utf-8"))
+    payload = json.loads(output_path.read_text(encoding="utf-8"))
+
     assert payload["readiness"] == {"ready": False}
+    assert payload["warehouse_option_stream_days"] == 0
+    assert payload["latest_experiment"] is None
+    assert digest["generated_at"]
