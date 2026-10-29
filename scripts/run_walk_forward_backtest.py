@@ -13,6 +13,7 @@ from nse_quant.research.backtest.walk_forward import (
     run_walk_forward_experiments,
     save_walk_forward_results,
 )
+from nse_quant.research.experiment_registry import register_walk_forward_run
 from nse_quant.strategy.iron_condor import IronCondorMonitor
 
 
@@ -50,8 +51,11 @@ def parse_args() -> argparse.Namespace:
 
 def make_engine(
     config: BacktestConfig,
-    settings: object = get_settings("config/settings.test.yaml"),
+    settings: object | None = None,
 ) -> BacktestEngine:
+    if settings is None:
+        settings = get_settings("config/settings.test.yaml")
+
     return BacktestEngine(
         config,
         strategy=IronCondorMonitor(settings),
@@ -106,6 +110,14 @@ def main() -> int:
         output_dir=Path(args.walk_forward_dir) / args.run_id,
     )
 
+    register_walk_forward_run(
+        results_csv=results_path,
+        report_dir=Path("data/research/reports"),
+        registry_path=Path("data/research/experiments/experiment_index.csv"),
+        underlying=args.symbol,
+        min_iv_rank=settings.get_effective_min_iv_rank("iron_condor_monitor"),
+        max_spread_pct=settings.get_effective_risk_settings("iron_condor_monitor").max_spread_pct,
+    )
     print("Walk-forward backtest complete")
     print(f"Results: {results_path}")
     print(f"Summary: {summary_path}")
