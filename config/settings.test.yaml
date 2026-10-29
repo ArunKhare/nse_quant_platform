@@ -65,6 +65,8 @@ notifier:
     uri: "https://api.telegram.org/bot{token}/sendMessage"
     enabled: true
     message_length_limit: 4096
+  researchalerts:
+    enabled: true
 
 market_data:
   default_symbol: NIFTY
@@ -93,6 +95,10 @@ research:
   enforce_regime_policy: false
   enforce_strategy_eligibility: true
   min_history_observations: 1
+  enable_parameter_experiments: true
+
+debug:
+  enable_option_stream_diagnostics: true
 
 backtest_readiness:
     min_complete_days: 20

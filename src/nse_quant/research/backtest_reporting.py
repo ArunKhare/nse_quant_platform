@@ -5,6 +5,11 @@ from pathlib import Path
 import pandas as pd
 import quantstats as qs
 
+from nse_quant.core.settings import get_settings
+from nse_quant.ops.notifier import Notifier
+
+settings = get_settings()
+
 
 def load_walk_forward_equity(
     *,
@@ -239,20 +244,32 @@ def generate_digest(
     warehouse_dir: Path,
     output_path: Path,
 ) -> dict[str, object]:
-    readiness = {}
-    if readiness_path.exists():
-        readiness = json.loads(readiness_path.read_text(encoding="utf-8"))
 
+    readiness = (
+        json.loads(readiness_path.read_text(encoding="utf-8")) if readiness_path.exists() else {}
+    )
     latest_experiment_row = latest_experiment(registry_path)
     warehouse_days = count_warehouse_days(warehouse_dir)
+    regime_days = count_regime_days(warehouse_dir)
 
+    alerts = build_alerts(warehouse_days, regime_days, readiness, latest_experiment_row)
     digest = {
         "generated_at": datetime.now(UTC).isoformat(),
         "warehouse_option_stream_days": warehouse_days,
         "readiness": readiness,
         "latest_experiment": latest_experiment_row,
-        "warehouse_regime_days": count_regime_days(warehouse_dir),
+        "warehouse_regime_days": regime_days,
+        "alerts": alerts,
+        "status": "ALERT" if alerts else "OK",
     }
+
+    if (
+        digest["status"] == "ALERT"
+        and settings.notifier.enabled
+        and settings.notifier.telegram.enabled
+        and settings.notifier.research_alerts.enabled
+    ):
+        Notifier().send("NSE Quant research status alert\n" + "\n".join(alerts))
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(
@@ -278,3 +295,28 @@ def latest_experiment(registry_path: Path) -> dict[str, object] | None:
 
 def count_regime_days(warehouse_dir: Path) -> int:
     return len(list(warehouse_dir.glob("**/market_regime_*.parquet")))
+
+
+def build_alerts(
+    warehouse_option_stream_days: int,
+    warehouse_regime_days: int,
+    readiness: dict[str, object],
+    experiment: dict[str, object] | None,
+) -> list[str]:
+    alerts: list[str] = []
+
+    if warehouse_option_stream_days == 0:
+        alerts.append("No option-stream warehouse days found")
+
+    if warehouse_regime_days == 0:
+        alerts.append("No market-regime warehouse days found")
+
+    if not readiness.get("ready", False):
+        blockers = readiness.get("blockers", [])
+        if isinstance(blockers, list):
+            alerts.extend(f"Readiness blocker: {blocker}" for blocker in blockers)
+
+    if experiment is None:
+        alerts.append("No registered walk-forward experiment")
+
+    return alerts

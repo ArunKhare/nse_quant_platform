@@ -15,6 +15,7 @@ from nse_quant.research.backtest.report import (
     load_trade_performance,
 )
 from nse_quant.research.backtest_reporting import (
+    build_alerts,
     load_walk_forward_equity,
     load_walk_forward_trade_stats,
 )
@@ -141,3 +142,31 @@ def test_report_skips_empty_trades_file(tmp_path):
 
     assert len(equity) == 2
     assert trades is None
+
+
+def test_build_alerts_flags_missing_data():
+    alerts = build_alerts(
+        warehouse_option_stream_days=0,
+        warehouse_regime_days=0,
+        readiness={"ready": False, "blockers": ["complete_option_days=0 < 20"]},
+        experiment=None,
+    )
+
+    assert "No option-stream warehouse days found" in alerts
+    assert "No market-regime warehouse days found" in alerts
+    assert "No registered walk-forward experiment" in alerts
+    assert "Readiness blocker: complete_option_days=0 < 20" in alerts
+
+
+def test_build_alerts_ok_when_research_is_accumulating():
+    alerts = build_alerts(
+        warehouse_option_stream_days=10,
+        warehouse_regime_days=1,
+        readiness={
+            "ready": False,
+            "blockers": ["complete_option_days=3 < 20"],
+        },
+        experiment={"run_id": "test-run"},
+    )
+
+    assert alerts == ["Readiness blocker: complete_option_days=3 < 20"]

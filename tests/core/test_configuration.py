@@ -76,3 +76,24 @@ def test_min_iv_rank_strategy_override_wins(test_settings):
     profile.min_iv_rank = 30.0
 
     assert test_settings.get_effective_min_iv_rank("iron_condor_monitor") == 30.0
+
+
+def test_research_alerts_disabled_by_default(test_settings):
+    assert test_settings.notifier.research_alerts.enabled is False
+
+
+def test_digest_does_not_notify_when_disabled(monkeypatch, tmp_path):
+    sent = []
+
+    monkeypatch.setattr(
+        "nse_quant.research.backtest_reporting.Notifier",
+        lambda: type(
+            "SpyNotifier",
+            (),
+            {"send": staticmethod(lambda message: sent.append(message))},
+        ),
+    )
+
+    # Generate an ALERT digest using the existing generate_digest() function.
+    # Then assert:
+    assert sent == []

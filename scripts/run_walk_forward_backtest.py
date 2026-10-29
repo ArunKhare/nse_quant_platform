@@ -1,11 +1,18 @@
 from __future__ import annotations
 
 import argparse
+import json
+from collections.abc import Mapping
 from datetime import date
 from functools import partial
 from pathlib import Path
+from typing import Protocol
 
-from nse_quant.core.settings import get_settings
+from nse_quant.core.settings import (
+    ResearchSettings,
+    Settings,
+    get_settings,
+)
 from nse_quant.research.backtest.config import BacktestConfig
 from nse_quant.research.backtest.engine import BacktestEngine
 from nse_quant.research.backtest.experiments import ParameterGrid
@@ -15,6 +22,11 @@ from nse_quant.research.backtest.walk_forward import (
 )
 from nse_quant.research.experiment_registry import register_walk_forward_run
 from nse_quant.strategy.iron_condor import IronCondorMonitor
+
+
+class ExperimentSettings(Protocol):
+    @property
+    def research(self) -> ResearchSettings: ...
 
 
 def parse_args() -> argparse.Namespace:
@@ -45,13 +57,17 @@ def parse_args() -> argparse.Namespace:
         default=1,
         help="Number of parallel worker processes for training experiments.",
     )
-
+    parser.add_argument(
+        "--allow-unready-diagnostic",
+        action="store_true",
+        help="Allow a diagnostic walk-forward run despite incomplete readiness",
+    )
     return parser.parse_args()
 
 
 def make_engine(
     config: BacktestConfig,
-    settings: object | None = None,
+    settings: Settings | None = None,
 ) -> BacktestEngine:
     if settings is None:
         settings = get_settings("config/settings.test.yaml")
@@ -62,10 +78,54 @@ def make_engine(
     )
 
 
+def resolve_experiment_permission(
+    *,
+    settings: ExperimentSettings,
+    readiness: Mapping[str, object],
+    allow_unready_diagnostic: bool,
+) -> tuple[bool, str]:
+    flag_enabled = settings.research.enable_parameter_experiments
+    readiness_ready = bool(readiness.get("ready", False))
+
+    if flag_enabled and readiness_ready:
+        return True, "research_ready"
+
+    if allow_unready_diagnostic:
+        return True, "diagnostic_override"
+
+    return False, "blocked"
+
+
 def main() -> int:
     args = parse_args()
 
     settings = get_settings("config/settings.test.yaml")
+    readiness_path = Path("data/research/backtest_readiness.json")
+    readiness = (
+        json.loads(readiness_path.read_text(encoding="utf-8")) if readiness_path.exists() else {}
+    )
+
+    experiments_allowed, permission_reason = resolve_experiment_permission(
+        settings=settings,
+        readiness=readiness,
+        allow_unready_diagnostic=args.allow_unready_diagnostic,
+    )
+    print(f"Experiment permission: {permission_reason}")
+
+    if not experiments_allowed:
+        raise SystemExit(
+            "Parameter experiments are blocked: "
+            "research flag is disabled or backtest readiness is not satisfied"
+        )
+
+    run_type = (
+        "diagnostic"
+        if args.allow_unready_diagnostic and not readiness.get("ready", False)
+        else "walk_forward"
+    )
+
+    output_dir = Path(args.output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
 
     base_config = BacktestConfig(
         warehouse_dir=Path(args.warehouse_dir),
@@ -117,6 +177,7 @@ def main() -> int:
         underlying=args.symbol,
         min_iv_rank=settings.get_effective_min_iv_rank("iron_condor_monitor"),
         max_spread_pct=settings.get_effective_risk_settings("iron_condor_monitor").max_spread_pct,
+        run_type=run_type,
     )
     print("Walk-forward backtest complete")
     print(f"Results: {results_path}")

@@ -138,10 +138,21 @@ class PaperExecutionSettings(BaseModel):
     allow_partial_fills: bool = False
 
 
+class ResearchAlertSettings(BaseModel):
+    enabled: bool = False
+    min_alert_severity: str = "ALERT"
+
+
 class TelegramNotifierSettings(BaseModel):
     enabled: bool = True
     uri: str = "https://api.telegram.org/bot{token}/sendMessage"
     message_length_limit: int = 4096
+
+
+class NotifierSettings(BaseModel):
+    enabled: bool = True
+    telegram: TelegramNotifierSettings = Field(default_factory=TelegramNotifierSettings)
+    research_alerts: ResearchAlertSettings = Field(default_factory=ResearchAlertSettings)
 
 
 class CandleIntervalSettings(BaseModel):
@@ -191,11 +202,6 @@ class MarketDataSettings(BaseModel):
     )
 
 
-class NotifierSettings(BaseModel):
-    enabled: bool = True
-    telegram: TelegramNotifierSettings = Field(default_factory=TelegramNotifierSettings)
-
-
 class KiteSecrets(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -238,6 +244,7 @@ class ResearchSettings(BaseModel):
     enforce_regime_policy: bool = True
     enforce_strategy_eligibility: bool = True
     min_history_observations: int = 1
+    enable_parameter_experiments: bool = False
     backtest_readiness: BacktestReadinessSettings = Field(default_factory=BacktestReadinessSettings)
 
 
@@ -280,6 +287,10 @@ class EvidenceSettings(BaseModel):
     plugins: EvidencePluginsSettings = EvidencePluginsSettings()
 
 
+class DebugSettings(BaseModel):
+    enable_option_stream_diagnostics: bool = False
+
+
 def _load_yaml(path: Path) -> dict[str, Any]:
     if not path.exists():
         return {}
@@ -315,6 +326,7 @@ class Settings(BaseSettings):
     strategies: dict[str, IronCondorProfileSettings] = Field(default_factory=dict)
     walk_forward: WalkForwardSettings = Field(default_factory=WalkForwardSettings)
     evidence: EvidenceSettings = Field(default_factory=EvidenceSettings)
+    debug: DebugSettings = Field(default_factory=DebugSettings)
 
     @model_validator(mode="before")
     @classmethod
