@@ -13,7 +13,7 @@ from nse_quant.core.models import (
     GateResult,
     MarketFeatures,
 )
-from nse_quant.core.settings import get_settings
+from nse_quant.core.settings import RiskSettings, get_settings
 
 
 class MarketOpenGate:
@@ -109,15 +109,20 @@ class ExpectedMoveGate:
 
 
 class LiquidityGate:
-    def __init__(self, settings: Any | None = None) -> None:
+    def __init__(
+        self,
+        settings: Any | None = None,
+        risk_limits: RiskSettings | None = None,
+    ) -> None:
         self.settings = settings or get_settings()
+        self.risk_limits = risk_limits or self.settings.risk
 
     def evaluate(
         self,
         snapshot: ChainSnapshot,
         strikes: list[float],
     ) -> GateResult:
-        limits = self.settings.risk
+        limits = self.risk_limits
         lookup = {
             (quote.instrument.option_type.value, quote.instrument.strike): quote
             for quote in snapshot.quotes
@@ -172,12 +177,19 @@ class LiquidityGate:
 
 
 class GateEvaluator:
-    def __init__(self, settings: Any | None = None) -> None:
+    def __init__(
+        self,
+        settings: Any | None = None,
+        risk_limits: Any | None = None,
+    ) -> None:
         self.settings = settings or get_settings()
         self.market_open_gate = MarketOpenGate()
         self.iv_regime_gate = IvRegimeGate(self.settings)
         self.expected_move_gate = ExpectedMoveGate(self.settings)
-        self.liquidity_gate = LiquidityGate(self.settings)
+        self.liquidity_gate = LiquidityGate(
+            self.settings,
+            risk_limits=risk_limits,
+        )
 
     def evaluate(
         self,

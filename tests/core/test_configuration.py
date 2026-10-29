@@ -37,3 +37,25 @@ def test_live_mode_is_blocked():
 
     with pytest.raises(ValueError):
         Settings.model_validate(data)
+
+
+def test_strategy_risk_spread_override():
+    settings = Settings.model_validate(
+        {
+            "risk": {"max_spread_pct": 0.03},
+            "strategies": {
+                "iron_condor_monitor": {
+                    "enabled": True,
+                    "strategy_type": "iron_condor",
+                    "underlyings": ["NIFTY"],
+                    "wing_distance_points": 200,
+                    "min_credit": 20,
+                    "risk": {"max_spread_pct": 0.05},
+                }
+            },
+        }
+    )
+
+    effective = settings.get_effective_risk_settings("iron_condor_monitor")
+
+    assert effective.max_spread_pct == 0.05

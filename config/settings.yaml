@@ -9,7 +9,7 @@ safety:
 
 universe:
   underlying: NIFTY
-  strikes_per_side: 10
+  strikes_per_side: 20
 
 runtime:
   stale_seconds: 300
@@ -105,9 +105,9 @@ strategies:
     strategy_type: iron_condor
     underlyings:
       - NIFTY
-
     wing_distance_points: 200
     min_credit: 20
+    min_days_to_expiry: 1
 
     regime_policy:
       allowed_regimes:
@@ -124,6 +124,7 @@ strategies:
       max_open_positions: 1
       max_daily_loss: 25000
       max_notional_exposure: 2000000
+      max_spread_pct: 0.05
 
     exits:
       profit_target_pct: 50

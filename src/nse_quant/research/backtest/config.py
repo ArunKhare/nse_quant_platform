@@ -31,3 +31,4 @@ class BacktestConfig(BaseModel):
     iv_collapse_pct: float = 20.0
     expected_move_buffer: float = 1.25
     force_close_eod: bool = True
+    force_close_expiry: bool = True

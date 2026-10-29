@@ -9,6 +9,7 @@ from nse_quant.core.models import (
     OrderSide,
     OrderStatus,
 )
+from nse_quant.core.settings import Settings
 from nse_quant.execution.broker import PaperBroker
 from nse_quant.strategy.iron_condor import IronCondorMonitor
 
@@ -134,6 +135,28 @@ def test_iron_condor_entry_credit_matches_distinct_leg_prices(
     assert len(set(premiums)) > 1
     assert proposal.entry_limit_price > 0
     assert proposal.entry_limit_price == net_credit
+
+
+def test_liquidity_gate_uses_effective_strategy_risk():
+    settings = Settings.model_validate(
+        {
+            "risk": {"max_spread_pct": 0.03},
+            "strategies": {
+                "iron_condor_monitor": {
+                    "enabled": True,
+                    "strategy_type": "iron_condor",
+                    "underlyings": ["NIFTY"],
+                    "wing_distance_points": 200,
+                    "min_credit": 20,
+                    "risk": {"max_spread_pct": 0.05},
+                }
+            },
+        }
+    )
+
+    strategy = IronCondorMonitor(settings)
+
+    assert strategy.gates.liquidity_gate.risk_limits.max_spread_pct == 0.05
 
 
 def test_paper_broker_marks_remaining_credit(

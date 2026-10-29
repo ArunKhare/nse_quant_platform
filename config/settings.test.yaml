@@ -30,7 +30,7 @@ analytics:
   risk_free_rate: 0.07
   rv_window: 20
   iv_history_limit: 250
-  min_iv_rank: 10
+  min_iv_rank: 0
   min_iv_rv_spread: 0.02
   max_expected_move_buffer: 1.15
   min_iv_history_observations: 30
@@ -105,9 +105,9 @@ strategies:
     strategy_type: iron_condor
     underlyings:
       - NIFTY
-
     wing_distance_points: 200
     min_credit: 20
+    min_days_to_expiry: 1
 
     regime_policy:
       allowed_regimes:
@@ -125,6 +125,7 @@ strategies:
       max_open_positions: 1
       max_daily_loss: 25000
       max_notional_exposure: 2000000
+      max_spread_pct: 0.06
 
     exits:
       profit_target_pct: 50
@@ -140,3 +141,4 @@ evidence:
     multi_timeframe:
       enabled: true
       timeframes: [1m, 15m, 60m]
+      history_limit: 6000

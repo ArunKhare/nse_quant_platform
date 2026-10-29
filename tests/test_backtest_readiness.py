@@ -8,18 +8,15 @@ from nse_quant.persistence.duckdb_store import DuckDBStore
 from nse_quant.research.backtest_readiness import (
     evaluate_backtest_readiness,
 )
-from scripts.eod_maintenance import (
-    build_export_path,
-    build_regime_export_path,
-    get_option_stream_count_for_date,
-)
+from scripts.eod_maintenance import build_export_path, get_option_stream_count_for_date
 
 
 def test_regime_export_path_uses_hive_partitions():
-    path = build_regime_export_path(
+    path = build_export_path(
         export_dir=Path("data/exports"),
         underlying="NIFTY",
         trading_date=date(2026, 10, 21),
+        dataset="market_regime",
     )
 
     assert path == Path(
@@ -31,11 +28,12 @@ def test_build_export_path_uses_hive_partitions():
     path = build_export_path(
         export_dir=Path("data/exports"),
         underlying="NIFTY",
-        trading_date=date(2026, 10, 21),
+        trading_date=date(2026, 10, 28),
+        dataset="option_stream",
     )
 
     assert path == Path(
-        "data/exports/underlying=NIFTY/year=2026/month=10/option_stream_2026-10-21.parquet"
+        "data/exports/underlying=NIFTY/year=2026/month=10/option_stream_2026-10-28.parquet"
     )
 
 
@@ -308,7 +306,7 @@ def test_option_stream_count_for_date(tmp_path: Path):
     )
 
     count = get_option_stream_count_for_date(
-        store,
+        store=store,
         underlying="NIFTY",
         trading_date=date(2026, 10, 20),
     )

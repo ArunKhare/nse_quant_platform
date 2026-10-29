@@ -12,10 +12,12 @@ import pandas as pd
 from nse_quant.analytics.features import build_features
 from nse_quant.core.models import (
     ChainSnapshot,
+    ExitReason,
     GateResult,
     MarketFeatures,
     TradeProposal,
 )
+from nse_quant.core.settings import get_settings
 from nse_quant.strategy.iron_condor import IronCondorMonitor
 
 from .config import BacktestConfig
@@ -23,6 +25,14 @@ from .data import HistoricalDataLoader
 from .portfolio import BacktestPortfolio
 
 IST = ZoneInfo("Asia/Kolkata")
+
+settings = get_settings("config/settings.test.yaml")
+
+print(
+    "settings:",
+    f"min_iv_rank={settings.analytics.min_iv_rank}",
+    f"max_spread_pct={settings.get_effective_risk_settings('iron_condor_monitor').max_spread_pct}",
+)
 
 
 @dataclass
@@ -106,6 +116,7 @@ class BacktestEngine:
         proposal: TradeProposal | None,
         gates: list[GateResult],
     ) -> BacktestResult:
+
         entry_allowed = self.portfolio.can_enter(
             snapshot_ts=snapshot.ts,
             max_open_positions=self.config.max_open_positions,
@@ -141,12 +152,13 @@ class BacktestEngine:
                     )
 
         if self.config.force_close_eod and self.portfolio.open_positions:
-            local_time = snapshot.ts.astimezone(
-                ZoneInfo(self.config.timezone),
-            ).time()
+            local_time = snapshot.ts.astimezone(ZoneInfo(self.config.timezone)).time()
 
             if local_time >= time.fromisoformat(self.config.market_close):
-                self.portfolio.force_close_eod(snapshot)
+                self.portfolio.force_close_eod(
+                    snapshot,
+                    exit_reason=ExitReason.EOD_FORCE_CLOSE,
+                )
 
         result.decisions.append(
             {

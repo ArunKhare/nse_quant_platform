@@ -22,6 +22,7 @@ from nse_quant.execution.broker import PaperBroker
 from nse_quant.market_data.replay_provider import (
     ReplayMarketDataProvider,
 )
+from nse_quant.ops.kill_switch import KillSwitch
 from nse_quant.persistence.duckdb_store import DuckDBStore
 from nse_quant.research.regime_risk_policy import RegimeRiskLimits
 from nse_quant.strategy.decision_loop import DecisionLoop
@@ -221,6 +222,7 @@ def decision_loop_environment(
                 settings=test_settings,
                 spot_instrument_token_resolver=lambda symbol: 256265,
                 live_snapshot_path=live_snapshot_path,
+                kill_switch=KillSwitch(tmp_path / "kill_switch.json"),
             )
             loop.settings.research.enforce_feature_availability = False
             loop.settings.research.enforce_regime_policy = False

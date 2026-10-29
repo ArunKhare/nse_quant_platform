@@ -1,6 +1,7 @@
 from datetime import UTC, date, datetime, time
 
 from nse_quant.core.models import (
+    ExitReason,
     Instrument,
     Leg,
     MarketFeatures,
@@ -170,12 +171,12 @@ def test_paper_broker_computes_leg_level_pnl(tmp_path):
     closed = broker.close_position(
         position.position_id,
         current_prices,
-        "TARGET_PROFIT",
+        ExitReason.TARGET_PROFIT,
     )
 
     assert closed is not None
     assert closed.status == "CLOSED"
-    assert closed.exit_reason == "TARGET_PROFIT"
+    assert closed.exit_reason == ExitReason.TARGET_PROFIT
     assert closed.realized_pnl == expected_unrealized
     assert closed.unrealized_pnl == 0.0
 

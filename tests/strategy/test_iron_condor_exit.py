@@ -3,6 +3,7 @@ from datetime import UTC, date, datetime, timedelta
 import pytest
 
 from nse_quant.core.models import (
+    ExitReason,
     Instrument,
     Leg,
     MarketFeatures,
@@ -137,8 +138,8 @@ def test_target_profit_triggers_at_remaining_credit_target():
         features=_features(proposal.expiry),
     )
 
-    assert "TARGET_PROFIT" in evaluation.triggered_reasons
-    assert evaluation.selected_reason == "TARGET_PROFIT"
+    assert ExitReason.TARGET_PROFIT in evaluation.triggered_reasons
+    assert evaluation.selected_reason == ExitReason.TARGET_PROFIT
 
 
 def test_target_profit_does_not_trigger_above_target():
@@ -155,7 +156,7 @@ def test_target_profit_does_not_trigger_above_target():
         features=_features(proposal.expiry),
     )
 
-    assert "TARGET_PROFIT" not in evaluation.triggered_reasons
+    assert ExitReason.TARGET_PROFIT not in evaluation.triggered_reasons
 
 
 def test_theta_decay_target_triggers_at_threshold():
@@ -181,7 +182,7 @@ def test_theta_decay_target_triggers_at_threshold():
     )
 
     assert evaluation.details["premium_decay_pct"] == pytest.approx(50.0)
-    assert "THETA_DECAY_TARGET" in evaluation.triggered_reasons
+    assert ExitReason.THETA_DECAY_TARGET in evaluation.triggered_reasons
 
 
 def test_theta_decay_target_does_not_trigger_below_threshold():
@@ -206,4 +207,4 @@ def test_theta_decay_target_does_not_trigger_below_threshold():
     )
 
     assert evaluation.details["premium_decay_pct"] == pytest.approx(41.6666666667)
-    assert "THETA_DECAY_TARGET" not in evaluation.triggered_reasons
+    assert ExitReason.THETA_DECAY_TARGET not in evaluation.triggered_reasons

@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import argparse
 from datetime import date
+from functools import partial
 from pathlib import Path
 
-import pandas as pd
-
+from nse_quant.core.settings import get_settings
 from nse_quant.research.backtest.config import BacktestConfig
 from nse_quant.research.backtest.engine import BacktestEngine
 from nse_quant.research.backtest.experiments import ParameterGrid
@@ -13,6 +13,7 @@ from nse_quant.research.backtest.walk_forward import (
     run_walk_forward_experiments,
     save_walk_forward_results,
 )
+from nse_quant.strategy.iron_condor import IronCondorMonitor
 
 
 def parse_args() -> argparse.Namespace:
@@ -47,8 +48,20 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def make_engine(
+    config: BacktestConfig,
+    settings: object = get_settings("config/settings.test.yaml"),
+) -> BacktestEngine:
+    return BacktestEngine(
+        config,
+        strategy=IronCondorMonitor(settings),
+    )
+
+
 def main() -> int:
     args = parse_args()
+
+    settings = get_settings("config/settings.test.yaml")
 
     base_config = BacktestConfig(
         warehouse_dir=Path(args.warehouse_dir),
@@ -67,37 +80,27 @@ def main() -> int:
         entry_cooldown_minutes=tuple(args.entry_cooldown_minutes),
     )
 
-    # DEDUG SCRIPTS
-    snapshot_loader = BacktestEngine(base_config)
-    snapshots = snapshot_loader.loader.load_market_hour_snapshots()
+    snapshot_loader_engine = BacktestEngine(
+        base_config,
+        strategy=IronCondorMonitor(settings),
+    )
+    snapshots = snapshot_loader_engine.loader.load_market_hour_snapshots()
+
     print(f"DEBUG snapshot_count={len(snapshots)}")
 
-    if snapshots:
-        dates = sorted({pd.Timestamp(s.ts).tz_convert("UTC").date() for s in snapshots})
-        print(f"DEBUG snapshot_dates={dates}")
-    else:
-        print("DEBUG snapshot_loader returned no snapshots")
-    print(
-        "DEBUG thresholds:",
-        base_config.min_snapshots,
-        base_config.min_iv_coverage,
-    )
-    # DEDUG SCRIPTS ENDS
+    engine_factory = partial(make_engine, settings=settings)
 
     results = run_walk_forward_experiments(
         base_config=base_config,
         grid=grid,
-        engine_factory=BacktestEngine,
-        snapshot_loader=BacktestEngine(
-            base_config,
-        ).loader.load_market_hour_snapshots,
+        engine_factory=engine_factory,
+        snapshot_loader=snapshot_loader_engine.loader.load_market_hour_snapshots,
         train_days=args.train_days,
         test_days=args.test_days,
         min_train_trades=args.min_train_trades,
         min_test_trades=args.min_test_trades,
         workers=args.workers,
     )
-
     results_path, summary_path = save_walk_forward_results(
         results=results,
         output_dir=Path(args.walk_forward_dir) / args.run_id,

@@ -1,0 +1,32 @@
+settings: min_iv_rank=0.0 max_spread_pct=0.06
+                                                                             file  status                        issues  rows  snapshots  iv_coverage
+data\exports\underlying=NIFTY\year=2026\month=10\option_stream_2026-10-18.parquet warning [low_snapshot_count: 27 < 30]  1302         27       0.8095
+data\exports\underlying=NIFTY\year=2026\month=10\option_stream_2026-10-19.parquet warning  [low_snapshot_count: 4 < 30]   168          4       0.8095
+data\exports\underlying=NIFTY\year=2026\month=10\option_stream_2026-10-20.parquet      ok                            []  7518        179       1.0000
+data\exports\underlying=NIFTY\year=2026\month=10\option_stream_2026-10-21.parquet      ok                            []  8274        195       0.9941
+data\exports\underlying=NIFTY\year=2026\month=10\option_stream_2026-10-22.parquet      ok                            []  1722         41       1.0000
+data\exports\underlying=NIFTY\year=2026\month=10\option_stream_2026-10-23.parquet      ok                            [] 20118        479       0.9271
+data\exports\underlying=NIFTY\year=2026\month=10\option_stream_2026-10-24.parquet      ok                            []  1470         35       1.0000
+data\exports\underlying=NIFTY\year=2026\month=10\option_stream_2026-10-27.parquet      ok                            [] 22512        536       0.8420
+data\exports\underlying=NIFTY\year=2026\month=10\option_stream_2026-10-28.parquet      ok                            [] 35490        845       1.0000
+DEBUG loader raw dates: [datetime.date(2026, 10, 20), datetime.date(2026, 10, 21), datetime.date(2026, 10, 23), datetime.date(2026, 10, 24), datetime.date(2026, 10, 27)]
+DEBUG loader returning: 1343 snapshots
+DEBUG loader raw dates: [datetime.date(2026, 10, 20), datetime.date(2026, 10, 21), datetime.date(2026, 10, 23), datetime.date(2026, 10, 24), datetime.date(2026, 10, 27)]
+DEBUG loader returning: 1343 snapshots
+DEBUG snapshot_count=1343
+                                                                             file  status                        issues  rows  snapshots  iv_coverage
+data\exports\underlying=NIFTY\year=2026\month=10\option_stream_2026-10-18.parquet warning [low_snapshot_count: 27 < 30]  1302         27       0.8095
+data\exports\underlying=NIFTY\year=2026\month=10\option_stream_2026-10-19.parquet warning  [low_snapshot_count: 4 < 30]   168          4       0.8095
+data\exports\underlying=NIFTY\year=2026\month=10\option_stream_2026-10-20.parquet      ok                            []  7518        179       1.0000
+data\exports\underlying=NIFTY\year=2026\month=10\option_stream_2026-10-21.parquet      ok                            []  8274        195       0.9941
+data\exports\underlying=NIFTY\year=2026\month=10\option_stream_2026-10-22.parquet      ok                            []  1722         41       1.0000
+data\exports\underlying=NIFTY\year=2026\month=10\option_stream_2026-10-23.parquet      ok                            [] 20118        479       0.9271
+data\exports\underlying=NIFTY\year=2026\month=10\option_stream_2026-10-24.parquet      ok                            []  1470         35       1.0000
+data\exports\underlying=NIFTY\year=2026\month=10\option_stream_2026-10-27.parquet      ok                            [] 22512        536       0.8420
+data\exports\underlying=NIFTY\year=2026\month=10\option_stream_2026-10-28.parquet      ok                            [] 35490        845       1.0000
+DEBUG loader raw dates: [datetime.date(2026, 10, 20), datetime.date(2026, 10, 21), datetime.date(2026, 10, 23), datetime.date(2026, 10, 24), datetime.date(2026, 10, 27)]
+DEBUG loader returning: 1343 snapshots
+DEBUG loader raw dates: [datetime.date(2026, 10, 20), datetime.date(2026, 10, 21), datetime.date(2026, 10, 23), datetime.date(2026, 10, 24), datetime.date(2026, 10, 27)]
+DEBUG loader returning: 1343 snapshots
+DEBUG fold construction: available_dates=[datetime.date(2026, 10, 20), datetime.date(2026, 10, 21), datetime.date(2026, 10, 23), datetime.date(2026, 10, 24), datetime.date(2026, 10, 27)] fold_count=1 train_days=4 test_days=1
+DEBUG filter: first_snapshot_date= 2026-10-20 train_dates = [datetime.date(2026, 10, 20), datetime.date(2026, 10, 21), datetime.date(2026, 10, 23), datetime.date(2026, 10, 24)] match = True

@@ -228,17 +228,17 @@ class BacktestPortfolio:
     def force_close_eod(
         self,
         snapshot: ChainSnapshot,
+        exit_reason: ExitReason = ExitReason.EOD_FORCE_CLOSE,
     ) -> list[BacktestTrade]:
         closed: list[BacktestTrade] = []
 
         for trade in list(self.open_positions):
             self.close_position(
                 trade=trade,
-                exit_reason=ExitReason.EXPIRY_FORCE_CLOSE,
+                exit_reason=exit_reason,
                 closed_at=snapshot.ts,
                 exit_spot=snapshot.spot,
             )
-
             closed.append(trade)
 
         return closed

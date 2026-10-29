@@ -206,21 +206,23 @@ class StrategyPositionStatus(StrEnum):
 
 
 class ExitReason(StrEnum):
-    MANUAL_KILL_SWITCH = "MANUAL_KILL_SWITCH"
-    RISK_LIMIT_BREACH = "RISK_LIMIT_BREACH"
-    EXPIRY_FORCE_CLOSE = "EXPIRY_FORCE_CLOSE"
-    STOP_LOSS = "STOP_LOSS"
-    TARGET_PROFIT = "TARGET_PROFIT"
-    THETA_DECAY_TARGET = "THETA_DECAY_TARGET"
-    IV_COLLAPSE = "IV_COLLAPSE"
-    EXPECTED_MOVE_VIOLATION = "EXPECTED_MOVE_VIOLATION"
-    DATA_QUALITY_EXIT = "DATA_QUALITY_EXIT"
+    MANUAL_KILL_SWITCH = "manual_kill_switch"
+    RISK_LIMIT_BREACH = "risk_limit_breach"
+    EXPIRY_FORCE_CLOSE = "expiry_force_close"
+    STOP_LOSS = "stop_loss"
+    TARGET_PROFIT = "target_profit"
+    THETA_DECAY_TARGET = "theta_decay_target"
+    IV_COLLAPSE = "iv_collapse"
+    EXPECTED_MOVE_VIOLATION = "expected_move_violation"
+    DATA_QUALITY_EXIT = "data_quality_exit"
+    EOD_FORCE_CLOSE = "eod_force_close"
 
 
 EXIT_PRIORITY: list[ExitReason] = [
     ExitReason.MANUAL_KILL_SWITCH,
     ExitReason.RISK_LIMIT_BREACH,
     ExitReason.EXPIRY_FORCE_CLOSE,
+    ExitReason.EOD_FORCE_CLOSE,
     ExitReason.STOP_LOSS,
     ExitReason.TARGET_PROFIT,
     ExitReason.THETA_DECAY_TARGET,

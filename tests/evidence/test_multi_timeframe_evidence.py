@@ -1,7 +1,8 @@
 import json
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from unittest.mock import Mock
 
+from nse_quant.features.availability import FeatureAvailability, FeatureAvailabilityReport
 from nse_quant.market_data.replay_provider import ReplayMarketDataProvider
 from nse_quant.research.candle_resampler import (
     latest_completed_candles,
@@ -64,6 +65,20 @@ def test_evidence_results_are_persisted(
     snapshot = replay_snapshots["snapshots"][0]
     provider = ReplayMarketDataProvider(replay_snapshots["snapshots"])
     loop = decision_loop_environment.build_loop(provider)
+    loop.kill_switch = Mock()
+    loop.kill_switch.is_active.return_value = False
+    loop.availability_checker = Mock()
+    loop.availability_checker.evaluate.return_value = FeatureAvailabilityReport(
+        symbol=snapshot.underlying,
+        as_of=datetime.now(UTC),
+        core_status=FeatureAvailability.READY,
+        htf_status=FeatureAvailability.READY,
+        iv_status=FeatureAvailability.READY,
+        overall_status=FeatureAvailability.READY,
+        observations={},
+        missing=[],
+        reasons=[],
+    )
     loop.settings.research.enforce_strategy_eligibility = False
 
     end = snapshot.ts.replace(second=0, microsecond=0)
@@ -87,7 +102,8 @@ def test_evidence_results_are_persisted(
         interval="1m",
     )
 
-    loop.run_once()
+    result = loop.run_once()
+    print(result["status"])
 
     rows = loop.store.conn.execute(
         """

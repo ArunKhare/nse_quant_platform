@@ -6,6 +6,7 @@ import pytest
 
 from nse_quant.core.models import (
     ChainSnapshot,
+    ExitReason,
     Instrument,
     Leg,
     MarketFeatures,
@@ -180,7 +181,7 @@ def test_iv_collapse_exit_triggers():
     )
 
     assert exit_reason is not None
-    assert exit_reason.value == "IV_COLLAPSE"
+    assert exit_reason.value == ExitReason.IV_COLLAPSE
 
 
 def test_expected_move_violation_exit_triggers():
@@ -210,7 +211,7 @@ def test_expected_move_violation_exit_triggers():
     )
 
     assert exit_reason is not None
-    assert exit_reason.value == "EXPECTED_MOVE_VIOLATION"
+    assert exit_reason.value == ExitReason.EXPECTED_MOVE_VIOLATION
 
 
 def test_expiry_force_close_triggers():
@@ -236,7 +237,7 @@ def test_expiry_force_close_triggers():
     )
 
     assert exit_reason is not None
-    assert exit_reason.value == "EXPIRY_FORCE_CLOSE"
+    assert exit_reason.value == ExitReason.EXPIRY_FORCE_CLOSE
 
 
 def test_no_exit_on_entry_snapshot():
@@ -289,7 +290,7 @@ def test_target_profit_requires_positive_pnl():
     )
 
     assert exit_reason is not None
-    assert exit_reason.value == "TARGET_PROFIT"
+    assert exit_reason.value == ExitReason.TARGET_PROFIT
     assert trade.realized_pnl > 0.0
     assert trade.realized_pnl == pytest.approx(20.0)
 
@@ -316,6 +317,6 @@ def test_stop_loss_requires_negative_pnl():
     )
 
     assert exit_reason is not None
-    assert exit_reason.value == "STOP_LOSS"
+    assert exit_reason.value == ExitReason.STOP_LOSS
     assert trade.realized_pnl < 0.0
     assert trade.realized_pnl == pytest.approx(-30.0)

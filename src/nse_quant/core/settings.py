@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from datetime import date as Date
 from datetime import time
 from pathlib import Path
@@ -13,6 +14,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 CONFIG_DIR = Path("config")
 SETTINGS_YAML = CONFIG_DIR / "settings.yaml"
+Path(os.getenv("NSE_QUANT_SETTINGS", str(CONFIG_DIR / "settings.yaml")))
 
 
 class SafetySettings(BaseModel):
@@ -77,6 +79,7 @@ class StrategyRiskSettings(BaseModel):
     max_open_positions: int = 1
     max_daily_loss: float = 25_000
     max_notional_exposure: float = 2_000_000
+    max_spread_pct: float = 0.03
 
 
 class StrategyExitSettings(BaseModel):
@@ -101,6 +104,7 @@ class IronCondorProfileSettings(StrategyProfileSettings):
     strategy_type: str = "iron_condor"
     wing_distance_points: float = 200.0
     min_credit: float = 20.0
+    min_days_to_expiry: int = 1
 
 
 STRATEGY_PROFILE_TYPES: dict[str, type[StrategyProfileSettings]] = {

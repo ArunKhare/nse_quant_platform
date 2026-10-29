@@ -1,9 +1,10 @@
 param(
-    [string]$TradeDate = (Get-Date -Format "yyyy-MM-dd"),
+    [string]$TradeDate = (Get-Date -Format yyyy-MM-dd),
     [int]$InstrumentToken = 0,
     [string]$Symbol = "",
-    [string]$CandleIntervals = "5m,15m,30m,60m"
+    [string[]]$CandleIntervals = @('5m', '15m', '30m', '60m')
 )
+
 
 $ErrorActionPreference = "Stop"
 
@@ -43,7 +44,7 @@ Write-Host "Log file:   $LogFile"
 $Arguments = @(
     "scripts/eod_maintenance.py",
     "--trade-date", $TradeDate,
-    "--candle-intervals", $CandleIntervals
+    "--candle-intervals", ($CandleIntervals -join ',')
 )
 
 if ($InstrumentToken -ne 0) {

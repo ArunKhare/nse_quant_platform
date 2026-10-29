@@ -152,7 +152,7 @@ def test_paper_lifecycle_fill_mark_exit_close(
 
     assert row is not None
     assert row[0] == "CLOSED"
-    assert row[1] == "TARGET_PROFIT"
+    assert row[1] == ExitReason.TARGET_PROFIT
     assert row[2] == pytest.approx(6000.0)
     assert row[3] == pytest.approx(3000.0)
     assert row[4] == pytest.approx(3000.0)

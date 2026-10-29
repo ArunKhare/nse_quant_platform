@@ -33,14 +33,14 @@ def parse_args() -> argparse.Namespace:
 
     parser.add_argument(
         "--symbol",
-        default=None,
+        default="NIFTY",
         help="Underlying symbol; defaults to configured default symbol",
     )
 
     parser.add_argument(
         "--instrument-token",
         type=int,
-        default=None,
+        default=256265,
         help=(
             "Spot instrument token. Defaults to "
             "settings.market_data.default_instrument_token when available."

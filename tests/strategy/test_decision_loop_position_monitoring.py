@@ -245,7 +245,7 @@ def test_position_closes_on_iv_collapse(
 
     assert outcomes
     assert outcomes[0]["status"] == "closed"
-    assert outcomes[0]["selected_exit_reason"] == "IV_COLLAPSE"
+    assert outcomes[0]["selected_exit_reason"] == ExitReason.IV_COLLAPSE
 
 
 def test_exit_engine_runs_on_next_cycle_after_fill(

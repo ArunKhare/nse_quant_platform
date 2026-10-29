@@ -151,10 +151,28 @@ def run_walk_forward_experiments(
         train_results: list[ExperimentResult] = []
 
         warmup_engine = engine_factory(base_config)
-        prepared_train_replay, uses_feature_path = _prepare_engine_replay(
+        ordered_fold_snapshots = [
+            *train_snapshots,
+            *test_snapshots,
+        ]
+
+        prepared_fold_replay, uses_feature_path = _prepare_engine_replay(
             warmup_engine,
-            train_snapshots,
+            ordered_fold_snapshots,
         )
+
+        prepared_train_replay: list[object] = []
+        prepared_test_replay: list[object] = []
+
+        for snapshot, step in zip(
+            ordered_fold_snapshots,
+            prepared_fold_replay,
+            strict=True,
+        ):
+            if snapshot.ts.date() in fold.train_dates:
+                prepared_train_replay.append(step)
+            else:
+                prepared_test_replay.append(step)
 
         experiment_configs: list[BacktestConfig] = []
         experiment_parameters: list[dict[str, float | int]] = []
@@ -245,11 +263,8 @@ def run_walk_forward_experiments(
             )
 
             test_engine = engine_factory(test_config)
-            prepared_test_replay, test_uses_feature_path = _prepare_engine_replay(
-                test_engine, test_snapshots
-            )
 
-            if test_uses_feature_path:
+            if uses_feature_path:
                 test_engine_result = test_engine.run_prepared_features(
                     prepared_test_replay,
                 )
@@ -258,6 +273,7 @@ def run_walk_forward_experiments(
                     prepared_steps=prepared_test_replay,
                 )
 
+            test_engine.save(test_engine_result)
             test_engine.save(test_engine_result)
 
             test_result = summarize_engine_run(
