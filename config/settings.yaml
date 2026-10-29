@@ -108,6 +108,7 @@ strategies:
     wing_distance_points: 200
     min_credit: 20
     min_days_to_expiry: 1
+    min_iv_rank: 30
 
     regime_policy:
       allowed_regimes:

@@ -98,6 +98,7 @@ class StrategyProfileSettings(BaseModel):
     regime_policy: RegimePolicySettings = Field(default_factory=RegimePolicySettings)
     risk: StrategyRiskSettings = Field(default_factory=StrategyRiskSettings)
     exits: StrategyExitSettings = Field(default_factory=StrategyExitSettings)
+    min_iv_rank: float | None = None
 
 
 class IronCondorProfileSettings(StrategyProfileSettings):
@@ -504,6 +505,17 @@ class Settings(BaseSettings):
                 setattr(effective, key, value)
 
         return effective
+
+    def get_effective_min_iv_rank(
+        self,
+        strategy_id: str,
+    ) -> float:
+        profile = self.get_strategy_profile(strategy_id)
+
+        if profile.min_iv_rank is not None:
+            return profile.min_iv_rank
+
+        return self.analytics.min_iv_rank
 
 
 def load_settings(path: str | Path | None = None) -> Settings:

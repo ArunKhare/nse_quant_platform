@@ -28,8 +28,15 @@ class MarketOpenGate:
 
 
 class IvRegimeGate:
-    def __init__(self, settings: Any | None = None) -> None:
+    def __init__(
+        self,
+        settings: Any | None = None,
+        min_iv_rank: float | None = None,
+    ) -> None:
         self.settings = settings or get_settings()
+        self.min_iv_rank = (
+            min_iv_rank if min_iv_rank is not None else self.settings.analytics.min_iv_rank
+        )
 
     def evaluate(
         self,
@@ -56,7 +63,7 @@ class IvRegimeGate:
             rank_ok = cold_start_allowed
             mode = "COLD_START"
         else:
-            rank_ok = iv_rank is not None and iv_rank >= analytics.min_iv_rank
+            rank_ok = iv_rank is not None and iv_rank >= self.min_iv_rank
             mode = "ENFORCED"
 
         passed = rank_ok and spread_ok
@@ -76,7 +83,7 @@ class IvRegimeGate:
                 "iv_history_count": iv_history_count,
                 "iv_rank": iv_rank,
                 "iv_rv_spread": spread,
-                "min_iv_rank": analytics.min_iv_rank,
+                "min_iv_rank": self.min_iv_rank,
                 "min_iv_rv_spread": analytics.min_iv_rv_spread,
                 "min_iv_history_observations": (analytics.min_iv_history_observations),
                 "cold_start_allowed": analytics.allow_iv_rank_cold_start,
