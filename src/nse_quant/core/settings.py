@@ -306,10 +306,23 @@ class MultiTimeframeEvidenceSettings(BaseModel):
     history_limit: int = 6000
 
 
+class TechnicalIndicatorSettings(BaseModel):
+    enabled: bool = False
+    timeframes: list[str] = Field(
+        default_factory=lambda: ["1m", "15m", "60m"],
+    )
+    history_limit: int = 6000
+    rsi_period: int = 14
+    adx_period: int = 14
+    ema_periods: list[int] = Field(
+        default_factory=lambda: [9, 20, 50, 200],
+    )
+
+
 class EvidencePluginsSettings(BaseModel):
     multi_timeframe: MultiTimeframeEvidenceSettings = MultiTimeframeEvidenceSettings()
-    ulti_timeframe: MultiTimeframeEvidenceSettings = MultiTimeframeEvidenceSettings()
     event_risk: EventRiskSettings = EventRiskSettings()
+    technical_indicators: TechnicalIndicatorSettings = TechnicalIndicatorSettings()
 
 
 class EvidenceSettings(BaseModel):

@@ -54,6 +54,7 @@ from nse_quant.research.evidence_plugins.base import DecisionContext, EvidencePl
 from nse_quant.research.evidence_plugins.event_risk import EventRiskPlugin
 from nse_quant.research.evidence_plugins.mutli_timeframe import MultiTimeframeTrendPlugin
 from nse_quant.research.evidence_plugins.registry import EvidencePluginRunner
+from nse_quant.research.evidence_plugins.technical_indicators import TechnicalIndicatorsPlugin
 from nse_quant.research.regime_policy import RegimePolicy
 from nse_quant.research.regime_policy_evaluation import (
     resolve_effective_regimes,
@@ -100,6 +101,14 @@ class DecisionLoop:
                 EventRiskPlugin(
                     store=store,
                     settings=self.settings.evidence.plugins.event_risk,
+                )
+            )
+
+        if self.settings.evidence.plugins.technical_indicators.enabled:
+            plugins.append(
+                TechnicalIndicatorsPlugin(
+                    store=store,
+                    settings=self.settings.evidence.plugins.technical_indicators,
                 )
             )
 

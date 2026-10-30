@@ -96,7 +96,12 @@ Required implementation:
 - Indicator calculations from completed candles
 - Decision-loop integration
 - Tests
-
+    technical_indicators:
+      enabled: false
+      timeframes: [1m, 15m, 60m]
+      history_limit: 6000
+      rsi_period: 14
+      ema_periods: [9, 20, 50, 200]
 ### Volume flow
 
 Purpose:

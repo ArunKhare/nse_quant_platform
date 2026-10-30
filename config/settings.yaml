@@ -150,3 +150,10 @@ evidence:
       block_new_entries: false
       blackout_minutes_before: 30
       blackout_minutes_after: 30
+    technical_indicator:
+      enabled: true
+      timeframes: [1m, 15m, 60m]
+      history_limit: 6000
+      rsi_period: 14
+      adx_period: 14
+      ema_periods: [9, 20, 50, 200]

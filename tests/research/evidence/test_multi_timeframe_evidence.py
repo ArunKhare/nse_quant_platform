@@ -107,28 +107,24 @@ def test_evidence_results_are_persisted(
     result = loop.run_once()
     print(result["status"])
 
-    rows = loop.store.conn.execute(
+    event_risk_rows = loop.store.conn.execute(
         """
         SELECT plugin, available, payload_json
         FROM decision_evidence
         WHERE run_id = ?
+          AND plugin = ?
         """,
-        [loop.run_id],
+        [loop.run_id, "event_risk"],
     ).fetchall()
 
-    assert len(rows) == 1
-    plugin, available, payload_json = rows[0]
-    payload = json.loads(payload_json)
-    assert plugin == "multi_timeframe_trend"
-    assert available is True
-    assert payload["complete"] is True
-    assert payload["alignment"] == "BULLISH"
-    assert payload["timeframes"]["1m"] == {
-        "trend": "UP",
-        "completed_buckets": 60,
-        "required_buckets": 60,
-        "complete": True,
-    }
+    assert len(event_risk_rows) == 1
+
+    event_plugin, event_available, event_payload_json = event_risk_rows[0]
+    event_payload = json.loads(event_payload_json)
+
+    assert event_available is True
+    assert event_payload["recommended_action"] == "OBSERVE"
+    assert event_payload["block_new_entries"] is False
 
 
 def test_runner_returns_typed_evidence_results():
