@@ -14,6 +14,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
+from zoneinfo import ZoneInfo
 
 from nse_quant.core.market_calendar import is_market_open_now
 from nse_quant.core.settings import get_settings
@@ -30,6 +31,15 @@ from nse_quant.ops.notifier import Notifier, NullNotifier
 from nse_quant.persistence.duckdb_store import DuckDBStore
 from nse_quant.persistence.repositories import DecisionRepository
 from nse_quant.strategy.decision_loop import DecisionLoop
+
+IST = ZoneInfo("Asia/Kolkata")
+
+
+def to_ist(value: datetime) -> datetime:
+    """Return an IST-rendered datetime for logs and status artifacts."""
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=UTC)
+    return value.astimezone(IST)
 
 
 def parse_args() -> argparse.Namespace:
@@ -186,7 +196,7 @@ def main() -> int:
 
         print(
             "Latest feature:",
-            feature_snapshot.ts,
+            to_ist(feature_snapshot.ts).isoformat(),
             "age_seconds:",
             feature_age.total_seconds(),
         )
@@ -263,6 +273,7 @@ def main() -> int:
                         second=0,
                         microsecond=0,
                     )
+                    candle_minute_ist = to_ist(candle_minute)
 
                     spot_price = provider.get_spot()
 
@@ -285,7 +296,7 @@ def main() -> int:
 
                     print(
                         "Persisted 1m candle:",
-                        candle_minute,
+                        candle_minute_ist.isoformat(),
                         "close:",
                         spot_price,
                         "rows:",
@@ -318,7 +329,7 @@ def main() -> int:
 
                     current_status.update(
                         {
-                            "updated_at": datetime.now(UTC).isoformat(),
+                            "updated_at": to_ist(datetime.now(UTC)).isoformat(),
                             "symbol": primary_symbol,
                             "loop_status": result.get("status"),
                             "latest_candle": candle_minute.isoformat(),
@@ -406,7 +417,7 @@ def main() -> int:
             f"NSE Quant paper loop {end_status}\n"
             f"Run ID: {run_id}\n"
             f"Symbol: {primary_symbol}\n"
-            f"Ended at: {datetime.now(UTC).isoformat()}",
+            f"Ended at: {to_ist(datetime.now(UTC)).isoformat()}",
         )
 
         store.conn.close()

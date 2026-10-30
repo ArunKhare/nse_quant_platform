@@ -226,3 +226,4 @@ data/*
 
 logs/*
 
+logs/live_status.json
