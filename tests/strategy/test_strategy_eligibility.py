@@ -80,6 +80,7 @@ def test_eligibility_rejects_unknown_regime(decision_loop_environment):
         current_regime="UNKNOWN",
         regime_allowed=False,
         regime_policy=None,
+        regime_source="test",
     )
 
     assert gate.passed is False
@@ -105,6 +106,7 @@ def test_eligibility_rejects_missing_iv_rank(
         current_regime=allowed_regime,
         regime_allowed=True,
         regime_policy=None,
+        regime_source="test",
     )
 
     assert gate.passed is False

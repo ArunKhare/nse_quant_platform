@@ -307,7 +307,23 @@ class DecisionLoop:
                 symbol=symbol,
                 ts=features.ts,
             )
-            current_regime = market_regime["regime"] if market_regime else "UNKNOWN"
+            daily_regime = market_regime.get("regime") if market_regime else None
+
+            if daily_regime and daily_regime != "UNKNOWN":
+                current_regime = daily_regime
+                regime_source = "daily_market_regime"
+            else:
+                current_regime = features.regime.value
+                regime_source = "live_spot_features"
+
+            print(
+                "DEBUG regime resolution:",
+                f"daily_regime={daily_regime}",
+                f"live_feature_regime={features.regime.value}",
+                f"resolved_regime={current_regime}",
+                f"regime_source={regime_source}",
+            )
+
             regime_policy = self.store.latest_regime_policy(
                 symbol=symbol,
                 as_of=features.ts,
@@ -333,6 +349,7 @@ class DecisionLoop:
                 current_regime=current_regime,
                 regime_allowed=regime_allowed,
                 regime_policy=regime_policy,
+                regime_source=regime_source,
             )
 
             self.decisions.save_decision(
@@ -1112,6 +1129,7 @@ class DecisionLoop:
         current_regime: str,
         regime_allowed: bool,
         regime_policy: dict[str, Any] | None,
+        regime_source: str,
     ) -> GateResult:
         iv_rank = features.iv_rank
         iv_rank_available = iv_rank is not None
@@ -1126,6 +1144,7 @@ class DecisionLoop:
             "profile_enabled": profile.enabled,
             "underlying_allowed": (self.settings.market_data.default_symbol in profile.underlyings),
             "current_regime": current_regime,
+            "regime_source": regime_source,
             "regime_allowed": regime_allowed,
             "iv_history_count": iv_history_count,
             "minimum_iv_history": minimum_iv_history,

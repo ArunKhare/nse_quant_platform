@@ -27,8 +27,8 @@ def test_volatility_and_iv_buckets() -> None:
 def test_combined_regime_is_point_in_time_label() -> None:
     result = classify_regime(
         close=101,
-        sma50=100,
-        atr14=1,
+        sma=100,
+        atr=1,
         realized_volatility=0.2,
         rv_percentile=50,
         iv_rank=80,
