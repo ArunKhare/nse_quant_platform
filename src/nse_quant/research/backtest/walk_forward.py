@@ -98,6 +98,7 @@ def _run_train_experiment(
 ) -> tuple[BacktestEngine, BacktestResult]:
     engine = engine_factory(config) if engine_factory is not None else BacktestEngine(config)
     result = engine.run_prepared_features(prepared_features)
+    engine.save(result)
     return engine, result
 
 

@@ -105,6 +105,13 @@ class BacktestEngine:
                 gates=gates,
             )
 
+        if self.config.force_close_eod and self.portfolio.open_positions:
+            final_snapshot = prepared_steps[-1].snapshot
+            self.portfolio.force_close_eod(
+                final_snapshot,
+                exit_reason=ExitReason.EOD_FORCE_CLOSE,
+            )
+
         return result
 
     def _process_replay_step(
@@ -195,6 +202,8 @@ class BacktestEngine:
         trades = []
 
         for decision in result.decisions:
+            failed_gates = [gate["gate"] for gate in decision["gates"] if not gate["passed"]]
+
             decisions.append(
                 {
                     "ts": decision["ts"],
@@ -206,9 +215,10 @@ class BacktestEngine:
                     ),
                     "gate_count": len(decision["gates"]),
                     "all_gates_passed": all(gate["passed"] for gate in decision["gates"]),
+                    "failed_gates": ",".join(failed_gates),
+                    "failed_gate_count": len(failed_gates),
                 }
             )
-
         pd.DataFrame(decisions).to_csv(
             output_dir / "decisions.csv",
             index=False,
@@ -253,6 +263,8 @@ class BacktestEngine:
             "end_date": self.config.end_date.isoformat(),
             "snapshot_count": len(result.decisions),
             "proposal_count": result.proposal_count,
+            "open_position_count": len(self.portfolio.open_positions),
+            "closed_trade_count": len(self.portfolio.closed_trades),
             "initial_capital": self.config.initial_capital,
         }
 
@@ -320,6 +332,13 @@ class BacktestEngine:
                 features=step.features,
                 proposal=proposal,
                 gates=gates,
+            )
+
+        if self.config.force_close_eod and self.portfolio.open_positions:
+            final_snapshot = prepared_features[-1].snapshot
+            self.portfolio.force_close_eod(
+                final_snapshot,
+                exit_reason=ExitReason.EOD_FORCE_CLOSE,
             )
 
         return result
