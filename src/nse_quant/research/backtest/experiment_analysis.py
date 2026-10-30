@@ -75,6 +75,11 @@ def rank_experiments(
         (frame["trade_count"] >= min_trades)
         & (frame["snapshot_count"] >= min_snapshots)
         & frame["win_rate"].notna()
+    )
+
+    frame["research_grade_eligible"] = (
+        frame["promotion_eligible"]
+        & (frame["trade_count"] >= 10)
         & frame["profit_factor"].notna()
         & (frame["profit_factor"] != float("inf"))
     )
@@ -130,6 +135,7 @@ def build_analysis_report(
         "analysis_status": status,
         "experiment_count": int(len(ranked)),
         "promotion_eligible_count": int(ranked["promotion_eligible"].sum()),
+        "research_grade_eligible_count": int(ranked["research_grade_eligible"].sum()),
         "minimum_trades": min_trades,
         "minimum_snapshots": min_snapshots,
         "recommended_experiment_id": (int(top["experiment_id"]) if top is not None else None),

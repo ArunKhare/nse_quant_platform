@@ -54,7 +54,9 @@ def build_snapshot_folds(
     *,
     train_days: int,
     test_days: int,
+    expiry_dates: set[date] | None = None,
 ) -> list[WalkForwardFold]:
+    expiry_dates = expiry_dates or set()
     unique_dates = sorted(set(snapshot_dates))
     folds: list[WalkForwardFold] = []
     cursor = 0
@@ -66,6 +68,8 @@ def build_snapshot_folds(
 
         if len(train_dates) < train_days or len(test_dates) < test_days:
             break
+        if any(test_date in expiry_dates for test_date in test_dates):
+            cursor += test_days
 
         folds.append(
             WalkForwardFold(
@@ -117,12 +121,16 @@ def run_walk_forward_experiments(
     snapshots = snapshot_loader()
     grouped = group_snapshots_by_date(snapshots)
     available_dates = sorted(grouped)
+    expiry_dates = {
+        snapshot.expiry for snapshot in snapshots if getattr(snapshot, "expiry", None) is not None
+    }
 
     folds = build_snapshot_folds(
-        available_dates,
-        train_days=train_days,
-        test_days=test_days,
+        available_dates, train_days=train_days, test_days=test_days, expiry_dates=expiry_dates
     )
+
+    if not folds:
+        print("No walk-forward folds available: all candidate test dates are option expiry dates.")
     print(
         "DEBUG fold construction:",
         f"available_dates={available_dates}",
