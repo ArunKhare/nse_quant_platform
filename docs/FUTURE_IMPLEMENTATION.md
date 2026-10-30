@@ -16,6 +16,11 @@ that a feature is active.
 evidence:
   enabled: true
   plugins:
+    multi_timeframe:
+      enabled: true
+      timeframes: [1m, 15m, 60m]
+      history_limit: 6000
+
     event_risk:
       enabled: false
       block_new_entries: false
@@ -29,6 +34,14 @@ evidence:
 
     option_positioning:
       enabled: false
+
+    institutional_regime:
+      enabled: false
+      iv_history_limit: 250
+      high_iv_rank_threshold: 70.0
+      term_structure_tolerance: 0.002
+      skew_threshold: 0.03
+      require_complete_regime: false
 
     market_structure:
       enabled: false
@@ -134,6 +147,56 @@ Required implementation:
 - PCR and max-pain calculations
 - Decision-loop integration
 - Tests
+
+### Institutional regime
+
+Purpose:
+
+- Produce a point-in-time institutional market-regime label.
+- Combine IV state, IV term structure, skew state, and completed price action.
+- Support the manual’s 108-regime taxonomy without introducing look-ahead bias.
+- Initially provide observational evidence; do not enforce strategy eligibility until validated.
+
+Regime dimensions:
+
+| Dimension | Point-in-time inputs | Planned states |
+|---|---|---|
+| IV state | ATM IV, historical IV rank/percentile | `HIGH_IV`, `NORMAL_IV` |
+| Term structure | Near-term and deferred-expiry IV | `CONTANGO`, `FLAT`, `BACKWARDATION` |
+| Skew state | Put/call IV skew from current chain | `NORMAL_SKEW`, `HIGH_PUT_SKEW`, etc. |
+| Price action | Completed 1m, 15m, 60m, and daily candles | Six price-action states |
+
+Example regime:
+
+```text
+HIGH_IV_CONTANGO_NORMAL_SKEW_RANGE_UPPER
+```
+
+Required implementation:
+
+- `InstitutionalRegimeSettings`
+- `InstitutionalRegimePlugin`
+- Point-in-time IV-history query
+- Term-structure calculation from timestamped option-chain snapshots
+- Skew calculation from timestamped option-chain snapshots
+- Completed-candle-only price-action classification
+- Regime-evidence persistence
+- Decision-loop integration
+- Tests
+
+Look-ahead rules:
+
+- Use only observations with `ts <= decision_ts`.
+- Use completed candles; never use the forming bar.
+- Use only the chain snapshot timestamped at or before the decision.
+- Never use future IV, future price action, post-event news, or future market reactions.
+- If any required component is unavailable, return an incomplete regime payload rather than fabricating a label.
+
+Initial rollout:
+
+- Implement as observational evidence only.
+- Persist the full regime label and component availability.
+- Do not use it in `allowed_regimes` or `blocked_regimes` matching until coverage and performance are validated.
 
 ### Market structure
 
@@ -285,6 +348,38 @@ These models should be added only when their features are implemented:
 - `ContextIndexSettings`
 - `IndexOptionSettings`
 - `TradingUniverseSettings`
+
+## Evidence plugin rollout
+
+| Sprint | Config change | Outcome |
+|---|---|---|
+| Current | Enable `multi_timeframe` only | Completed multi-timeframe trend evidence is persisted. |
+| Next | Add and enable `event_risk` | Scheduled-event impact and optional new-entry blackout evidence. |
+| Then | Add and enable `technical_indicators` | Momentum, trend-strength, and mean-reversion evidence. |
+| Then | Add and enable `volume_flow` | Volume participation and flow evidence. |
+| Then | Add and enable `option_positioning` | OI, PCR, IV-change, expected-move, and IV-crush evidence. |
+| Then | Add `institutional_regime` in observation mode | Point-in-time institutional regime evidence is persisted. |
+| Later | Add `market_structure` | Swing, BOS/CHoCH, range, and level evidence. |
+| Later | Add `market_context` | Cross-index, breadth, sector, and global-context evidence. |
+| Later | Add `execution_quality` | Spread, depth, entry-window, slippage, and risk-reward evidence. |
+| Later | Promote `institutional_regime` to eligibility | Only after regime coverage and performance validation. |
+| Later | Add `trading_universe.cash_stocks` | Cash-equity research and future strategy track. |
+| Later | Add `trading_universe.stock_options` | Stock-option research and future strategy track. |
+| Much later | Enable additional index options | Expand index-option universe. |
+
+### Institutional regime promotion checklist
+
+Promote `institutional_regime` from observational evidence to a hard eligibility gate only when:
+
+1. `InstitutionalRegimeSettings` exists.
+2. `InstitutionalRegimePlugin` is implemented.
+3. Regime evidence is persisted with `as_of`, input timestamps, availability flags, and `classifier_version`.
+4. All regime components use point-in-time data.
+5. Tests cover complete, incomplete, stale, and missing-input cases.
+6. Decision-loop integration is complete.
+7. Sufficient complete regime observations exist.
+8. Strategy performance has been evaluated across regime labels.
+9. Enabling it does not weaken the persistent kill switch, paper mode, liquidity checks, data-quality checks, or risk controls.
 
 ## Promotion rule
 
