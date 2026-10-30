@@ -11,6 +11,7 @@ from uuid import uuid4
 import duckdb
 import pandas as pd
 
+from nse_quant.analytics.features import required_spot_history_closes
 from nse_quant.analytics.implied_volatility import (
     implied_volatility,
     time_to_expiry_years,
@@ -38,16 +39,16 @@ class DuckDBStore:
     """Owns the DuckDB connection and schema."""
 
     def __init__(self, path: str | Path | None = None, *, read_only: bool = False) -> None:
-        settings = get_settings()
-        self.path = Path(path or settings.storage.db_path)
+        self.settings = get_settings()
+        self.path = Path(path or self.settings.storage.db_path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        self.history_limit = settings.evidence.plugins.multi_timeframe.history_limit
+        self.history_limit = self.settings.evidence.plugins.multi_timeframe.history_limit
         self.conn = duckdb.connect(
             str(self.path),
             read_only=read_only,
         )
-        self.conn.execute(f"SET memory_limit = '{settings.storage.db_memory_limit}'")
-        self.conn.execute(f"SET threads = {settings.storage.db_threads}")
+        self.conn.execute(f"SET memory_limit = '{self.settings.storage.db_memory_limit}'")
+        self.conn.execute(f"SET threads = {self.settings.storage.db_threads}")
         if not read_only:
             self._create_schema()
 
@@ -461,7 +462,6 @@ class DuckDBStore:
         option_type: str,
         ltp: float | None,
     ) -> float | None:
-        settings = get_settings()
 
         if spot is None or ltp is None or ltp <= 0:
             return None
@@ -480,7 +480,7 @@ class DuckDBStore:
                 as_of=ts,
                 expiry=expiry_dt,
             ),
-            risk_free_rate=settings.market_data.risk_free_rate,
+            risk_free_rate=self.settings.market_data.risk_free_rate,
             option_type=option_type,
         )
 
@@ -597,8 +597,8 @@ class DuckDBStore:
         )
 
     def latest_iv_history(self, underlying: str, limit: int | None = None) -> list[float]:
-        settings = get_settings()
-        limit = limit or settings.analytics.iv_history_limit
+
+        limit = limit or self.settings.analytics.iv_history_limit
 
         rows = self.conn.execute(
             """
@@ -1245,6 +1245,8 @@ class DuckDBStore:
         as_of: datetime,
     ) -> None:
         """Refresh the latest spot feature snapshot from recent 1m candles."""
+        required_closes = required_spot_history_closes()
+        history_limit = required_closes + 1
 
         rows = self.conn.execute(
             """
@@ -1263,7 +1265,7 @@ class DuckDBStore:
             ORDER BY ts DESC
             LIMIT ?
             """,
-            [symbol, instrument_token, as_of, self.history_limit],
+            [symbol, instrument_token, as_of, history_limit],
         ).fetchall()
 
         if not rows:

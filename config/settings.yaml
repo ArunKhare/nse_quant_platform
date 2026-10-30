@@ -36,6 +36,9 @@ analytics:
   min_iv_history_observations: 30
   allow_iv_rank_cold_start: true
   expiries_per_snapshot: 2
+  sma20_window: 20
+  sma50_window: 50
+  atr14_window: 14
 
 risk:
   max_lots_per_order: 2

@@ -14,6 +14,19 @@ from ..core.models import ChainSnapshot, IVAnalytics, MarketFeatures, MarketRegi
 from ..core.settings import settings
 from .option_analytics import enrich_quote
 
+FEATURE_HISTORY_REQUIREMENTS: dict[str, int] = {
+    "realized_vol": 21,
+    "sma20": 20,
+    "sma50": 50,
+    "atr14": 15,
+    "momentum_5": 6,
+}
+
+
+def required_spot_history_closes() -> int:
+    """Return the minimum number of completed closes needed by spot features."""
+    return max(FEATURE_HISTORY_REQUIREMENTS.values())
+
 
 def realized_volatility(returns: Iterable[float], window: int | None = None) -> float | None:
     window = window or settings.analytics.rv_window
@@ -130,8 +143,10 @@ def build_features(
     emp = straddle * 0.85 if straddle else None
     closes = list(close_history)
     close_series = pd.Series(closes, dtype=float)
-    fast = float(close_series.tail(20).mean()) if len(closes) >= 20 else None
-    slow = float(close_series.tail(50).mean()) if len(closes) >= 50 else None
+    fast_window = settings.analytics.sma20_window
+    slow_window = settings.analytics.sma50_window
+    fast = float(close_series.tail(fast_window).mean()) if len(closes) >= fast_window else None
+    slow = float(close_series.tail(slow_window).mean()) if len(closes) >= slow_window else None
     momentum = (closes[-1] / closes[-6] - 1) if len(closes) >= 6 and closes[-6] > 0 else None
 
     iv_analytics = build_iv_analytics(atm_iv, iv_history)

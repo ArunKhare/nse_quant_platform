@@ -57,6 +57,10 @@ class AnalyticsSettings(BaseModel):
     allow_iv_rank_cold_start: bool = True
     expiries_per_snapshot: int = 2
 
+    sma20_window: int = 20
+    sma50_window: int = 50
+    atr14_window: int = 14
+
     @model_validator(mode="after")
     def validate_analytics(self) -> Self:
         if self.min_iv_history_observations < 1:
@@ -64,6 +68,19 @@ class AnalyticsSettings(BaseModel):
 
         if self.iv_history_limit < self.min_iv_history_observations:
             raise ValueError("iv_history_limit must be >= min_iv_history_observations")
+
+        return self
+
+    @model_validator(mode="after")
+    def validate_feature_windows(self) -> Self:
+        if self.sma20_window >= self.sma50_window:
+            raise ValueError("sma20_window must be smaller than sma50_window")
+
+        if self.sma50_window < 2:
+            raise ValueError("sma50_window must be at least 2")
+
+        if self.atr14_window < 2:
+            raise ValueError("atr14_window must be at least 2")
 
         return self
 

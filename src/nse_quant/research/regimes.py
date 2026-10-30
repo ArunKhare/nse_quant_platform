@@ -18,13 +18,13 @@ class RegimeClassification:
 
 def classify_trend(
     close: float,
-    sma50: float | None,
-    atr14: float | None,
+    sma: float | None,
+    atr: float | None,
 ) -> str:
-    if sma50 is None or atr14 is None or atr14 <= 0:
+    if sma is None or atr is None or atr <= 0:
         return "UNKNOWN"
 
-    normalized_distance = (close - sma50) / atr14
+    normalized_distance = (close - sma) / atr
 
     if normalized_distance >= 1.0:
         return "BULL"
@@ -77,14 +77,14 @@ def combine_regime(
 def classify_regime(
     *,
     close: float,
-    sma50: float | None,
-    atr14: float | None,
+    sma: float | None,
+    atr: float | None,
     realized_volatility: float | None,
     rv_percentile: float | None,
     iv_rank: float | None,
     iv_percentile: float | None,
 ) -> RegimeClassification:
-    trend_regime = classify_trend(close, sma50, atr14)
+    trend_regime = classify_trend(close, sma, atr)
     volatility_regime = classify_volatility(
         realized_volatility,
         rv_percentile,
@@ -102,10 +102,10 @@ def classify_regime(
         ),
         features={
             "close": close,
-            "sma50": sma50,
-            "atr14": atr14,
+            "sma50": sma,
+            "atr14": atr,
             "normalized_trend_distance": (
-                (close - sma50) / atr14 if sma50 is not None and atr14 and atr14 > 0 else None
+                (close - sma) / atr if sma is not None and atr and atr > 0 else None
             ),
             "realized_volatility": realized_volatility,
             "rv_percentile": rv_percentile,
