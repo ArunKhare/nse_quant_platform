@@ -143,12 +143,17 @@ def main() -> int:
         )
 
     stale_seconds = int(getattr(settings.runtime, "stale_seconds", 50 * 60 * 60))
+    stale_feature_max_age_seconds = 7 * 24 * 60 * 60
 
-    feature_gate = SpotFeatureGate(
-        max_age_seconds=(stale_seconds if not args.allow_stale_features else 7 * 24 * 60 * 60),
-        index_symbols=tuple(settings.market_data.index_symbols),
+    def build_feature_gate(*, allow_stale: bool) -> SpotFeatureGate:
+        return SpotFeatureGate(
+            max_age_seconds=(stale_feature_max_age_seconds if allow_stale else stale_seconds),
+            index_symbols=tuple(settings.market_data.index_symbols),
+        )
+
+    feature_gate = build_feature_gate(
+        allow_stale=args.allow_stale_features,
     )
-
     warmup_from = datetime.fromisoformat(args.warmup_from) if args.warmup_from else None
 
     warmup_to = datetime.fromisoformat(args.warmup_to) if args.warmup_to else None
@@ -203,7 +208,7 @@ def main() -> int:
 
     print(
         "Gate max age seconds:",
-        loop.feature_gate._max_age_seconds,
+        (stale_feature_max_age_seconds if args.allow_stale_features else stale_seconds),
     )
 
     loop_failed = False
@@ -251,6 +256,7 @@ def main() -> int:
         result: dict[str, Any] = {}
         candle_minute: datetime | None = None
         spot_price: float | None = None
+        rows_written: int | None = 0
 
         while time.monotonic() < end_time:
             if kill_switch.is_active():
@@ -314,6 +320,20 @@ def main() -> int:
                 except Exception:  # noqa:BLE001
                     print("Spot candle capture failed:")
                     traceback.print_exc()
+
+            market_open = is_market_open_now()
+            allow_stale_features = args.allow_stale_features or not market_open
+
+            loop.feature_gate = build_feature_gate(
+                allow_stale=allow_stale_features,
+            )
+
+            if not market_open:
+                print(
+                    "NSE Market is closed. Using allow-stale feature gate:",
+                    "max_age_seconds=",
+                    (stale_feature_max_age_seconds if allow_stale_features else stale_seconds),
+                )
 
             try:
                 result = loop.run_once()
