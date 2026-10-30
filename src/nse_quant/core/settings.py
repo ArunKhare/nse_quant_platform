@@ -150,6 +150,17 @@ class ExitSettings(BaseModel):
     expected_move_violation_buffer: float = 1.25
 
 
+class EventRiskSettings(BaseModel):
+    enabled: bool = False
+    block_new_entries: bool = False
+    lookahead_minutes: int = 0
+    blackout_minutes_before: int = 30
+    blackout_minutes_after: int = 30
+    high_impact_types: list[str] = Field(
+        default_factory=lambda: ["RBI_POLICY", "FED_POLICY", "UNION_BUDGET"]
+    )
+
+
 class PaperExecutionSettings(BaseModel):
     fill_slippage_pct: float = 0.0
     allow_partial_fills: bool = False
@@ -297,6 +308,8 @@ class MultiTimeframeEvidenceSettings(BaseModel):
 
 class EvidencePluginsSettings(BaseModel):
     multi_timeframe: MultiTimeframeEvidenceSettings = MultiTimeframeEvidenceSettings()
+    ulti_timeframe: MultiTimeframeEvidenceSettings = MultiTimeframeEvidenceSettings()
+    event_risk: EventRiskSettings = EventRiskSettings()
 
 
 class EvidenceSettings(BaseModel):

@@ -452,6 +452,45 @@ class DuckDBStore:
         """
         self.conn.execute(EVIDENCE_SNAPSHOT)
 
+        MARKET_EVENTS = """
+            CREATE TABLE IF NOT EXISTS market_events (
+                event_id VARCHAR PRIMARY KEY,
+                source VARCHAR,
+                event_type VARCHAR,
+                title VARCHAR,
+                description TEXT,
+                symbol VARCHAR,
+                event_ts TIMESTAMPTZ,
+                importance VARCHAR,
+                consensus_value DOUBLE,
+                actual_value DOUBLE,
+                surprise_label VARCHAR,
+                affected_underlyings JSON,
+                raw_payload JSON,
+                ingested_at TIMESTAMPTZ
+            )
+        """
+        self.conn.execute(MARKET_EVENTS)
+
+        EVENT_IMPACT_EVIDENCE = """
+            CREATE TABLE IF NOT EXISTS event_impact_evidence (
+                impact_id VARCHAR PRIMARY KEY,
+                run_id VARCHAR,
+                ts TIMESTAMPTZ,
+                event_id VARCHAR,
+                event_type VARCHAR,
+                instrument VARCHAR,
+                direction VARCHAR,
+                volatility_impact VARCHAR,
+                liquidity_impact VARCHAR,
+                confidence DOUBLE,
+                surprise_label VARCHAR,
+                recommended_action VARCHAR,
+                payload JSON
+            )
+        """
+        self.conn.execute(EVENT_IMPACT_EVIDENCE)
+
     def _compute_option_iv(
         self,
         *,

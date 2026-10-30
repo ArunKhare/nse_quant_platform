@@ -51,6 +51,7 @@ from nse_quant.persistence.repositories import (
     PositionRepository,
 )
 from nse_quant.research.evidence_plugins.base import DecisionContext, EvidencePlugin
+from nse_quant.research.evidence_plugins.event_risk import EventRiskPlugin
 from nse_quant.research.evidence_plugins.mutli_timeframe import MultiTimeframeTrendPlugin
 from nse_quant.research.evidence_plugins.registry import EvidencePluginRunner
 from nse_quant.research.regime_policy import RegimePolicy
@@ -94,6 +95,13 @@ class DecisionLoop:
                         history_limit=mtf.history_limit,
                     )
                 )
+        if self.settings.evidence.plugins.event_risk.enabled:
+            plugins.append(
+                EventRiskPlugin(
+                    store=store,
+                    settings=self.settings.evidence.plugins.event_risk,
+                )
+            )
 
         self.evidence_runner = EvidencePluginRunner(plugins)
         self.provider = provider
