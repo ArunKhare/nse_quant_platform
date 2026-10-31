@@ -1,4 +1,9 @@
-"""Aggregate persisted 1-minute spot candles into daily OHLCV candles."""
+"""Aggregate persisted 1-minute spot candles into daily OHLCV candles.
+uv run python scripts/build_daily_candles.py `
+--symbol NIFTY `
+--start-date 2026-10-27 `
+--end-date 2026-10-31
+"""
 
 from __future__ import annotations
 

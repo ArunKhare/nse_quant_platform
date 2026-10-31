@@ -1,4 +1,11 @@
-"""Identify and fill historical NIFTY spot-candle gaps from Kite."""
+"""Identify and fill historical NIFTY spot-candle gaps from Kite.
+uv run python scripts/fill_data_gaps.py `
+  --symbol NIFTY `
+  --from 2026-10-29 `
+  --to 2026-10-31 `
+  --interval 1m `
+  --min-candles 400
+"""
 
 from __future__ import annotations
 

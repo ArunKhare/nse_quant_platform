@@ -1,6 +1,7 @@
 """Build intraday spot candles from persisted 1-minute candles.
 
 Supported intervals: 5m, 15m, 30m, 60m.
+uv run python scripts\build_interval_candles.py --symbol NIFTY --trade-date 2026-10-30
 """
 
 from __future__ import annotations

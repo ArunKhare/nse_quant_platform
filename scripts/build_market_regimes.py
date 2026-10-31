@@ -1,4 +1,6 @@
-"""Build point-in-time market regimes from persisted daily data."""
+"""Build point-in-time market regimes from persisted daily data.
+python scripts/build_market_regimes.py --symbol NIFTY --from 2026-10-28 --to 2026-10-30
+"""
 
 from __future__ import annotations
 
@@ -170,8 +172,8 @@ def main() -> int:
 
             classification = classify_regime(
                 close=close,
-                sma50=sma50,
-                atr14=atr14,
+                sma=sma50,
+                atr=atr14,
                 realized_volatility=realized_volatility,
                 rv_percentile=rv_percentile,
                 iv_rank=iv_rank,

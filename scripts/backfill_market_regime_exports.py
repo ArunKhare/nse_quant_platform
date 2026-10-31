@@ -1,4 +1,4 @@
-"""Backfill partitioned market-regime Parquet exports."""
+"""Compatibility entry point; prefer export_warehouse.py market-regimes."""
 
 from __future__ import annotations
 
@@ -7,93 +7,34 @@ from datetime import date
 from pathlib import Path
 
 from nse_quant.persistence.duckdb_store import DuckDBStore
+from nse_quant.persistence.warehouse_exports import (
+    build_regime_export_path as build_regime_export_path,
+)
+from nse_quant.persistence.warehouse_exports import (
+    export_market_regimes,
+)
 
 
-def build_regime_export_path(
-    *,
-    export_dir: Path,
-    underlying: str,
-    trading_date: date,
-) -> Path:
-    return (
-        export_dir
-        / f"underlying={underlying}"
-        / f"year={trading_date.year}"
-        / f"month={trading_date.month:02d}"
-        / f"market_regime_{trading_date.isoformat()}.parquet"
-    )
-
-
-def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Backfill market-regime Parquet exports")
-
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--symbol", default="NIFTY")
-    parser.add_argument(
-        "--export-dir",
-        type=Path,
-        default=Path("data/exports"),
-    )
-    parser.add_argument(
-        "--start-date",
-        required=True,
-        help="Inclusive start date, YYYY-MM-DD",
-    )
-    parser.add_argument(
-        "--end-date",
-        required=True,
-        help="Inclusive end date, YYYY-MM-DD",
-    )
-
-    return parser.parse_args()
+    parser.add_argument("--start-date", required=True)
+    parser.add_argument("--end-date", required=True)
+    parser.add_argument("--export-dir", type=Path, default=Path("data/exports"))
+    return parser.parse_args(argv)
 
 
-def main() -> int:
-    args = parse_args()
+def main(argv: list[str] | None = None) -> int:
+    args = parse_args(argv)
     store = DuckDBStore()
-
     try:
-        rows = store.conn.execute(
-            """
-            SELECT CAST(ts AS DATE) AS trading_date
-            FROM market_regimes
-            WHERE symbol = ?
-              AND CAST(ts AS DATE) BETWEEN ? AND ?
-            GROUP BY 1
-            ORDER BY 1
-            """,
-            [
-                args.symbol,
-                args.start_date,
-                args.end_date,
-            ],
-        ).fetchall()
-
-        exported = 0
-
-        for (trading_date,) in rows:
-            output_path = build_regime_export_path(
-                export_dir=args.export_dir,
-                underlying=args.symbol,
-                trading_date=trading_date,
-            )
-
-            output_path.parent.mkdir(
-                parents=True,
-                exist_ok=True,
-            )
-
-            store.export_market_regime_parquet(
-                output_path=output_path,
-                underlying=args.symbol,
-                date_str=trading_date.isoformat(),
-            )
-
-            print(f"Exported {trading_date}: {output_path}")
-            exported += 1
-
-        print(f"Exported regime days: {exported}")
-        return 0
-
+        return export_market_regimes(
+            store=store,
+            export_dir=args.export_dir,
+            underlying=args.symbol,
+            start_date=date.fromisoformat(args.start_date),
+            end_date=date.fromisoformat(args.end_date),
+        )
     finally:
         store.conn.close()
 

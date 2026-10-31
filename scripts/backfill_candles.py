@@ -1,4 +1,6 @@
-"""Backfill explicit historical candle ranges in Kite-sized chunks."""
+"""Backfill explicit historical candle ranges in Kite-sized chunks.
+python scripts/backfill_candles.py --symbol NIFTY --interval 1m --from 2026-10-29 --to 2026-10-31
+"""
 
 from __future__ import annotations
 
