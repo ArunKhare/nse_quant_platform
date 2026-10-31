@@ -52,6 +52,7 @@ from nse_quant.persistence.repositories import (
 )
 from nse_quant.research.evidence_plugins.base import DecisionContext, EvidencePlugin
 from nse_quant.research.evidence_plugins.event_risk import EventRiskPlugin
+from nse_quant.research.evidence_plugins.market_context import MarketContextPlugin
 from nse_quant.research.evidence_plugins.market_structure import MarketStructurePlugin
 from nse_quant.research.evidence_plugins.mutli_timeframe import MultiTimeframeTrendPlugin
 from nse_quant.research.evidence_plugins.option_positioning import OptionPositioningPlugin
@@ -136,6 +137,14 @@ class DecisionLoop:
                 MarketStructurePlugin(
                     store=store,
                     settings=self.settings.evidence.plugins.market_structure,
+                )
+            )
+
+        if self.settings.evidence.enabled and self.settings.evidence.plugins.market_context.enabled:
+            plugins.append(
+                MarketContextPlugin(
+                    store=store,
+                    settings=self.settings.evidence.plugins.market_context,
                 )
             )
 

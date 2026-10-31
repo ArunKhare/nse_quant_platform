@@ -346,6 +346,33 @@ class MarketStructureSettings(BaseModel):
     opening_range_minutes: int = 15
 
 
+class MarketContextSettings(BaseModel):
+    enabled: bool = False
+
+    symbols: list[str] = Field(
+        default_factory=lambda: ["NIFTY", "BANKNIFTY"],
+        min_length=1,
+    )
+
+    max_age_seconds: int = Field(
+        default=86_400,
+        gt=0,
+    )
+
+    @model_validator(mode="after")
+    def validate_symbols(self) -> Self:
+        if any(not symbol.strip() or symbol != symbol.strip() for symbol in self.symbols):
+            raise ValueError(
+                "market_context.symbols must contain non-empty symbols"
+                "symbols without surrounding whitespace"
+            )
+
+        if len(self.symbols) != len(set(self.symbols)):
+            raise ValueError("market_context.symbols must not contain duplicates")
+
+        return self
+
+
 class EvidencePluginsSettings(BaseModel):
     multi_timeframe: MultiTimeframeEvidenceSettings = MultiTimeframeEvidenceSettings()
     event_risk: EventRiskSettings = EventRiskSettings()
@@ -353,6 +380,7 @@ class EvidencePluginsSettings(BaseModel):
     volume_flow: VolumeFlowSettings = VolumeFlowSettings()
     option_positioning: OptionPositioningSettings = OptionPositioningSettings()
     market_structure: MarketStructureSettings = MarketStructureSettings()
+    market_context: MarketContextSettings = Field(default_factory=MarketContextSettings)
 
 
 class EvidenceSettings(BaseModel):

@@ -181,3 +181,8 @@ evidence:
       history_limit: 6000
       swing_lookback: 2
       opening_range_minutes: 15
+    market_context:
+      enabled: true
+      symbols: [NIFTY, BANKNIFTY]
+      max_age_seconds: 86400
+
