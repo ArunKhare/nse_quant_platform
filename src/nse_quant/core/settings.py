@@ -319,10 +319,20 @@ class TechnicalIndicatorSettings(BaseModel):
     )
 
 
+class VolumeFlowSettings(BaseModel):
+    enabled: bool = False
+    timeframes: list[str] = Field(
+        default_factory=lambda: ["1m", "15m", "60m"],
+    )
+    history_limit: int = 6000
+    baseline_periods: int = 30
+
+
 class EvidencePluginsSettings(BaseModel):
     multi_timeframe: MultiTimeframeEvidenceSettings = MultiTimeframeEvidenceSettings()
     event_risk: EventRiskSettings = EventRiskSettings()
     technical_indicators: TechnicalIndicatorSettings = TechnicalIndicatorSettings()
+    volume_flow: VolumeFlowSettings = VolumeFlowSettings()
 
 
 class EvidenceSettings(BaseModel):

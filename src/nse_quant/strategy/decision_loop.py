@@ -55,6 +55,7 @@ from nse_quant.research.evidence_plugins.event_risk import EventRiskPlugin
 from nse_quant.research.evidence_plugins.mutli_timeframe import MultiTimeframeTrendPlugin
 from nse_quant.research.evidence_plugins.registry import EvidencePluginRunner
 from nse_quant.research.evidence_plugins.technical_indicators import TechnicalIndicatorsPlugin
+from nse_quant.research.evidence_plugins.volume_flow import VolumeFlowPlugin
 from nse_quant.research.regime_policy import RegimePolicy
 from nse_quant.research.regime_policy_evaluation import (
     resolve_effective_regimes,
@@ -109,6 +110,14 @@ class DecisionLoop:
                 TechnicalIndicatorsPlugin(
                     store=store,
                     settings=self.settings.evidence.plugins.technical_indicators,
+                )
+            )
+
+        if self.settings.evidence.plugins.volume_flow.enabled:
+            plugins.append(
+                VolumeFlowPlugin(
+                    store=store,
+                    settings=self.settings.evidence.plugins.volume_flow,
                 )
             )
 

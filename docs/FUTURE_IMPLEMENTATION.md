@@ -71,7 +71,13 @@ Required implementation:
 - Event-to-instrument mapping
 - Decision-loop integration
 - Tests
-
+```yaml
+event_risk:
+  enabled: true
+  block_new_entries: false
+  blackout_minutes_before: 30
+  blackout_minutes_after: 30
+```
 ### Technical indicators
 
 Purpose:
@@ -96,12 +102,14 @@ Required implementation:
 - Indicator calculations from completed candles
 - Decision-loop integration
 - Tests
-    technical_indicators:
-      enabled: false
-      timeframes: [1m, 15m, 60m]
-      history_limit: 6000
-      rsi_period: 14
-      ema_periods: [9, 20, 50, 200]
+```yaml
+technical_indicators:
+  enabled: false
+  timeframes: [1m, 15m, 60m]
+  history_limit: 6000
+  rsi_period: 14
+  ema_periods: [9, 20, 50, 200]
+```
 ### Volume flow
 
 Purpose:
@@ -126,7 +134,13 @@ Required implementation:
 - Optional tick-side delta ingestion
 - Decision-loop integration
 - Tests
-
+```yaml
+volume_flow:
+  enabled: false
+  timeframes: [1m, 15m, 60m]
+  history_limit: 6000
+  baseline_periods: 30
+```
 ### Option positioning
 
 Purpose:
