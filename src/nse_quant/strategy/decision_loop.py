@@ -52,6 +52,7 @@ from nse_quant.persistence.repositories import (
 )
 from nse_quant.research.evidence_plugins.base import DecisionContext, EvidencePlugin
 from nse_quant.research.evidence_plugins.event_risk import EventRiskPlugin
+from nse_quant.research.evidence_plugins.execution_quality import ExecutionQualityPlugin
 from nse_quant.research.evidence_plugins.market_context import MarketContextPlugin
 from nse_quant.research.evidence_plugins.market_structure import MarketStructurePlugin
 from nse_quant.research.evidence_plugins.mutli_timeframe import MultiTimeframeTrendPlugin
@@ -60,9 +61,7 @@ from nse_quant.research.evidence_plugins.registry import EvidencePluginRunner
 from nse_quant.research.evidence_plugins.technical_indicators import TechnicalIndicatorsPlugin
 from nse_quant.research.evidence_plugins.volume_flow import VolumeFlowPlugin
 from nse_quant.research.regime_policy import RegimePolicy
-from nse_quant.research.regime_policy_evaluation import (
-    resolve_effective_regimes,
-)
+from nse_quant.research.regime_policy_evaluation import resolve_effective_regimes
 from nse_quant.research.regime_risk_policy import RegimeRiskLimits, build_regime_risk_limits
 from nse_quant.risk.risk_engine import RiskEngine
 from nse_quant.strategy.exit_engine import ExitEngine
@@ -145,6 +144,14 @@ class DecisionLoop:
                 MarketContextPlugin(
                     store=store,
                     settings=self.settings.evidence.plugins.market_context,
+                )
+            )
+
+        execution_quality = self.settings.evidence.plugins.execution_quality
+        if self.settings.evidence.enabled and execution_quality.enabled:
+            plugins.append(
+                ExecutionQualityPlugin(
+                    settings=execution_quality,
                 )
             )
 

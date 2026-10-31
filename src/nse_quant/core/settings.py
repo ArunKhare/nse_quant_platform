@@ -373,6 +373,11 @@ class MarketContextSettings(BaseModel):
         return self
 
 
+class ExecutionQualitySettings(BaseModel):
+    enabled: bool = False
+    max_quote_age_seconds: int = Field(default=300, gt=0)
+
+
 class EvidencePluginsSettings(BaseModel):
     multi_timeframe: MultiTimeframeEvidenceSettings = MultiTimeframeEvidenceSettings()
     event_risk: EventRiskSettings = EventRiskSettings()
@@ -381,6 +386,7 @@ class EvidencePluginsSettings(BaseModel):
     option_positioning: OptionPositioningSettings = OptionPositioningSettings()
     market_structure: MarketStructureSettings = MarketStructureSettings()
     market_context: MarketContextSettings = Field(default_factory=MarketContextSettings)
+    execution_quality: ExecutionQualitySettings = Field(default_factory=ExecutionQualitySettings)
 
 
 class EvidenceSettings(BaseModel):

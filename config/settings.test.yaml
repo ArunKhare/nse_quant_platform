@@ -185,4 +185,6 @@ evidence:
       enabled: true
       symbols: [NIFTY, BANKNIFTY]
       max_age_seconds: 86400
-
+    execution_quality:
+      enabled: true
+      max_quote_age_seconds: 300
