@@ -1,0 +1,25 @@
+script,target_category,operation,current_output,current_behavior,required_update
+backfill_candles.py,maintenance,ingest/repair,spot_candles,replace,source preservation; chunking
+import_candle.py,maintenance,ingest,spot_candles,replace,reuse chunked downloader; source identity
+fill_data_gaps.py,maintenance,repair,spot_candles,replace,calendar and exact gap policy
+backfill_option_iv.py,features,build,option_stream.iv,update,full run key; preserve original; version derived
+backfill_option_greeks.py,features,build,option_stream.greeks,update,full run key; coherent analytics
+backfill_iv.py,features,build,underlying_iv_observations,replace,source collision protection
+bootstrap_nse_eod_iv.py,ingest/build,bootstrap,underlying_iv_observations,replace,NIFTY guard; raw files; true dry-run
+build_daily_rv.py,features,build,daily_rv_observations,replace,scope; complete sessions; version methodology
+build_spot_features.py,features,build,spot_features,replace,warm-up; session policy; version builds
+build_market_regimes.py,features,build,market_regimes,replace,PIT; canonical IV; classifier identity
+classify_iv_regimes.py,research,build/optional persist,market_regimes/reports,optional replace,retrospective vs PIT; threshold units
+iv_surface_report.py,research,build/export,CSV reports,file write,pair identity; versioned artifacts
+build_research_panel.py,research,build/export,CSV panel,file write,lineage; shared primitives; missing RV handling
+build_single_expiry_iv.py,research,build/export,CSV summary,file write,enforce expiry; naming
+build_backtest_returns.py,research,build/export,CSV returns,file write,explicit return definition
+run_milestone2_research.py,workflows,research workflow,CSV reports,file write,registered children and pinned inputs
+run_daily_research.py,workflows,workflow,multiple,child operations,parent-child audit; canonical callers
+eod_maintenance.py,workflows,workflow/export,multiple,mixed,remove duplicate domain logic; safe publication
+export_daily_rv.py,exports,export,CSV,file write,symbol-scoped name; immutable build
+export_replay.py,exports,export,JSON,file write,run/timezone scope; original vs revised
+export_active_policy.py,publish/exports,export/promotion,JSON policy,atomic replace,historical vs operational destination
+load_warehouse.py,inspect/exports,read/optional export,CSV optional,file write optional,read not DB restore; output audit
+export_warehouse.py,exports,export,Parquet,publication review,local new CLI verify; manifests
+manage_candles.py,features,build,spot_candles,legacy replacement,local new CLI verify; staged rebuild
