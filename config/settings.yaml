@@ -186,3 +186,6 @@ evidence:
       iv_history_limit: 250
       min_iv_history_observations: 30
       high_iv_rank_threshold: 70.0
+      term_structure_tolerance: 0.002
+      max_term_observation_age_seconds: 300
+      max_term_observation_gap_seconds: 30
