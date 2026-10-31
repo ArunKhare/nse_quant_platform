@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
 
-CAPTURE_VERSION = "kite-instrument-http@1"
+CAPTURE_VERSION = "kite-instrument-http@2"
 HOST = "api.kite.trade"
 ALLOWED_HEADERS = frozenset(
     {
@@ -239,8 +239,10 @@ def fetch_instrument_response(
             framing_error = "HEADER_CAPTURE_LIMIT"
         elif len(lengths) > 1 or len(transfers) > 1 or (lengths and transfers):
             framing_error = "AMBIGUOUS_HTTP_FRAMING"
-        elif transfers and transfers[0].lower().strip() != "chunked":
+        elif transfers and transfers[0].lower() != "chunked":
             framing_error = "UNSUPPORTED_TRANSFER_ENCODING"
+        elif bool(transfers) != (getattr(response, "chunked", False) is True):
+            framing_error = "TRANSFER_FRAMING_MISMATCH"
         elif lengths:
             if not re.fullmatch(r"[0-9]{1,20}", lengths[0].strip()):
                 framing_error = "INVALID_CONTENT_LENGTH"
