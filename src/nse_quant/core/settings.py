@@ -391,6 +391,22 @@ class InstitutionalRegimeSettings(BaseModel):
         allow_inf_nan=False,
     )
 
+    term_structure_tolerance: float = Field(
+        default=0.002,
+        ge=0.0,
+        allow_inf_nan=False,
+    )
+
+    max_term_observation_age_seconds: int = Field(
+        default=300,
+        gt=0,
+    )
+
+    max_term_observation_gap_seconds: int = Field(
+        default=30,
+        ge=0,
+    )
+
     @model_validator(mode="after")
     def validate_iv_history(self) -> Self:
         if self.iv_history_limit < self.min_iv_history_observations:

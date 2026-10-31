@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import math
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from typing import Any
 
+from nse_quant.core.constants import IST, REGULAR_SESSION_CLOSE
 from nse_quant.core.models import ChainSnapshot, MarketFeatures
 from nse_quant.core.settings import InstitutionalRegimeSettings
 from nse_quant.research.evidence_plugins.base import (
@@ -143,9 +144,17 @@ class InstitutionalRegimePlugin(EvidencePlugin):
             "reason": iv_reason,
         }
 
+        term_component = self._term_structure(
+            symbol=context.symbol,
+            near_expiry=snapshot.expiry,
+            cutoff=snapshot_ts,
+            as_of=as_of,
+        )
+
         components = {
             "iv_state": iv_component,
             **self._pending_components(),
+            "term_structure": term_component,
         }
 
         return {
@@ -155,7 +164,7 @@ class InstitutionalRegimePlugin(EvidencePlugin):
             "symbol": context.symbol,
             "expiry": snapshot.expiry.isoformat(),
             "snapshot_ts": snapshot_ts.isoformat(),
-            "classifier_version": "institutional_iv_component_v1",
+            "classifier_version": "institutional_iv_term_components_v2",
             "mode": "observation",
             "regime_label": None,
             "components": components,
@@ -163,9 +172,160 @@ class InstitutionalRegimePlugin(EvidencePlugin):
                 name for name, component in components.items() if not component["complete"]
             ],
             "reason": (
-                iv_reason if iv_reason is not None else "remaining_components_not_implemented"
+                iv_reason
+                if iv_reason is not None
+                else term_component["reason"]
+                if not term_component["complete"]
+                else "remaining_components_not_implemented"
             ),
         }
+
+    def _term_structure(
+        self,
+        *,
+        symbol: str,
+        near_expiry: date,
+        cutoff: datetime,
+        as_of: datetime,
+    ) -> dict[str, Any]:
+        result: dict[str, Any] = {
+            "available": False,
+            "complete": False,
+            "state": None,
+            "source": HISTORY_SOURCE,
+            "pair_selection": "nearest_persisted_deferred_expiry",
+            "near_expiry": near_expiry.isoformat(),
+            "deferred_expiry": None,
+            "observation_cutoff_inclusive": cutoff.isoformat(),
+            "near_observation_ts": None,
+            "deferred_observation_ts": None,
+            "near_age_seconds": None,
+            "deferred_age_seconds": None,
+            "observation_gap_seconds": None,
+            "near_atm_iv": None,
+            "deferred_atm_iv": None,
+            "iv_difference": None,
+            "iv_difference_unit": "decimal",
+            "tolerance": self._settings.term_structure_tolerance,
+            "max_age_seconds": (self._settings.max_term_observation_age_seconds),
+            "max_gap_seconds": (self._settings.max_term_observation_gap_seconds),
+            "reason": None,
+        }
+
+        near_expiry_close = datetime.combine(
+            near_expiry,
+            REGULAR_SESSION_CLOSE,
+            tzinfo=IST,
+        ).astimezone(UTC)
+
+        if as_of >= near_expiry_close:
+            result["reason"] = "expired_near_expiry"
+            return result
+
+        rows = self._store.conn.execute(
+            """
+            WITH latest_per_expiry AS (
+                SELECT
+                    expiry,
+                    ts,
+                    iv,
+                    ROW_NUMBER() OVER (
+                        PARTITION BY expiry
+                        ORDER BY ts DESC
+                    ) AS observation_rank
+                FROM underlying_iv_observations
+                WHERE underlying = ?
+                  AND source = ?
+                  AND expiry >= ?
+                  AND ts <= ?
+            )
+            SELECT expiry, ts, iv
+            FROM latest_per_expiry
+            WHERE observation_rank = 1
+            ORDER BY expiry
+            LIMIT 2
+            """,
+            [
+                symbol,
+                HISTORY_SOURCE,
+                near_expiry,
+                cutoff,
+            ],
+        ).fetchall()
+
+        if not rows or rows[0][0] != near_expiry:
+            result["reason"] = "missing_near_observation"
+            return result
+
+        near_row = rows[0]
+        near_ts = self._utc(near_row[1])
+        near_iv = float(near_row[2])
+
+        result["near_observation_ts"] = near_ts.isoformat()
+        result["near_age_seconds"] = (as_of - near_ts).total_seconds()
+
+        if math.isfinite(near_iv) and near_iv > 0:
+            result["near_atm_iv"] = near_iv
+        else:
+            result["reason"] = "invalid_near_iv"
+            return result
+
+        if len(rows) < 2:
+            result["reason"] = "missing_deferred_observation"
+            return result
+
+        deferred_row = rows[1]
+        deferred_ts = self._utc(deferred_row[1])
+        deferred_iv = float(deferred_row[2])
+
+        result["deferred_expiry"] = deferred_row[0].isoformat()
+        result["deferred_observation_ts"] = deferred_ts.isoformat()
+        result["deferred_age_seconds"] = (as_of - deferred_ts).total_seconds()
+        result["observation_gap_seconds"] = abs((near_ts - deferred_ts).total_seconds())
+
+        if math.isfinite(deferred_iv) and deferred_iv > 0:
+            result["deferred_atm_iv"] = deferred_iv
+        else:
+            result["reason"] = "invalid_deferred_iv"
+            return result
+
+        result["available"] = True
+
+        if near_ts > cutoff or deferred_ts > cutoff:
+            result["reason"] = "future_term_observation"
+            return result
+
+        near_age = float(result["near_age_seconds"])
+        deferred_age = float(result["deferred_age_seconds"])
+
+        if near_age < 0 or deferred_age < 0:
+            result["reason"] = "future_term_observation"
+            return result
+
+        max_age = self._settings.max_term_observation_age_seconds
+
+        if near_age > max_age or deferred_age > max_age:
+            result["reason"] = "stale_term_observation"
+            return result
+
+        if result["observation_gap_seconds"] > self._settings.max_term_observation_gap_seconds:
+            result["reason"] = "term_observation_gap_exceeded"
+            return result
+
+        difference = deferred_iv - near_iv
+        tolerance = self._settings.term_structure_tolerance
+
+        result["iv_difference"] = difference
+        result["state"] = (
+            "CONTANGO"
+            if difference > tolerance
+            else "BACKWARDATION"
+            if difference < -tolerance
+            else "FLAT"
+        )
+        result["complete"] = True
+
+        return result
 
     def _unavailable(
         self,
@@ -179,7 +339,7 @@ class InstitutionalRegimePlugin(EvidencePlugin):
             "complete": False,
             "as_of": as_of.isoformat(),
             "symbol": context.symbol,
-            "classifier_version": "institutional_iv_component_v1",
+            "classifier_version": "institutional_iv_term_components_v2",
             "mode": "observation",
             "regime_label": None,
             "components": {
@@ -207,7 +367,9 @@ class InstitutionalRegimePlugin(EvidencePlugin):
                 "available": False,
                 "complete": False,
                 "state": None,
-                "reason": "not_implemented",
+                "reason": (
+                    "current_inputs_unavailable" if name == "term_structure" else "not_implemented"
+                ),
             }
             for name in ("term_structure", "skew", "price_action")
         }
