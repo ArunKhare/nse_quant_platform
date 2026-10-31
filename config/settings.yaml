@@ -162,3 +162,9 @@ evidence:
       timeframes: ["1m", "15m", "60m"]
       history_limit: 6000
       baseline_periods: 30
+    option_positioning:
+      enabled: true
+      pcr_high_threshold: 1.25
+      pcr_low_threshold: 0.75
+      iv_crush_decline_pct: 20.0
+      history_limit: 100

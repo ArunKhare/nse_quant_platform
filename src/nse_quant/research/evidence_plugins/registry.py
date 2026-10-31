@@ -40,7 +40,7 @@ class EvidencePluginRunner:
                         payload=payload,
                     )
                 )
-            except (ValueError, TypeError, KeyError, RuntimeError) as exc:
+            except (AttributeError, ValueError, TypeError, KeyError, RuntimeError) as exc:
                 logger.warning(
                     "Evidence plugin %s failed: %s",
                     plugin.name,

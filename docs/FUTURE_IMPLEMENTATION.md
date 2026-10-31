@@ -166,6 +166,14 @@ Required implementation:
 - PCR and max-pain calculations
 - Decision-loop integration
 - Tests
+```yaml
+    option_positioning:
+      enabled: false
+      pcr_high_threshold: 1.25
+      pcr_low_threshold: 0.75
+      iv_crush_decline_pct: 20.0
+      history_limit: 100
+```
 
 ### Institutional regime
 
@@ -245,6 +253,14 @@ Required implementation:
 - Completed-candle-only calculations
 - Decision-loop integration
 - Tests
+```yaml
+    market_structure:
+      enabled: false
+      timeframes: [15m, 60m, day]
+      history_limit: 6000
+      swing_lookback: 2
+      opening_range_minutes: 15
+  ```
 
 ### Market context
 

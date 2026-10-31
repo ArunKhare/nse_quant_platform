@@ -52,7 +52,9 @@ from nse_quant.persistence.repositories import (
 )
 from nse_quant.research.evidence_plugins.base import DecisionContext, EvidencePlugin
 from nse_quant.research.evidence_plugins.event_risk import EventRiskPlugin
+from nse_quant.research.evidence_plugins.market_structure import MarketStructurePlugin
 from nse_quant.research.evidence_plugins.mutli_timeframe import MultiTimeframeTrendPlugin
+from nse_quant.research.evidence_plugins.option_positioning import OptionPositioningPlugin
 from nse_quant.research.evidence_plugins.registry import EvidencePluginRunner
 from nse_quant.research.evidence_plugins.technical_indicators import TechnicalIndicatorsPlugin
 from nse_quant.research.evidence_plugins.volume_flow import VolumeFlowPlugin
@@ -118,6 +120,22 @@ class DecisionLoop:
                 VolumeFlowPlugin(
                     store=store,
                     settings=self.settings.evidence.plugins.volume_flow,
+                )
+            )
+
+        if self.settings.evidence.plugins.option_positioning.enabled:
+            plugins.append(
+                OptionPositioningPlugin(
+                    store=store,
+                    settings=self.settings.evidence.plugins.option_positioning,
+                )
+            )
+
+        if self.settings.evidence.plugins.market_structure.enabled:
+            plugins.append(
+                MarketStructurePlugin(
+                    store=store,
+                    settings=self.settings.evidence.plugins.market_structure,
                 )
             )
 

@@ -328,11 +328,31 @@ class VolumeFlowSettings(BaseModel):
     baseline_periods: int = 30
 
 
+class OptionPositioningSettings(BaseModel):
+    enabled: bool = False
+    pcr_high_threshold: float = 1.25
+    pcr_low_threshold: float = 0.75
+    iv_crush_decline_pct: float = 20.0
+    history_limit: int = 100
+
+
+class MarketStructureSettings(BaseModel):
+    enabled: bool = False
+    timeframes: list[str] = Field(
+        default_factory=lambda: ["15m", "60m", "day"],
+    )
+    history_limit: int = 6000
+    swing_lookback: int = 2
+    opening_range_minutes: int = 15
+
+
 class EvidencePluginsSettings(BaseModel):
     multi_timeframe: MultiTimeframeEvidenceSettings = MultiTimeframeEvidenceSettings()
     event_risk: EventRiskSettings = EventRiskSettings()
     technical_indicators: TechnicalIndicatorSettings = TechnicalIndicatorSettings()
     volume_flow: VolumeFlowSettings = VolumeFlowSettings()
+    option_positioning: OptionPositioningSettings = OptionPositioningSettings()
+    market_structure: MarketStructureSettings = MarketStructureSettings()
 
 
 class EvidenceSettings(BaseModel):
