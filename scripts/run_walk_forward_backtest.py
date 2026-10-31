@@ -164,9 +164,8 @@ def main() -> int:
         base_config,
         strategy=IronCondorMonitor(settings),
     )
-    snapshots = snapshot_loader_engine.loader.load_market_hour_snapshots()
 
-    print(f"DEBUG snapshot_count={len(snapshots)}")
+    snapshot_loader_engine.loader.load_market_hour_snapshots()
 
     engine_factory = partial(make_engine, settings=settings)
 

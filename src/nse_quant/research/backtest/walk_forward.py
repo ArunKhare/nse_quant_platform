@@ -130,26 +130,13 @@ def run_walk_forward_experiments(
     )
 
     if not folds:
-        print("No walk-forward folds available: all candidate test dates are option expiry dates.")
-    print(
-        "DEBUG fold construction:",
-        f"available_dates={available_dates}",
-        f"fold_count={len(folds)}",
-        f"train_days={train_days}",
-        f"test_days={test_days}",
-    )
-
+        print(
+            "No walk-forward folds available for the supplied "
+            "dates, window sizes, and expiry exclusions."
+        )
     results: list[WalkForwardFoldResult] = []
 
     for fold in folds:
-        if snapshots:
-            print(
-                "DEBUG filter:",
-                f"first_snapshot_date= {snapshots[0].ts.date()}",
-                f"train_dates = {fold.train_dates}",
-                f"match = {snapshots[0].ts.date() in fold.train_dates}",
-            )
-
         train_snapshots = [
             snapshot for snapshot in snapshots if snapshot.ts.date() in fold.train_dates
         ]
@@ -282,7 +269,6 @@ def run_walk_forward_experiments(
                     prepared_steps=prepared_test_replay,
                 )
 
-            test_engine.save(test_engine_result)
             test_engine.save(test_engine_result)
 
             test_result = summarize_engine_run(

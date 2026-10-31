@@ -70,16 +70,6 @@ class HistoricalDataLoader:
 
             if snapshot is not None:
                 snapshots.append(snapshot)
-        print(
-            "DEBUG loader raw dates:",
-            sorted({pd.Timestamp(snapshot.ts).tz_convert("UTC").date() for snapshot in snapshots}),
-        )
-        print("DEBUG loader returning:", len(snapshots), "snapshots")
-        print(
-            "DEBUG loader raw dates:",
-            sorted({pd.Timestamp(snapshot.ts).tz_convert("UTC").date() for snapshot in snapshots}),
-        )
-        print("DEBUG loader returning:", len(snapshots), "snapshots")
 
         return snapshots
 

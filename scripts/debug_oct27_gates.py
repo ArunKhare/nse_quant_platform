@@ -122,14 +122,6 @@ def main() -> int:
         entry_cooldown_minutes=30,
     )
 
-    print(
-        "DEBUG config:",
-        f"start={config.start_date}",
-        f"end={config.end_date}",
-        f"min_snapshots={config.min_snapshots}",
-        f"min_iv_coverage={config.min_iv_coverage}",
-    )
-
     engine = BacktestEngine(
         config,
         strategy=IronCondorMonitor(settings),

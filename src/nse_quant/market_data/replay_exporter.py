@@ -136,9 +136,6 @@ class ReplayExporter:
             from_dt,
             to_dt,
         )
-        print(f"DEBUG range: {len(rows)} rows, from={from_dt!r}, to={to_dt!r}")
-        if rows:
-            print("DEBUG first:", rows[0])
 
         return self._write_replay(
             underlying=underlying,

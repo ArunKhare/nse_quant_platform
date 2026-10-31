@@ -360,14 +360,6 @@ class DecisionLoop:
                 current_regime = features.regime.value
                 regime_source = "live_spot_features"
 
-            print(
-                "DEBUG regime resolution:",
-                f"daily_regime={daily_regime}",
-                f"live_feature_regime={features.regime.value}",
-                f"resolved_regime={current_regime}",
-                f"regime_source={regime_source}",
-            )
-
             regime_policy = self.store.latest_regime_policy(
                 symbol=symbol,
                 as_of=features.ts,
