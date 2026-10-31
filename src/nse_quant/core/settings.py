@@ -378,6 +378,27 @@ class ExecutionQualitySettings(BaseModel):
     max_quote_age_seconds: int = Field(default=300, gt=0)
 
 
+class InstitutionalRegimeSettings(BaseModel):
+    enabled: bool = False
+
+    iv_history_limit: int = Field(default=250, ge=2)
+    min_iv_history_observations: int = Field(default=30, ge=2)
+
+    high_iv_rank_threshold: float = Field(
+        default=70.0,
+        ge=0.0,
+        le=100.0,
+        allow_inf_nan=False,
+    )
+
+    @model_validator(mode="after")
+    def validate_iv_history(self) -> Self:
+        if self.iv_history_limit < self.min_iv_history_observations:
+            raise ValueError("iv_history_limit must be >= min_iv_history_observations")
+
+        return self
+
+
 class EvidencePluginsSettings(BaseModel):
     multi_timeframe: MultiTimeframeEvidenceSettings = MultiTimeframeEvidenceSettings()
     event_risk: EventRiskSettings = EventRiskSettings()
@@ -387,6 +408,9 @@ class EvidencePluginsSettings(BaseModel):
     market_structure: MarketStructureSettings = MarketStructureSettings()
     market_context: MarketContextSettings = Field(default_factory=MarketContextSettings)
     execution_quality: ExecutionQualitySettings = Field(default_factory=ExecutionQualitySettings)
+    institutional_regime: InstitutionalRegimeSettings = Field(
+        default_factory=InstitutionalRegimeSettings
+    )
 
 
 class EvidenceSettings(BaseModel):

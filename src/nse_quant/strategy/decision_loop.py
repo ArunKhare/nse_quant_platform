@@ -53,6 +53,7 @@ from nse_quant.persistence.repositories import (
 from nse_quant.research.evidence_plugins.base import DecisionContext, EvidencePlugin
 from nse_quant.research.evidence_plugins.event_risk import EventRiskPlugin
 from nse_quant.research.evidence_plugins.execution_quality import ExecutionQualityPlugin
+from nse_quant.research.evidence_plugins.institutional_regime import InstitutionalRegimePlugin
 from nse_quant.research.evidence_plugins.market_context import MarketContextPlugin
 from nse_quant.research.evidence_plugins.market_structure import MarketStructurePlugin
 from nse_quant.research.evidence_plugins.mutli_timeframe import MultiTimeframeTrendPlugin
@@ -152,6 +153,15 @@ class DecisionLoop:
             plugins.append(
                 ExecutionQualityPlugin(
                     settings=execution_quality,
+                )
+            )
+
+        institutional_regime = self.settings.evidence.plugins.institutional_regime
+        if self.settings.evidence.enabled and institutional_regime.enabled:
+            plugins.append(
+                InstitutionalRegimePlugin(
+                    store=store,
+                    settings=institutional_regime,
                 )
             )
 

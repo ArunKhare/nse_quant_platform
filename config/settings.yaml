@@ -181,3 +181,8 @@ evidence:
     execution_quality:
       enabled: false
       max_quote_age_seconds: 300
+    institutional_regime:
+      enabled: true
+      iv_history_limit: 250
+      min_iv_history_observations: 30
+      high_iv_rank_threshold: 70.0

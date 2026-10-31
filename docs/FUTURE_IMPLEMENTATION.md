@@ -167,12 +167,12 @@ Required implementation:
 - Decision-loop integration
 - Tests
 ```yaml
-    option_positioning:
-      enabled: false
-      pcr_high_threshold: 1.25
-      pcr_low_threshold: 0.75
-      iv_crush_decline_pct: 20.0
-      history_limit: 100
+option_positioning:
+  enabled: false
+  pcr_high_threshold: 1.25
+  pcr_low_threshold: 0.75
+  iv_crush_decline_pct: 20.0
+  history_limit: 100
 ```
 
 ### Institutional regime
@@ -224,6 +224,13 @@ Initial rollout:
 - Implement as observational evidence only.
 - Persist the full regime label and component availability.
 - Do not use it in `allowed_regimes` or `blocked_regimes` matching until coverage and performance are validated.
+```yaml
+institutional_regime:
+  enabled: true
+  iv_history_limit: 250
+  min_iv_history_observations: 30
+  high_iv_rank_threshold: 70.0
+```
 
 ### Market structure
 
@@ -254,13 +261,13 @@ Required implementation:
 - Decision-loop integration
 - Tests
 ```yaml
-    market_structure:
-      enabled: false
-      timeframes: [15m, 60m, day]
-      history_limit: 6000
-      swing_lookback: 2
-      opening_range_minutes: 15
-  ```
+market_structure:
+  enabled: false
+  timeframes: [15m, 60m, day]
+  history_limit: 6000
+  swing_lookback: 2
+  opening_range_minutes: 15
+```
 
 ### Market context
 
@@ -289,7 +296,12 @@ Required implementation:
 - Breadth calculations
 - Decision-loop integration
 - Tests
-
+```yaml
+market_context:
+  enabled: true
+  symbols: [NIFTY, BANKNIFTY]
+  max_age_seconds: 86400
+```
 ### Execution quality
 
 Purpose:
@@ -315,7 +327,11 @@ Required implementation:
 - Risk-reward calculation
 - Decision-loop integration
 - Tests
-
+```yaml
+execution_quality:
+      enabled: true
+      max_quote_age_seconds: 300
+```
 ## Future trading universe
 
 ```yaml

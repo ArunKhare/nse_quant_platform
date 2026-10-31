@@ -12,6 +12,7 @@ from nse_quant.core.models import (
     GateResult,
     Instrument,
     Leg,
+    MarketFeatures,
     OptionQuote,
     OptionType,
     OrderSide,
@@ -24,6 +25,7 @@ from nse_quant.market_data.replay_provider import (
 )
 from nse_quant.ops.kill_switch import KillSwitch
 from nse_quant.persistence.duckdb_store import DuckDBStore
+from nse_quant.research.evidence_plugins.base import DecisionContext
 from nse_quant.research.regime_risk_policy import RegimeRiskLimits
 from nse_quant.strategy.decision_loop import DecisionLoop
 
@@ -113,6 +115,53 @@ def test_store(tmp_path: Path):
 @pytest.fixture
 def expiry() -> Any:
     return (datetime.now(UTC) + timedelta(days=3)).date()
+
+
+@pytest.fixture
+def decisioncontext_factory(snapshot_factory):
+    def build(
+        *,
+        run_id: str = "runid",
+        symbol: str = "NIFTY",
+        ts: datetime | None = None,
+        current_iv: float | None = 0.18,
+        features: MarketFeatures | None = None,
+        snapshot: ChainSnapshot | None = None,
+        iv_history_count: int = 0,
+        current_regime: str | None = None,
+        effective_regimes: list[str] | None = None,
+        regime_policy: dict[str, Any] | None = None,
+        spot_instrument_token: int = 256265,
+    ) -> DecisionContext:
+        context_ts = ts or datetime.now(UTC)
+        context_snapshot = snapshot or snapshot_factory(
+            spot=23_000.0,
+            call_price=100.0,
+            put_price=100.0,
+            ts=context_ts,
+        )
+        context_features = features or MarketFeatures(
+            ts=context_ts,
+            underlying=symbol,
+            spot=context_snapshot.spot,
+            expiry=context_snapshot.expiry,
+            atm_iv=current_iv,
+        )
+
+        return DecisionContext(
+            run_id=run_id,
+            symbol=symbol,
+            ts=context_ts,
+            features=context_features,
+            snapshot=context_snapshot,
+            iv_history_count=iv_history_count,
+            current_regime=current_regime,
+            effective_regimes=effective_regimes or [],
+            regime_policy=regime_policy,
+            spot_instrument_token=spot_instrument_token,
+        )
+
+    return build
 
 
 @pytest.fixture
