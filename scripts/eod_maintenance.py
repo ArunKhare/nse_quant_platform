@@ -365,7 +365,8 @@ def main() -> int:
         run_command(
             [
                 sys.executable,
-                "scripts/build_daily_candles.py",
+                "scripts/manage_candles.py",
+                "aggregate-daily",
                 "--symbol",
                 symbol,
                 "--start-date",
@@ -379,7 +380,8 @@ def main() -> int:
             run_command(
                 [
                     sys.executable,
-                    "scripts/build_interval_candles.py",
+                    "scripts/manage_candles.py",
+                    "aggregate-intraday",
                     "--symbol",
                     symbol,
                     "--trade-date",

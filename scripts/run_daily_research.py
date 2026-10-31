@@ -202,8 +202,9 @@ def main(argv: list[str] | None = None) -> int:
 
     run_step(
         "1. Export option stream",
-        "scripts/backfill_option_stream_exports.py",
+        "scripts/export_warehouse.py",
         [
+            "option-streams",
             "--underlying",
             args.underlying,
             "--date",
@@ -215,8 +216,9 @@ def main(argv: list[str] | None = None) -> int:
 
     run_step(
         "2. Export market regimes",
-        "scripts/backfill_market_regime_exports.py",
+        "scripts/export_warehouse.py",
         [
+            "market-regimes",
             "--symbol",
             args.symbol,
             "--start-date",

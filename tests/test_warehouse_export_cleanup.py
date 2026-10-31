@@ -65,7 +65,7 @@ def test_option_copy_preserves_schema_parameters_and_escaping(tmp_path):
         == 0
     )
     sql, parameters = store.conn.execute.call_args.args
-    expected = expected = [
+    expected = [
         "run_id",
         "ts",
         "underlying",
@@ -174,17 +174,6 @@ def test_cli_rejects_reversed_range_before_opening_store(monkeypatch):
     "script,argv,function",
     [
         ("export_warehouse", ["option-stream", "--date", "2026-10-30"], "export_option_stream"),
-        ("backfill_option_stream_exports", ["--date", "2026-10-30"], "export_option_stream"),
-        (
-            "backfill_market_regime_exports",
-            [
-                "--start-date",
-                "2026-10-29",
-                "--end-date",
-                "2026-10-30",
-            ],
-            "export_market_regimes",
-        ),
     ],
 )
 def test_entrypoints_forward_custom_directory_close_and_propagate(

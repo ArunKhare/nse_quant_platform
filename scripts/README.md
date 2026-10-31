@@ -42,17 +42,17 @@ python scripts/loop_status.py --config config/settings.test.yaml
 | `backfill_iv.py` | Backfills historical IV observations. | `python scripts/backfill_iv.py --symbol NIFTY` |
 | `backfill_option_iv.py` | Backfills option-level IV data. | `python scripts/backfill_option_iv.py --symbol NIFTY` |
 | `backfill_option_greeks.py` | Backfills option Greeks. | `python scripts/backfill_option_greeks.py --symbol NIFTY` |
-| `backfill_market_regime_exports.py` | Backfills exported market-regime policy data. | `python scripts/backfill_market_regime_exports.py --symbol NIFTY` |
+| `export_warehouse.py market-regimes` | Exports persisted market regimes to partitioned Parquet. | `uv run python scripts/export_warehouse.py market-regimes --symbol NIFTY --start-date 2026-10-20 --end-date 2026-10-30` |
 | `bootstrap_nse_eod_iv.py` | Bootstraps end-of-day IV history. | `python scripts/bootstrap_nse_eod_iv.py --symbol NIFTY` |
 | `fill_data_gaps.py` | Identifies and fills missing warehouse data. | `python scripts/fill_data_gaps.py --symbol NIFTY` |
 | `eod_maintenance.py` | Runs end-of-day warehouse and feature maintenance. | `python scripts/eod_maintenance.py --symbol NIFTY` |
 | `import_candle.py` | Imports a candle file into the warehouse. | `python scripts/import_candle.py --help` |
-| `build_daily_candles.py` | Builds daily candles from intraday data. | `python scripts/build_daily_candles.py --symbol NIFTY` |
+| `manage_candles.py aggregate-daily` | Builds daily candles from persisted 1-minute candles. | `uv run python scripts/manage_candles.py aggregate-daily --symbol NIFTY --start-date 2026-10-20 --end-date 2026-10-30` |
 | `build_daily_rv.py` | Builds daily realized-volatility observations. | `python scripts/build_daily_rv.py --symbol NIFTY` |
 | `build_spot_features.py` | Builds spot features, including ATR and trend indicators. | `python scripts/build_spot_features.py --symbol NIFTY --from 2026-10-13 --to 2026-10-23` |
 | `build_market_regimes.py` | Builds daily market regimes from trend, volatility, and IV data. | `python scripts/build_market_regimes.py --symbol NIFTY --from 2026-08-01 --to 2026-10-23` |
 | `build_single_expiry_iv.py` | Builds IV data for one option expiry. | `python scripts/build_single_expiry_iv.py --help` |
-
+| `manage_candles.py aggregate-intraday` | Builds intraday candles from persisted 1-minute candles. | `uv run python scripts/manage_candles.py aggregate-intraday --symbol NIFTY --trade-date 2026-10-30 --intervals 5m,15m,30m,60m` |
 ## Research and reporting
 
 | Script | Purpose | How to run |
