@@ -1,66 +1,31 @@
 param(
-    [string]$TradeDate = (Get-Date -Format yyyy-MM-dd),
-    [int]$InstrumentToken = 0,
-    [string]$Symbol = "",
-    [string[]]$CandleIntervals = @('5m', '15m', '30m', '60m')
+    [Parameter(Mandatory=$true)][string]$SourceDb,
+    [Parameter(Mandatory=$true)][string]$TradeDate,
+    [string]$Symbol = "NIFTY",
+    [string]$CodeRevision = "",
+    [string]$RunRoot = "data/workflow_runs",
+    [string[]]$CandleIntervals = @('5m', '15m', '30m', '60m'),
+    [switch]$Execute,
+    [switch]$SourceOffline
 )
-
-
 $ErrorActionPreference = "Stop"
-
 $ProjectRoot = Split-Path -Parent $PSScriptRoot
 Set-Location $ProjectRoot
-
 $Python = Join-Path $ProjectRoot ".venv\Scripts\python.exe"
-
-if (-not (Test-Path $Python)) {
-    Write-Error "Python virtual environment not found: $Python"
-    exit 1
-}
-
-# Check the requested trade date, not necessarily today.
-& $Python -c "from nse_quant.core.market_calendar import is_nse_trading_day; from datetime import date; import sys; raise SystemExit(0 if is_nse_trading_day(date.fromisoformat(sys.argv[1])) else 2)" $TradeDate
-
-if ($LASTEXITCODE -eq 2) {
-    Write-Host "NSE market closed on $TradeDate. EOD maintenance skipped."
-    exit 0
-}
-
-if ($LASTEXITCODE -ne 0) {
-    Write-Error "Unable to determine NSE trading day."
-    exit 1
-}
-
-$LogDir = Join-Path $ProjectRoot "logs"
-New-Item -ItemType Directory -Force -Path $LogDir | Out-Null
-
-$Timestamp = Get-Date -Format "yyyy-MM-dd_HH-mm-ss"
-$LogFile = Join-Path $LogDir "eod_maintenance_$Timestamp.log"
-
-Write-Host "NSE Quant EOD maintenance"
-Write-Host "Trade date: $TradeDate"
-Write-Host "Log file:   $LogFile"
-
+if (-not (Test-Path $Python)) { throw "Virtual environment Python is missing" }
 $Arguments = @(
-    "scripts/eod_maintenance.py",
-    "--trade-date", $TradeDate,
-    "--candle-intervals", ($CandleIntervals -join ',')
+    "scripts/eod_maintenance.py", "--source-db", $SourceDb,
+    "--trade-date", $TradeDate, "--symbol", $Symbol,
+    "--run-root", $RunRoot, "--candle-intervals", ($CandleIntervals -join ',')
 )
-
-if ($InstrumentToken -ne 0) {
-    $Arguments += @("--instrument-token", $InstrumentToken)
+if ($Execute) {
+    if (-not $SourceOffline -or [string]::IsNullOrWhiteSpace($CodeRevision)) {
+        throw "Execution requires -SourceOffline and -CodeRevision"
+    }
+    & $Python -c "from nse_quant.core.market_calendar import is_nse_trading_day; from datetime import date; import sys; raise SystemExit(0 if is_nse_trading_day(date.fromisoformat(sys.argv[1])) else 2)" $TradeDate
+    if ($LASTEXITCODE -eq 2) { Write-Host "Non-trading date; execution skipped"; exit 0 }
+    if ($LASTEXITCODE -ne 0) { throw "Trading-calendar check failed" }
+    $Arguments += @("--execute", "--source-offline", "--code-revision", $CodeRevision)
 }
-
-if ($Symbol -ne "") {
-    $Arguments += @("--symbol", $Symbol)
-}
-
-& $Python @Arguments 2>&1 |
-    Tee-Object -FilePath $LogFile
-
-if ($LASTEXITCODE -ne 0) {
-    Write-Error "EOD maintenance exited with code $LASTEXITCODE."
-    exit $LASTEXITCODE
-}
-
-Write-Host "EOD maintenance completed."
+& $Python @Arguments
+exit $LASTEXITCODE
