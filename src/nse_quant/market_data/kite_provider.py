@@ -10,6 +10,9 @@ import pandas as pd
 from nse_quant.core.models import ChainSnapshot, Instrument, OptionType
 from nse_quant.core.settings import get_settings
 from nse_quant.market_data import chain
+from nse_quant.market_data.kite_timestamps import (
+    normalize_kite_rest_timestamp,
+)
 
 
 class InstrumentResolutionError(ValueError):
@@ -186,8 +189,14 @@ class KiteMarketDataProvider:
                 "ask": (depth.get("sell") or [{}])[0].get("price"),
                 "volume": quote.get("volume"),
                 "oi": quote.get("oi"),
-                "exchange_ts": quote.get("exchange_timestamp"),
-                "trade_ts": quote.get("last_trade_time"),
+                "exchange_ts": normalize_kite_rest_timestamp(
+                    quote.get("timestamp"),
+                    field="timestamp",
+                ),
+                "trade_ts": normalize_kite_rest_timestamp(
+                    quote.get("last_trade_time"),
+                    field="last_trade_time",
+                ),
                 "received_at": received_at,
             }
 
@@ -197,12 +206,11 @@ class KiteMarketDataProvider:
             expiry_date,
             option_instruments,
             ticks,
+            now=received_at,
         )
 
     def get_chain_snapshots(self) -> list[ChainSnapshot]:
-        settings = self.settings
-
-        expiry_count = settings.analytics.expiries_per_snapshot
+        expiry_count = self.settings.analytics.expiries_per_snapshot
 
         raw_instruments = self._load_nfo_instruments()
 
@@ -219,16 +227,16 @@ class KiteMarketDataProvider:
             underlying=self.underlying,
             spot=spot,
             expiries_requested=expiry_count,
-            strikes_per_side=(self.settings.universe.strikes_per_side),
+            strikes_per_side=self.settings.universe.strikes_per_side,
         )
 
-        snapshot_ts = datetime.now(UTC)
         snapshots: list[ChainSnapshot] = []
 
         for expiry, option_instruments in chains:
             raw = self.kite.quote(
                 [f"NFO:{instrument.tradingsymbol}" for instrument in option_instruments]
             )
+            received_at = datetime.now(UTC)
 
             ticks: dict[int, dict[str, Any]] = {}
 
@@ -237,7 +245,6 @@ class KiteMarketDataProvider:
                     f"NFO:{instrument.tradingsymbol}",
                     {},
                 )
-
                 depth = quote.get("depth") or {}
 
                 ticks[instrument.instrument_token] = {
@@ -246,9 +253,15 @@ class KiteMarketDataProvider:
                     "ask": (depth.get("sell") or [{}])[0].get("price"),
                     "volume": quote.get("volume"),
                     "oi": quote.get("oi"),
-                    "exchange_ts": quote.get("exchange_timestamp"),
-                    "trade_ts": quote.get("last_trade_time"),
-                    "received_at": snapshot_ts,
+                    "exchange_ts": normalize_kite_rest_timestamp(
+                        quote.get("timestamp"),
+                        field="timestamp",
+                    ),
+                    "trade_ts": normalize_kite_rest_timestamp(
+                        quote.get("last_trade_time"),
+                        field="last_trade_time",
+                    ),
+                    "received_at": received_at,
                 }
 
             snapshots.append(
@@ -258,6 +271,7 @@ class KiteMarketDataProvider:
                     expiry,
                     option_instruments,
                     ticks,
+                    now=received_at,
                 )
             )
 
