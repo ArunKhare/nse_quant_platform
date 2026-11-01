@@ -1,108 +1,91 @@
-# Audited append-only packet/reference assessments
+# Read-only persisted packet association consumer @1
 
-## Baseline and reconciliation
-User baseline b378d92: association implementation committed, local/origin aligned,
-QA passed. Local repository/HEAD could not be accessed here.
-Inspected Project Files audit.py, contracts.py and native_reference_silver.py.
-AuditLedger.execution commits lifecycle independently; domain rollback belongs
-to the service. DatasetContract Silver requires revision_id, source_observation_id,
-and recorded_at with APPEND_REVISIONS. This package uses those native APIs.
-The newly committed association/frame-reader source is absent from the returned
-upload snapshot; their interfaces are grounded in this conversation, not a local
-HEAD inspection. Stop on discrepancies before apply. Existing files untouched.
+## Source baseline and reconciliation
+User baseline ae4d0aa, reported QA passed, local and origin aligned.
+This turn inspected actual uploaded packet_association_silver.py including the
+corrected `for pin` variable, packet_reference_association.py and
+reference_supersession.py. Consumer matches schema version 1, input/result
+fingerprints, linked-attempt tables and dataset contract. Existing files untouched.
+Local Git checkout/HEAD was not accessible; reconcile before applying.
 
-## Repository additions
-src/nse_quant/data_platform/packet_association_silver.py
-src/nse_quant/data_platform/packet_association_cli.py
-scripts/ingest/assess_packet_reference.py
-tests/data_platform/test_packet_association_silver.py
-tests/data_platform/test_packet_association_cli.py
+## Add only
+src/nse_quant/data_platform/packet_association_reader.py
+tests/data_platform/test_packet_association_reader.py
 
-## Purpose/API
-persist_packet_association(bronze, frame_silver, reference_silver, target,
-    frame_revision_id=..., packet_ordinal=...,
-    reference_assessment_revision_id=..., actor_id=..., code_revision=...,
-    initialize=False)
+## API
+read_packet_assessment(bronze, frame_silver, reference_silver, assessments,
+    assessment_revision_id=<exact lowercase SHA256>)
+All connections are caller-owned, read-only, without enclosing transactions.
+Assessment DB must be separate from every input. Frame/reference Silver may share.
+No new CLI or DB schemas; no initialization, write, migration or audit transition.
 
-Three owned read-only input connections, separate single-owner writable output,
-no enclosing transactions. Frame and reference inputs may share a Silver file.
-Output must be separate from ALL inputs; same connection/file checks include
-attached databases. Output permits Silver/audit schemas only, never legacy tables.
-Only explicit initialization creates new schemas. No adapter or legacy DB write.
+## Behavior
+Read schema, history, chosen assessment, contract and linked attempt audits in ONE
+assessment-database transaction. Resolve the FULL group graph before status,
+version, quality or audit filtering. New blocked/unsupported/failed rows can
+invalidate old evidence; no old-good fallback, latest-wins or automatic pin change.
+Cycles, duplicate/dangling links, multiple heads and exceeded bounds block.
 
-## Stored objects (schema version 1)
-silver.packet_reference_schema_versions
-silver.packet_reference_assessments
-silver.packet_reference_attempts
+For the active explicit pin verify the dataset contract, supported versions,
+recomputed input/revision identities, bounded strict canonical JSON and association
+fingerprint, duplicated row metadata and NULL publication/effective fields.
+Require a link for first_job_id and validate command/scope/config/latest state for
+EVERY linked attempt on this active pin. All must be terminal; at least one must
+be SUCCEEDED. Terminal FAILED/CANCELLED attempts remain evidence, not success.
+Unsupported or nonterminal audit states block even alongside a successful attempt.
+Unlinked jobs and superseded rows' attempt audits do not grant authority; the graph
+is already resolved without using their job states to filter invalidation edges.
 
-The result is freshly computed under an audited attempt, never supplied as an
-arbitrary import. Full association evidence is canonicalized and fingerprint
-checked. Pins, versions and status are stored with exact result JSON. Publication
-and effective endpoints remain NULL; no eligibility is asserted.
+Then recompute association using the existing source-verifying service. Require
+exact canonical agreement with the stored result. Changed source evidence blocks;
+no rewrite or reassessment occurs. Missing/changed schemas/catalogs or reader SQL/
+execution failures propagate, not fabricated success. Invalid pin raises ValueError.
+Expected evidence failures return a bounded blocked result with no association.
 
-Input identity hashes explicit frame/ordinal/reference pins plus store/association
-versions. Assessment revision hashes input identity and association fingerprint.
-Exact result retry reuses its assessment and appends a new job/attempt. Changed
-results append revisions linking all bounded prior assessments for that input;
-blocked/ambiguous/unresolved evidence is never filtered out. No UPDATE/DELETE
-operations in this API. Retry detects deterministic-column/content mismatches.
-History is bounded: at most 1000 prior assessment links for a new revision.
-Exact retries remain possible at the bound. Attempts/audit grow append-only.
+A verified_current result means stored evidence matches the current recomputation,
+NOT that the association domain status is associated. Its nested association may
+be blocked/ambiguous/unresolved and remains that exact disposition. Publication,
+historical validity and decision eligibility remain False at the consumer boundary.
+All linked successful job IDs and a deterministic snapshot evidence fingerprint
+are returned, not persisted. Fingerprints can change as retry audits accumulate.
 
-Each result/attempt-link write is atomic in one domain transaction. Audit planning,
-RUNNING and terminal events are separate transactions by foundation design.
-A domain row or attempt link alone DOES NOT prove audit completion. Final audit
-failure leaves real committed evidence and a nonterminal job; no fabricated success,
-automatic repair, truncation or audit transition is performed. A fresh retry gets
-its own job; it does not rewrite the earlier job or first_job_id.
+## Strict incomplete-attempt policy
+If a domain commit was followed by final audit failure, that linked job may remain
+RUNNING. A successful retry does NOT erase it: this consumer blocks while ANY
+linked active-pin attempt remains nonterminal. It does not automatically repair
+or manufacture success for that job. Review/recovery is separate future work.
+Terminal failed attempts plus at least one valid success are permitted for exactly
+the same content-addressed assessment. Failed executions without domain links are
+not treated as assessment evidence; current source recomputation remains mandatory.
 
-## Important consumer boundary
-This package is NOT a persisted-assessment consumer/current-selection API.
-Supersession links preserve invalidation-first history; never SELECT only associated
-or successful rows before resolving invalidation evidence. An exact old result
-reappearing after a newer assessment reuses its old revision and DOES NOT revive
-it or override newer links. No automatic graph-head selection is provided.
-A future consumer must validate the graph, all relevant attempt audits and current
-source evidence. Do not admit stored assessments directly to decisions/replay.
-Inputs are verified sequentially, NOT an atomic cross-database snapshot or a
-publication barrier. Post-read source changes remain possible. Source reader limits
-and acquisition/session-health limitations remain unchanged.
+## Limits
+Bounded at 1001 assessment nodes, 1000 links per node, 100000 link-JSON bytes,
+1000 active-pin attempts, and 1 MiB chosen result JSON. Limits fail closed.
+Database snapshot + subsequent source reads are not an atomic cross-database
+snapshot, lock, immutable manifest or decision/publication barrier. Changes after
+reads remain possible. Caller connection access modes remain a responsibility.
+No temporal admission, feature publication or decision-loop integration is added.
 
-## CLI
-Plan only (no execution imports, DB opens, writes, network or credentials):
-
-uv run python scripts/ingest/assess_packet_reference.py --bronze-db <bronze.duckdb> --frame-silver-db <frames.duckdb> --reference-silver-db <reference.duckdb> --assessment-db <new-assessments.duckdb> --frame-revision-id <64hex> --packet-ordinal 0 --reference-assessment-revision-id <64hex>
-
-Execution also requires --execute --actor <actor> --code-revision <revision>.
-Add --initialize for a new dedicated output DB. Parent directory must exist.
-No implicit DB creation in plan. Inputs always read-only. CLI diagnostics are
-bounded generic failure codes, not arbitrary exception text or credentials.
-Exit 0 means assessment execution committed, even for blocked domain evidence;
-execution_status and domain status are intentionally distinct. Exit 1 means
-execution failure; argument errors use argparse exit 2. No publication claim.
-
-## Safe application/QA
-Inspect local git branch --show-current, git log -1 and git status --short.
-Require feat/medallion-feature-store, reconcile b378d92 or newer without resetting.
-Check current association/AuditLedger signatures. Copy only the five repository
-additions; STOP if any target exists and compare instead. Preserve prior Ruff fixes.
-Run verify-local.ps1 from extracted bundle. Review untracked additions as well as
-git diff: git diff --check alone does not inspect untracked files.
-No dependencies, typing rules, existing tests or architecture were weakened.
+## Safe apply and QA
+Inspect git branch --show-current, git log -1 and git status --short in
+C:\Projects\nse_quant_platform. Require feat/medallion-feature-store; reconcile
+against ae4d0aa without resetting newer work. Add only the two repository files.
+STOP if either path exists; compare rather than overwrite committed sources.
+Run verify-local.ps1 from extracted bundle; it displays HEAD/runtime and executes
+all five required QA commands. Review untracked additions as well as git diff.
+No dependency, typing policy, architecture or existing tests are weakened.
 
 ## Verification disclosure
-30 focused tests passed with actual DuckDB SQL/transactions and audit lifecycle
-execution, including rollback, retries, evidence changes, tamper checks, schema/
-size/history bounds, forbidden targets, same-file rejection and final audit failure.
-Association computation is substituted in persistence tests; CLI tests cover
-plan/input validation, not end-to-end successful CLI execution.
-The sandbox lacks the actual checkout. Baseline AuditLedger/contracts were
-reconstructed from inspected source with formatting/diagnostics condensed for
-execution, and the association model was replicated with a fail-fast placeholder.
-These harness dependencies are NOT included in this bundle. Tests in the real
-repository import its actual modules. No full end-to-end source pipeline claim.
-Full required repository suites, Ruff and mypy were NOT run here; local QA required.
-See VERIFICATION.json and SHA256SUMS.json for performed checks.
+34 focused tests passed under Python 3.12.8 with actual DuckDB snapshots/SQL,
+including unchanged hashes of a file-backed read-only assessment DB. Tests cover
+invalidation regardless of quality/audit state, malformed graph/results, attempts,
+source drift, error propagation and limits. Current association computation is
+substituted, not an end-to-end provider/normalizer integration test.
+Because execution cannot read Project Files directly, sandbox graph logic/model
+interfaces were materialized from inspected source with condensed formatting;
+store constants were replicated. Those harness files are NOT shipped. Repository
+tests import actual committed dependencies. Ruff, mypy and full checkout QA were
+NOT run here and remain mandatory locally. See VERIFICATION.json.
 
 Suggested commit:
-feat(data-platform): persist audited append-only packet-reference assessments
+feat(data-platform): add invalidation-aware persisted association consumer
