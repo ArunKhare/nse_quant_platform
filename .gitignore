@@ -227,3 +227,4 @@ data/*
 logs/*
 
 logs/live_status.json
+verify-local.ps1
