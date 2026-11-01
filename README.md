@@ -1,73 +1,69 @@
-# Verified research-publication snapshot consumer
+# Purpose-aware admission receipts and deterministic policy replay
 
-## Baseline and actual-source reconciliation
-User reports QA/tests passed, but repeated truncated Git line still identifies
-fe4853d (the earlier recovery milestone). No newer publication commit hash is
-established. Current uploaded quote_bundle_publication.py and its documentation
-ARE present and were inspected: exact 20-column record, attempt fingerprints,
-version/purpose/clock semantics and post-commit publication lifecycle.
-Local HEAD/branch cannot be independently accessed. Preserve all newer committed
-Ruff/mypy fixes; no existing file is overwritten by this package.
+## Baseline and inspected interfaces
+User baseline 46a9a5e with writer 707ef1d, QA/tests passed and HEAD/origin aligned
+by supplied Git log. Local checkout/branch/HEAD cannot be independently inspected.
+This turn inspected actual quote_publication_reader.py ResearchPublicationEvidence
+DTO/read API, reader tests and writer/docs. Its availability/current-source/
+historical-validity/decision flags are explicitly False; no field is upgraded.
+The older standalone reference temporal policy was not returned by exploration;
+it is not modified or silently substituted. No existing sources/tests overwritten.
 
 ## Add only
-src/nse_quant/data_platform/quote_publication_reader.py
-src/nse_quant/data_platform/quote_publication_inspect_cli.py
-scripts/inspect/inspect_research_quote_publication.py
-tests/data_platform/test_quote_publication_reader.py
-tests/data_platform/test_quote_publication_inspect_cli.py
-docs/RESEARCH_QUOTE_CONSUMPTION.md
+src/nse_quant/data_platform/publication_admission.py
+src/nse_quant/data_platform/publication_admission_cli.py
+scripts/inspect/assess_quote_publication_use.py
+tests/data_platform/test_publication_admission.py
+docs/PUBLICATION_ADMISSION_RECEIPTS.md
 
-## Implemented
-Read-only explicit-pin consumption of exact archived RESEARCH_ONLY snapshots.
-Checks schema/contract/version/purpose/identity, bounded immutable BLOB content,
-member counts/hashes and all linked audit evidence. Requires full successful
-PLANNED/RUNNING/STAGED/VALIDATED/PUBLISHED/SUCCEEDED sequence for original publication;
-a later success cannot substitute for failed origin approval/clock. Pending linked
-attempts block. No audit repair, publication, source lookup or filesystem root read.
-The original root may be absent; provenance text is not used as a live path.
+## What this package completes
+A versioned policy kernel, strict typed two-axis requests, read-only source-bound
+assessment, immutable frozen-input/outcome receipts, exact canonical encoding and
+deterministic OFFLINE replay of this policy result. Not strategy/trading execution.
+Verified archival research may be permitted WITHOUT as-of assertions. Research
+publications always reject point-in-time decision requests; missing availability,
+economic validity and canonical identity remain unknown. No clock substitution.
+Replay is reproducibility, NOT authenticity/authorization or full decision replay.
+No files/DB/audit events written, no loading/migration, no unknown-time overrides.
 
-API:
-read_research_publication(publications, publication_id=<exact SHA256>)
+Public APIs:
+AdmissionRequest("ARCHIVED_RESEARCH_ANALYSIS")
+AdmissionRequest("POINT_IN_TIME_DECISION", knowledge_cutoff, economic_at)
+assess_publication_use(publications, publication_id=..., request=...)
+encode_admission_receipt(receipt)
+replay_admission_receipt(raw, expected_receipt_id=...)
 
-Returns ResearchPublicationEvidence with verified_research_snapshot status only
-for valid research records, immutable bundle, original clocks and audit identities.
-No generic current/decision eligibility is implied. Source-current, availability,
-historical-validity and decision-eligibility assertions remain False.
-See docs/RESEARCH_QUOTE_CONSUMPTION.md for precise trust/time/replay boundaries.
+CLI plan (no DB/execution import or side effect):
+uv run python scripts/inspect/assess_quote_publication_use.py --publication-db <registry.duckdb> --publication-id <64hex> --use-case ARCHIVED_RESEARCH_ANALYSIS
 
-CLI plan:
-uv run python scripts/inspect/inspect_research_quote_publication.py --publication-db <research-publications.duckdb> --publication-id <64-lowercase-hex>
+Append --assess for a read-only assessment summary. Point-in-time requests use
+--use-case POINT_IN_TIME_DECISION --knowledge-cutoff <aware-ISO> --economic-at <aware-ISO>.
+They remain REJECTED for current research-only inputs. Plan exit 0 is not admission.
+See docs/PUBLICATION_ADMISSION_RECEIPTS.md for semantics and limits.
 
-Append --inspect for a read-only bounded summary, not a raw feature dump.
-No actor, credentials, current source DBs or artifact root needed. Default creates/
-opens nothing and imports no execution service. No write/time-travel switches.
-
-## Safe apply / mandatory QA
+## Apply / mandatory local QA
 Inspect git branch --show-current, git log -1 and git status --short in
-C:\Projects\nse_quant_platform. Require feat/medallion-feature-store; reconcile
-actual publication writer/commit (not inferred from repeated fe4853d) without
-resetting/discarding work. Verify the prior publication writer is installed.
-Copy ONLY six repository additions; STOP if any target exists and compare instead.
-Run verify-local.ps1 from extracted bundle. Review untracked files separately.
-No deps, architecture, typing rules, configs or existing tests weakened/modified.
+C:\Projects\nse_quant_platform. Require feat/medallion-feature-store and reconcile
+46a9a5e or newer without resetting work. Compare the actual reader/codec interfaces.
+Copy only five additions; STOP on existing paths and compare rather than overwrite.
+Run verify-local.ps1 from extracted bundle; review untracked files separately from
+ git diff. No deps, architecture, typing rules, configs or existing tests weakened.
 
 ## Verification disclosure
-44 focused tests passed under Python 3.12.8 using actual DuckDB registry snapshots
-and actual read-only CLI/DB clones. Coverage: archive/root independence, exact
-content/policy/approvals, full lifecycle vs latest-success, pending/failed origin,
-retry integrity, corruption/bounds, timezone-invariant clocks/fingerprints, escaped
-catalogs, missing registries, safe CLI plans and blocked/summary outcomes.
-Tests use exact-column schema fixtures, not production writer execution. Baseline
-codec/model interfaces used a materialized harness for sandbox execution; those
-harness dependencies are NOT delivered. Real repository tests import committed
-modules and existing codec tests remain intact. No full writer/source pipeline,
-audit-as-of replay, current freshness or temporal admission is claimed. Full QA,
-Ruff and mypy were not run here; local checks remain mandatory. Python line length,
-static imports, staged patch whitespace and archive/file hashes were verified.
+48 focused tests passed under Python 3.12.8: research vs decision scope, explicit
+aware axes, before/after record clocks, timezone identity, unknown-proof rejection,
+source contracts, replay without DB/current sources, snapshot drift, strict hashes/
+JSON/types/byte limits and CLI no-I/O/read-only/error boundaries.
+The new policy/codecs ran directly. Source reader is substituted; sandbox baseline
+codec/models used an interface harness, NOT the full repository source pipeline.
+Those harness dependencies are NOT delivered. Real tests import committed models/
+codec and existing baseline tests remain intact. No full temporal admission,
+authenticity, audited persistence or strategy-replay pass is claimed. Full QA,
+Ruff and mypy were not run here; local checks mandatory. Python line lengths,
+static imports, patch whitespace and ZIP/file hashes were independently checked.
 
 Suggested commit after local QA:
-feat(data-platform): verify archived research quote-publication snapshots
+feat(data-platform): add purpose-aware publication admission and policy replay receipts
 
-Next boundaries: explicit temporal/knowledge admission and native decision/replay
-contracts, without confusing research publication clocks with availability or
-validity. Data loading/migration remains deferred.
+Next boundary: audited admission/decision-input snapshot persistence and verified
+provenance, not automatic promotion of research inputs. Migration remains held.

@@ -7,13 +7,10 @@ if ($LASTEXITCODE -ne 0 -or $branch -ne 'feat/medallion-feature-store') {
 }
 & git log -1 --format='%H %s'
 if ($LASTEXITCODE -ne 0) { throw 'Cannot inspect HEAD' }
-if (-not (Test-Path 'src/nse_quant/data_platform/quote_bundle_publication.py')) {
-    throw 'Required prior research-publication writer is missing; reconcile source first'
-}
 & uv run python --version
 if ($LASTEXITCODE -ne 0) { throw 'Runtime inspection failed' }
-& uv run pytest tests/data_platform/test_quote_publication_reader.py tests/data_platform/test_quote_publication_inspect_cli.py -q
-if ($LASTEXITCODE -ne 0) { throw 'Publication consumer tests failed' }
+& uv run pytest tests/data_platform/test_publication_admission.py -q
+if ($LASTEXITCODE -ne 0) { throw 'Publication admission/replay tests failed' }
 & uv run pytest tests/data_platform -q
 if ($LASTEXITCODE -ne 0) { throw 'Data platform tests failed' }
 & uv run pytest tests -q
