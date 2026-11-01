@@ -9,8 +9,8 @@ if ($LASTEXITCODE -ne 0 -or $branch -ne 'feat/medallion-feature-store') {
 if ($LASTEXITCODE -ne 0) { throw 'Cannot inspect HEAD' }
 & uv run python --version
 if ($LASTEXITCODE -ne 0) { throw 'Runtime inspection failed' }
-& uv run pytest tests/data_platform/test_publication_admission.py -q
-if ($LASTEXITCODE -ne 0) { throw 'Publication admission/replay tests failed' }
+& uv run pytest tests/data_platform/test_admission_capture.py -q
+if ($LASTEXITCODE -ne 0) { throw 'Admission capture tests failed' }
 & uv run pytest tests/data_platform -q
 if ($LASTEXITCODE -ne 0) { throw 'Data platform tests failed' }
 & uv run pytest tests -q

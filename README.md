@@ -1,69 +1,72 @@
-# Purpose-aware admission receipts and deterministic policy replay
+# Durable audited admission-input receipt capture
 
-## Baseline and inspected interfaces
-User baseline 46a9a5e with writer 707ef1d, QA/tests passed and HEAD/origin aligned
-by supplied Git log. Local checkout/branch/HEAD cannot be independently inspected.
-This turn inspected actual quote_publication_reader.py ResearchPublicationEvidence
-DTO/read API, reader tests and writer/docs. Its availability/current-source/
-historical-validity/decision flags are explicitly False; no field is upgraded.
-The older standalone reference temporal policy was not returned by exploration;
-it is not modified or silently substituted. No existing sources/tests overwritten.
+## Baseline / actual source inspection
+User baseline 9ef2f23, QA/tests passed, local/origin aligned by provided Git log.
+Local checkout/branch/HEAD cannot be independently inspected. This turn inspected
+actual publication_admission.py model/request/receipt fields, variable-length reasons
+annotation, exact identity/encode/replay and public assessment API, plus its docs
+and native publication context. Existing policy/codec/reader/Ruff/mypy fixes are
+not regenerated or overwritten. Migration and source eligibility remain unchanged.
 
 ## Add only
-src/nse_quant/data_platform/publication_admission.py
-src/nse_quant/data_platform/publication_admission_cli.py
-scripts/inspect/assess_quote_publication_use.py
-tests/data_platform/test_publication_admission.py
-docs/PUBLICATION_ADMISSION_RECEIPTS.md
+src/nse_quant/data_platform/admission_capture.py
+src/nse_quant/data_platform/admission_capture_cli.py
+scripts/ingest/capture_publication_admission.py
+tests/data_platform/test_admission_capture.py
+docs/ADMISSION_CAPTURE_STORAGE.md
 
-## What this package completes
-A versioned policy kernel, strict typed two-axis requests, read-only source-bound
-assessment, immutable frozen-input/outcome receipts, exact canonical encoding and
-deterministic OFFLINE replay of this policy result. Not strategy/trading execution.
-Verified archival research may be permitted WITHOUT as-of assertions. Research
-publications always reject point-in-time decision requests; missing availability,
-economic validity and canonical identity remain unknown. No clock substitution.
-Replay is reproducibility, NOT authenticity/authorization or full decision replay.
-No files/DB/audit events written, no loading/migration, no unknown-time overrides.
+## This increment
+Dedicated file-backed decision_inputs store with immutable native contract/policy
+registry, complete exact receipt bytes and frozen inputs, accepted/rejected outcome
+metadata, per-request reassessment history and audited attempt links. Fresh native
+assessment per attempt, not offline receipt import. Domain contract/definition/
+receipt/link writes are atomic; final audit is separate. Exact retries deduplicate
+content while preserving attempts, timestamps and first job. Corruption/unsupported
+versions/legacy output targets reject; old records are never updated/deleted.
+These are post-publication business records, not medallion observations/analytics:
+no fake Gold/Silver layer metadata or weakened DatasetContract enum is introduced.
 
-Public APIs:
-AdmissionRequest("ARCHIVED_RESEARCH_ANALYSIS")
-AdmissionRequest("POINT_IN_TIME_DECISION", knowledge_cutoff, economic_at)
-assess_publication_use(publications, publication_id=..., request=...)
-encode_admission_receipt(receipt)
-replay_admission_receipt(raw, expected_receipt_id=...)
+API:
+capture_publication_admission(publications, target, publication_id=...,
+    request=AdmissionRequest(...), actor_id=..., code_revision=..., initialize=False)
 
-CLI plan (no DB/execution import or side effect):
-uv run python scripts/inspect/assess_quote_publication_use.py --publication-db <registry.duckdb> --publication-id <64hex> --use-case ARCHIVED_RESEARCH_ANALYSIS
+Plan:
+uv run python scripts/ingest/capture_publication_admission.py --publication-db <registry.duckdb> --receipt-db <admission-receipts.duckdb> --publication-id <64hex> --use-case ARCHIVED_RESEARCH_ANALYSIS
 
-Append --assess for a read-only assessment summary. Point-in-time requests use
---use-case POINT_IN_TIME_DECISION --knowledge-cutoff <aware-ISO> --economic-at <aware-ISO>.
-They remain REJECTED for current research-only inputs. Plan exit 0 is not admission.
-See docs/PUBLICATION_ADMISSION_RECEIPTS.md for semantics and limits.
+Execution adds --execute --actor <actor> --code-revision <revision> and --initialize
+for a new dedicated receipt DB. Parent directory must exist. Publication source is
+read-only. POINT_IN_TIME_DECISION also needs --knowledge-cutoff <aware-ISO> and
+--economic-at <aware-ISO>; current research-only input remains rejected.
+COMMITTED/exit 0 records a completed capture even when domain status=REJECTED; it
+is not trading permission. Raw receipt rows or successful fresh retries cannot
+manufacture an earlier incomplete audit's success. See storage doc before execution.
 
-## Apply / mandatory local QA
+## Safe apply / mandatory local QA
 Inspect git branch --show-current, git log -1 and git status --short in
-C:\Projects\nse_quant_platform. Require feat/medallion-feature-store and reconcile
-46a9a5e or newer without resetting work. Compare the actual reader/codec interfaces.
-Copy only five additions; STOP on existing paths and compare rather than overwrite.
-Run verify-local.ps1 from extracted bundle; review untracked files separately from
- git diff. No deps, architecture, typing rules, configs or existing tests weakened.
+C:\Projects\nse_quant_platform. Require feat/medallion-feature-store; reconcile
+9ef2f23 or newer without resetting/discarding work. Compare actual native admission
+and audit APIs. Copy only five repository additions. STOP on existing paths and
+compare rather than overwrite. Run verify-local.ps1 from extracted bundle; review
+untracked additions as well as git diff. No existing deps/tests/configs/typing or
+architecture weakened. No source data loaded, migrated, acquired or published.
 
 ## Verification disclosure
-48 focused tests passed under Python 3.12.8: research vs decision scope, explicit
-aware axes, before/after record clocks, timezone identity, unknown-proof rejection,
-source contracts, replay without DB/current sources, snapshot drift, strict hashes/
-JSON/types/byte limits and CLI no-I/O/read-only/error boundaries.
-The new policy/codecs ran directly. Source reader is substituted; sandbox baseline
-codec/models used an interface harness, NOT the full repository source pipeline.
-Those harness dependencies are NOT delivered. Real tests import committed models/
-codec and existing baseline tests remain intact. No full temporal admission,
-authenticity, audited persistence or strategy-replay pass is claimed. Full QA,
-Ruff and mypy were not run here; local checks mandatory. Python line lengths,
-static imports, patch whitespace and ZIP/file hashes were independently checked.
+29 focused tests passed under Python 3.12.8 with actual file-backed DuckDB domain/
+audit transactions. Covers full frozen-byte replay, native contract/definition,
+rejection capture, exact retry/reassessment, alias/legacy/schema/policy/byte/history
+limits, rollback of contract+definition+receipt+attempt, incomplete final audit,
+no history revival, non-UTC request retries, quoted namespace ambiguity, no-I/O
+plan and CLI read-only/source-error boundaries.
+In repository tests only the publication verifier boundary is substituted; actual
+policy/receipt codecs are imported. The sandbox cannot read checkout modules, so
+baseline audit was reconstructed and policy/codec/model behavior used an interface
+harness. Those harness dependencies are NOT shipped. These tests do not establish
+full source/audit authenticity, decision execution or strategy replay. Full required
+QA, Ruff and mypy were not run here and remain mandatory locally. Python line
+length, static import scan, patch whitespace and ZIP/file checksums were checked.
 
 Suggested commit after local QA:
-feat(data-platform): add purpose-aware publication admission and policy replay receipts
+feat(data-platform): persist audited admission receipts and frozen decision inputs
 
-Next boundary: audited admission/decision-input snapshot persistence and verified
-provenance, not automatic promotion of research inputs. Migration remains held.
+Next boundary: verified captured-receipt/provenance consumption, not automatic
+promotion of research data. Loading/migration remains held until platform acceptance.
