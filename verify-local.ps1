@@ -9,8 +9,8 @@ if ($LASTEXITCODE -ne 0 -or $branch -ne 'feat/medallion-feature-store') {
 if ($LASTEXITCODE -ne 0) { throw 'Cannot inspect HEAD' }
 & uv run python --version
 if ($LASTEXITCODE -ne 0) { throw 'Runtime inspection failed' }
-& uv run pytest tests/data_platform/test_quote_bundle_stage_reader.py -q
-if ($LASTEXITCODE -ne 0) { throw 'Staged bundle consumer tests failed' }
+& uv run pytest tests/data_platform/test_quote_bundle_recovery.py -q
+if ($LASTEXITCODE -ne 0) { throw 'Bundle recovery planner tests failed' }
 & uv run pytest tests/data_platform -q
 if ($LASTEXITCODE -ne 0) { throw 'Data platform tests failed' }
 & uv run pytest tests -q

@@ -1,62 +1,66 @@
-# Verified staged quote-feature bundle consumer
+# Nonexecuting targeted staged-bundle recovery plans
 
-## Baseline / inspected interfaces
-User baseline 7d340d4, QA/tests passed and HEAD/origin aligned by provided Git log.
-Local branch/HEAD cannot be independently accessed. This turn inspected actual
-quote_bundle_staging.py exact schema/root/scope/config/contract, feature_bundle.py,
-quote_bundle_assembly.py, shared reference_supersession.py and bundle tests/docs.
-A targeted BundleArtifacts source lookup failed; its read_exact/root/exists API
-is grounded in the current staging source calls and prior committed delivery.
-No existing source, codec, artifact helper, staging service or tests overwritten.
+## Baseline / source reconciliation
+User baseline 05de39c, QA/tests passed and local/origin aligned by supplied Git log.
+Local HEAD/branch cannot be independently inspected. This turn inspected actual
+quote_bundle_staging.py schema/scope/config, staging CLI/tests and existing bundle
+contracts from context. Inspector is structurally independent of Gold/source
+verification; it does not invoke the stage reader or claim current-source validity.
+No committed staging/consumer/codec APIs, fixes or existing tests overwritten.
 
 ## Add only
-src/nse_quant/data_platform/quote_bundle_stage_reader.py
-tests/data_platform/test_quote_bundle_stage_reader.py
-docs/QUOTE_BUNDLE_STAGE_CONSUMPTION.md
+src/nse_quant/data_platform/quote_bundle_recovery.py
+src/nse_quant/data_platform/quote_bundle_recovery_cli.py
+scripts/inspect/inspect_quote_bundle_recovery.py
+tests/data_platform/test_quote_bundle_recovery.py
+docs/QUOTE_BUNDLE_RECOVERY_PLANS.md
 
-## Public service
-read_staged_quote_bundle(bronze, frame_silver, reference_silver, assessments, gold,
-    staging, bundle_id=<exact lowercase SHA256>, artifact_root=Path(...))
+## Implemented
+One explicit target: read-only metadata/contract/history/audit observations,
+bounded artifact verification, orphan/missing/corrupt and incomplete-job review
+findings, names-only bounded pending-file observations and immutable nonexecuting
+plans. No delete, truncate, reseal, adopt, force-success, restore, migration or
+publication code path. execution_permitted is always False. Limits/incomplete
+coverage are reported; no global clean/healthy claim is made.
 
-Caller-owned read-only connections, file-backed separate staging metadata, no
-outer transactions. Returns immutable StagedQuoteBundleEvidence. No new CLI is
-needed for this service increment. No source acquisition, migration or publication.
+CLI plan only:
+uv run python scripts/inspect/inspect_quote_bundle_recovery.py --staging-db <staging.duckdb> --artifact-root <bound-artifact-root> --bundle-id <64-lowercase-hex>
 
-Checks dedicated/root/schema/contract/version constraints, invalidation-first
-complete history, all linked attempt audits and first job, exact bounded artifact
-bytes/content/counts/scope, fresh native assembly, then observed metadata/file
-stability again. No artifact/metadata/audit writes, initialization or repair.
-Expected evidence failures return bounded blocked reasons with no bundle. Invalid
-pins/configurations and operational failures raise. verified_current still means
-SEALED_NOT_PUBLISHED evidence, not temporal admission or decision eligibility.
-See docs/QUOTE_BUNDLE_STAGE_CONSUMPTION.md for exact policy and limits.
+Append --inspect for read-only observations. Optional bounded --max-history,
+--max-jobs, --max-directory-entries and --max-artifact-bytes tune inspection scope,
+not recovery authority. Default plan imports no DB/execution service, opens/scans/
+creates nothing and performs no network/credential lookup. Execution/repair flags
+are intentionally rejected. Detailed policy in docs/QUOTE_BUNDLE_RECOVERY_PLANS.md.
 
-## Mandatory local QA / apply
+NO_TARGET_FINDINGS is not an execution permit, global inventory or source check.
+An intact orphan still requires separate review, and pending files are never
+ingestible based on this plan. Use the committed stage consumer for current-source
+verification. A separate future recovery operation would require fresh review and
+explicit authorization; this package supplies no such executor.
+
+## Safe apply / mandatory local QA
 Inspect git branch --show-current, git log -1 and git status --short in
 C:\Projects\nse_quant_platform. Require feat/medallion-feature-store; reconcile
-7d340d4 or newer without resetting. Compare local staging/codec/assembly interfaces.
-Copy only the three additions. STOP on existing paths and compare rather than
-overwrite. Run verify-local.ps1 from extracted bundle. Review untracked additions
-as well as git diff. No deps, typing rules, existing tests or architecture weakened.
+05de39c or newer without resetting/discarding work. Copy ONLY five repository
+additions. STOP if any path exists; compare rather than overwrite. Run the bundled
+verify-local.ps1 from extracted location. Review untracked additions as well as
+git diff. No dependencies, architecture, typing rules or existing tests weakened.
 
-## Verification honestly performed
-48 focused tests passed under Python 3.12.8 with actual file-backed DuckDB read
-snapshots and filesystem artifact reads. Tests include root/contract/audit/scope/
-version checks, failed-successor invalidation, ambiguity/graph errors, incomplete
-retry obligations, orphan/missing/corrupt artifacts, size/history limits, current
-source rejection/drift, final metadata/artifact drift and unchanged read-only DB/
-artifact hashes (including a metadata catalog named gold).
-Fixtures are schema replicas, not the production staging writer. Source assembly
-is substituted. Sandbox baseline graph code/models/constants and an interface-level
-codec/artifact-reader harness were materialized; these harness dependencies are
-NOT shipped. Repository tests import actual committed dependencies and baseline
-codec tests remain unchanged. No full writer-to-source, publication or crash pass
-is claimed. Full repository suites, Ruff and mypy were NOT run here; local QA needed.
-Python line lengths, static unused-import scan, staged patch whitespace, ZIP
-integrity and per-file hashes were checked; these are not substitutes for Ruff/mypy.
+## Verification disclosure
+28 focused tests passed under Python 3.12.8 with real DuckDB/file fixtures and a
+read-only CLI clone whose database checksum stays unchanged. Tests cover healthy
+scope vs global authority, orphan/missing/corrupt evidence preservation, pending
+payload nonexposure, incomplete audit/first links, bounds, graph errors, legitimate
+other stage jobs, default plan, rejected repair flags and redacted failures.
+Sandbox baseline codec/model and graph dependencies used a materialized/interface
+harness, NOT the full repository execution environment. Those harness files are
+NOT shipped. New repository tests import actual committed dependencies; existing
+codec/graph tests remain intact. No current-source or full recovery/publication
+integration pass is claimed. Full required QA, Ruff and mypy were not run here;
+local checks are mandatory. Line lengths, static imports, patch whitespace and ZIP
+checksums were checked separately, not substituted for those tools.
 
-Suggested commit after all local checks:
-feat(data-platform): verify staged quote bundles against audits and current sources
+Suggested commit after local QA:
+feat(data-platform): add bounded nonexecuting quote-bundle recovery plans
 
-Data loading/migration remain deferred. Reviewed recovery planning and separately
-authorized publication/temporal admission are further acceptance stages.
+Loading and migration remain deferred until all platform acceptance gates pass.
