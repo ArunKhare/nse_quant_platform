@@ -9,8 +9,8 @@ if ($LASTEXITCODE -ne 0 -or $branch -ne 'feat/medallion-feature-store') {
 if ($LASTEXITCODE -ne 0) { throw 'Cannot inspect HEAD' }
 & uv run python --version
 if ($LASTEXITCODE -ne 0) { throw 'Runtime inspection failed' }
-& uv run pytest tests/data_platform/test_gold_quote_store.py tests/data_platform/test_gold_quote_build_cli.py -q
-if ($LASTEXITCODE -ne 0) { throw 'Gold persistence tests failed' }
+& uv run pytest tests/data_platform/test_gold_quote_reader.py -q
+if ($LASTEXITCODE -ne 0) { throw 'Gold consumer tests failed' }
 & uv run pytest tests/data_platform -q
 if ($LASTEXITCODE -ne 0) { throw 'Data platform tests failed' }
 & uv run pytest tests -q
