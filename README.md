@@ -1,74 +1,62 @@
-# Audited quote-feature bundle staging package
+# Verified staged quote-feature bundle consumer
 
-## Baseline and interface reconciliation
-User baseline 2b29bc4, QA/tests passed, HEAD/origin aligned by supplied Git log.
-Local branch/HEAD cannot be accessed independently here. This turn inspected the
-current feature_bundle.py full codec/models/bounds, existing bundle tests/docs,
-Gold reader, audit.py, contracts.py and manifests.py. Assembly signature is
-confirmed by its uploaded tests/docs. New code preserves all existing modules.
-No changes to the committed codec, consumer, Gold kernel or existing QA fixes.
+## Baseline / inspected interfaces
+User baseline 7d340d4, QA/tests passed and HEAD/origin aligned by provided Git log.
+Local branch/HEAD cannot be independently accessed. This turn inspected actual
+quote_bundle_staging.py exact schema/root/scope/config/contract, feature_bundle.py,
+quote_bundle_assembly.py, shared reference_supersession.py and bundle tests/docs.
+A targeted BundleArtifacts source lookup failed; its read_exact/root/exists API
+is grounded in the current staging source calls and prior committed delivery.
+No existing source, codec, artifact helper, staging service or tests overwritten.
 
 ## Add only
-src/nse_quant/data_platform/bundle_artifacts.py
-src/nse_quant/data_platform/quote_bundle_staging.py
-src/nse_quant/data_platform/quote_bundle_stage_cli.py
-scripts/ingest/stage_quote_feature_bundle.py
-tests/data_platform/test_quote_bundle_staging.py
-tests/data_platform/test_quote_bundle_stage_cli.py
-docs/QUOTE_BUNDLE_STAGING.md
+src/nse_quant/data_platform/quote_bundle_stage_reader.py
+tests/data_platform/test_quote_bundle_stage_reader.py
+docs/QUOTE_BUNDLE_STAGE_CONSUMPTION.md
 
-## Implemented
-Fresh explicit-pin assembly under audit, file-backed dedicated staging metadata,
-root binding, canonical bytes/checksums, fsync-before-hard-link no-replace artifacts,
-post-write exact verification, atomic stage/attempt metadata, append-only history
-and exact retries. Missing registered files, orphan artifacts, corrupt bytes,
-changed root bindings and unsupported state require review; no reseal/adoption.
-No publisher, migration, replay or audit-repair path is added.
+## Public service
+read_staged_quote_bundle(bronze, frame_silver, reference_silver, assessments, gold,
+    staging, bundle_id=<exact lowercase SHA256>, artifact_root=Path(...))
 
-## Public service / CLI
-stage_quote_bundle(bronze, frame_silver, reference_silver, assessments, gold, staging,
-    build_ids=(<exact pins>, ...), artifact_root=Path(...), actor_id=...,
-    code_revision=..., initialize=False)
+Caller-owned read-only connections, file-backed separate staging metadata, no
+outer transactions. Returns immutable StagedQuoteBundleEvidence. No new CLI is
+needed for this service increment. No source acquisition, migration or publication.
 
-Default CLI plan:
-uv run python scripts/ingest/stage_quote_feature_bundle.py --bronze-db <bronze.duckdb> --frame-silver-db <frames.duckdb> --reference-silver-db <references.duckdb> --assessment-db <assessments.duckdb> --gold-db <gold.duckdb> --staging-db <bundle-staging.duckdb> --artifact-root <dedicated-artifacts-directory> --build-id <64-lowercase-hex>
+Checks dedicated/root/schema/contract/version constraints, invalidation-first
+complete history, all linked attempt audits and first job, exact bounded artifact
+bytes/content/counts/scope, fresh native assembly, then observed metadata/file
+stability again. No artifact/metadata/audit writes, initialization or repair.
+Expected evidence failures return bounded blocked reasons with no bundle. Invalid
+pins/configurations and operational failures raise. verified_current still means
+SEALED_NOT_PUBLISHED evidence, not temporal admission or decision eligibility.
+See docs/QUOTE_BUNDLE_STAGE_CONSUMPTION.md for exact policy and limits.
 
-Repeat --build-id for additional exact members. Execution adds --execute --actor
-<actor> --code-revision <revision>. Add --initialize for a new dedicated metadata
-DB. DB parent directory must exist. Artifact directory must not contain any of
-the input/output database files. All execution inputs are read-only.
-A successful result is SEALED_NOT_PUBLISHED with false publication/eligibility.
-No default network, credential lookup, file creation, DB initialization or writes.
+## Mandatory local QA / apply
+Inspect git branch --show-current, git log -1 and git status --short in
+C:\Projects\nse_quant_platform. Require feat/medallion-feature-store; reconcile
+7d340d4 or newer without resetting. Compare local staging/codec/assembly interfaces.
+Copy only the three additions. STOP on existing paths and compare rather than
+overwrite. Run verify-local.ps1 from extracted bundle. Review untracked additions
+as well as git diff. No deps, typing rules, existing tests or architecture weakened.
 
-See docs/QUOTE_BUNDLE_STAGING.md before execution. Filesystem, DB domain commit and
-final audit are NOT atomic together. File-link success + DB failure leaves an
-orphan for review, not a file to delete/adopt automatically. A successful fresh
-retry cannot repair an older nonterminal audit job. No PUBLISHED event is used.
+## Verification honestly performed
+48 focused tests passed under Python 3.12.8 with actual file-backed DuckDB read
+snapshots and filesystem artifact reads. Tests include root/contract/audit/scope/
+version checks, failed-successor invalidation, ambiguity/graph errors, incomplete
+retry obligations, orphan/missing/corrupt artifacts, size/history limits, current
+source rejection/drift, final metadata/artifact drift and unchanged read-only DB/
+artifact hashes (including a metadata catalog named gold).
+Fixtures are schema replicas, not the production staging writer. Source assembly
+is substituted. Sandbox baseline graph code/models/constants and an interface-level
+codec/artifact-reader harness were materialized; these harness dependencies are
+NOT shipped. Repository tests import actual committed dependencies and baseline
+codec tests remain unchanged. No full writer-to-source, publication or crash pass
+is claimed. Full repository suites, Ruff and mypy were NOT run here; local QA needed.
+Python line lengths, static unused-import scan, staged patch whitespace, ZIP
+integrity and per-file hashes were checked; these are not substitutes for Ruff/mypy.
 
-## Safe apply and mandatory QA
-In C:\Projects\nse_quant_platform inspect git branch --show-current, git log -1 and
-git status --short. Require feat/medallion-feature-store, reconcile 2b29bc4 or newer
-without resetting work. Copy ONLY seven repository additions. STOP on existing
-destination paths and compare rather than overwrite. Run verify-local.ps1 from
-extracted bundle. Review untracked files separately from git diff.
-No dependencies, architecture, typing rules, configs or existing tests weakened.
+Suggested commit after all local checks:
+feat(data-platform): verify staged quote bundles against audits and current sources
 
-## Verification disclosure
-40 focused tests passed on Python 3.12.8 with actual DuckDB file-backed transactions
-and actual filesystem fsync/hard-link operations. Cases include artifact/metadata
-retries, orphan/missing/corrupt evidence, no overwrite/adoption/reseal, rollback,
-final-audit failure, interrupt cancellation, root/schema/version/history bounds,
-source isolation, Gold catalog ambiguity, default plan and CLI read-only/redaction.
-Source assembly is substituted at the staging boundary. Sandbox audit/contracts
-were reconstructed from inspected code with condensed formatting/diagnostics;
-codec/models used an interface-level harness, not a repeat of all baseline codec
-validation. These harness dependencies are NOT delivered. Repository tests import
-the actual committed codec/audit/models and existing codec tests remain unchanged.
-This is not full source-to-publication or crash/power-loss verification. Full
-required repository tests, Ruff and mypy were not run here; local QA mandatory.
-Python line-length, staged patch whitespace and ZIP/file checksums were verified.
-
-Suggested commit after local QA:
-feat(data-platform): stage audited immutable quote-feature bundle artifacts
-
-Loading and migration remain on hold until the platform acceptance gates pass.
+Data loading/migration remain deferred. Reviewed recovery planning and separately
+authorized publication/temporal admission are further acceptance stages.
