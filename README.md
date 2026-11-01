@@ -1,66 +1,69 @@
-# Invalidation-aware native Gold consumer
+# Immutable quote-feature bundle construction package
 
-## Baseline and source reconciliation
-User baseline b23cf45, all QA/tests passed, local and origin aligned by provided
-Git output. Local repository branch/HEAD cannot be independently accessed here.
-This turn inspected current gold_quote_store.py schema, versions, definitions,
-input/build identities and attempts, and test_gold_quote_store.py including the
-committed aware-instant timezone correction. Current reference_supersession.py
-was also inspected. A targeted kernel lookup returned the store instead; kernel
-model interface is grounded in its imports plus prior user-confirmed delivery.
-No existing kernel/store/tests/configuration is overwritten or weakened.
+## Interpretation / baseline reconciliation
+This is the next package after uploaded native Gold consumption, not a redelivery
+of the consumer. Last explicit Git marker remains b23cf45. The Gold consumer is
+present in uploaded sources, but its separate commit/QA status was not supplied;
+local HEAD/branch cannot be independently verified here. Do not assume or overwrite.
+
+This turn inspected current gold_quote_reader.py exact GoldQuoteEvidence/API,
+Gold build CLI and manifests.py hard-link/no-replace/fsync semantics. The new
+package uses the actual uploaded consumer interface. Gold kernel model fields are
+from prior user-confirmed package/API; no kernel or consumer replacements shipped.
+Existing ManifestStore is unchanged. No migration or loading is performed.
 
 ## Add only
-src/nse_quant/data_platform/gold_quote_reader.py
-tests/data_platform/test_gold_quote_reader.py
-docs/GOLD_QUOTE_CONSUMPTION.md
+src/nse_quant/data_platform/feature_bundle.py
+src/nse_quant/data_platform/quote_bundle_assembly.py
+tests/data_platform/test_feature_bundle.py
+docs/QUOTE_FEATURE_BUNDLES.md
 
-## Public API
-read_quote_price_build(bronze, frame_silver, reference_silver, assessments, gold,
-    build_id=<exact lowercase SHA256>)
+## Implemented
+- Frozen member and bundle models with exact serialized Gold candidate snapshots.
+- Explicit sorted/unique 1..64 membership, no semantic duplicate packet features.
+- Canonical JSON bytes and SHA256 bundle IDs without self-referential hashing.
+- Full candidate/build/ratio/lineage/quality/schema validation and strict decoding.
+- Read-only all-or-nothing assembly using two source-verification passes.
+- Bounded acquired-artifact reader; no files/database/audit writes or publication.
 
-Caller-owned read-only connections, no outer transactions. Gold separate from all
-inputs. Returns immutable GoldQuoteEvidence with bounded reason codes, active
-build pins, linked successful job IDs and source-recomputed GoldQuoteCandidate.
-No new CLI, DB objects, audit events, publication or migration commands.
+Public API:
+assemble_quote_bundle(bronze, frame_silver, reference_silver, assessments, gold,
+    build_ids=(<exact build pin>, ...))
+encode_quote_bundle(bundle) -> exact bytes
+decode_quote_bundle(raw, expected_bundle_id=<exact pin>) -> content-validated bundle
+read_quote_bundle_file(root, bundle_id=<exact pin>) -> content-validated bundle
 
-Checks include invalidation-first complete graph resolution, immutable definition
-and contract fingerprints, explicit version support, input/build identity, strict
-canonical JSON, selected-build attempt audits, separately scoped definition origin,
-UTC-aware event/trade instant comparison, and exact fresh kernel recomputation.
-See docs/GOLD_QUOTE_CONSUMPTION.md for strict audit policy and limitations.
+The pure codec is NOT a provenance/current-state/publication verifier. Only the
+assembly path calls source-verifying Gold readers. Two matching passes are not
+atomic across sources or a decision-admission barrier. No fallback/retry occurs.
+Unknown times remain null and all publication/validity/eligibility assertions false.
+See docs/QUOTE_FEATURE_BUNDLES.md for complete scope, bounds and trust boundaries.
 
-verified_current is evidence verification, not automatic feature eligibility.
-Nested candidate.status may remain blocked. All outer publication/validity/
-eligibility assertions remain False. A stale source response blocks rather than
-rewrites stored evidence. Old pins never fall back to another build.
+## Verification performed
+60 focused tests passed on Python 3.12.8. New codec and assembly code ran directly:
+round trips/exact IDs, deterministic ordering, duplicate semantics, strict JSON,
+content hashes/schema/temporal claims, exact decimals/ranges/zeros, scale extremes,
+quality flags, immutable snapshots, byte/member bounds and bounded artifact reads.
+Assembly tests substitute the Gold reader boundary, checking exact pins/two passes,
+blocked members, drift detection, no retry or partial results and exception handling.
+Sandbox baseline dataclass interfaces were replicated from inspected/conversation
+source with a fail-fast reader placeholder. Harness files are NOT shipped. Real
+repository tests import its actual committed models. This is not end-to-end DB
+or publication verification. Full repository QA, Ruff and mypy were not run here.
+Line lengths, staged patch whitespace and archive/file checksums were checked.
 
-## Safe apply / local QA
+## Safe application and mandatory QA
 Inspect git branch --show-current, git log -1 and git status --short in
-C:\Projects\nse_quant_platform. Require feat/medallion-feature-store. Reconcile
-b23cf45 or newer without resetting work. Compare local model/API definitions.
-Copy ONLY the three repository additions; STOP if any destination exists and
-compare instead. Preserve the existing timezone-safe test. Run verify-local.ps1
-from extracted bundle. Review untracked additions separately from git diff.
-
-## Verification disclosure
-44 focused tests passed under Python 3.12.8 using actual DuckDB SQL/read snapshots,
-including a file-backed read-only DB named gold, unchanged file checksums, escaped
-catalogs and UTC/Asia-Kolkata timestamp/evidence identity equivalence. Cases cover
-invalidating failed/unsupported successors, graph errors, definitions/shared origin
-scope, audit states and retries, tampering/strict JSON, limits and source drift.
-Fixtures use Gold schema-column replicas, not calls to the writer. Candidate
-computation is substituted. Sandbox baseline graph code/model interfaces were
-materialized from inspected/conversation source with condensed formatting; store
-constants replicated. Those harness dependencies are NOT shipped. Tests in the
-repository import actual committed modules. This is NOT a writer-to-source chain
-integration pass. Full local suites, Ruff and mypy remain mandatory, not run here.
-Python <=100-character source lines, patch whitespace and ZIP integrity/hash
-checks were performed. No dependency replicas are included in the patch.
+C:\Projects\nse_quant_platform. Require feat/medallion-feature-store and reconcile
+current HEAD (b23cf45 or newer) without resetting/discarding work. Confirm local
+Gold consumer exists with the inspected API. Copy ONLY four repository additions;
+STOP if a path exists and compare rather than overwrite. Preserve committed fixes.
+Run verify-local.ps1 from extracted bundle. It runs focused tests and all five
+required QA commands. Review untracked additions; diff --check alone ignores them.
+No dependencies, existing tests, architecture or typing rules are changed/weakened.
 
 Suggested commit after local QA:
-feat(data-platform): add invalidation-aware native Gold quote consumer
+feat(data-platform): construct immutable pinned quote-feature bundles
 
-Next boundary: immutable feature-bundle construction and audited publication,
-without treating Gold persistence/current verification as temporal admission.
-User data loading/migration remains deferred until platform acceptance.
+No audited staging, sealing/publication lifecycle, temporal admission, decisions or
+exact replay are claimed complete. Loading/migration remains deferred.
