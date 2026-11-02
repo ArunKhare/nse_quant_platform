@@ -1,9 +1,9 @@
 {
-  "updated_at": "2026-11-02T11:48:27.203153+05:30",
+  "updated_at": "2026-11-02T12:14:33.855751+05:30",
   "symbol": "NIFTY",
-  "latest_candle": "2026-11-02T11:48:00+05:30",
-  "latest_close": 23296.2,
-  "loop_status": "strategy_eligibility_rejected",
+  "latest_candle": "2026-11-02T12:14:00+05:30",
+  "latest_close": 23333.4,
+  "loop_status": "feature_gate_rejected",
   "regime": null,
   "realized_vol": null,
   "iv_rank": null,
@@ -14,5 +14,5 @@
   "open_positions": [],
   "latest_orders": [],
   "latest_exits": [],
-  "candles_written_this_session": 4284
+  "candles_written_this_session": 4378
 }
