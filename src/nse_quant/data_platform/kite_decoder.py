@@ -46,6 +46,8 @@ def decode(payload: bytes, payload_format: str) -> DecodedFrame:
         return DecodedFrame("quarantine", "FRAME_BYTE_LIMIT")
     if payload_format in {"kite_ws_text_bytes", "kite_ws_text_reencoded_utf8"}:
         return DecodedFrame("text_notification", "OPAQUE_TEXT_NOT_NORMALIZED")
+    if payload_format in {"binary", "kite_ws_binary_payload"}:
+        payload_format = "kite_ws_binary_payload"
     if payload_format != "kite_ws_binary_payload":
         return DecodedFrame("unsupported", "UNSUPPORTED_PAYLOAD_FORMAT")
     if len(payload) == 1:
