@@ -1,20 +1,28 @@
 # Native audited pre-strategy refusal decisions
 
-## Baseline and dependency reconciliation
+## Current-status correction (2026-11-04)
 
-Latest USER-CONFIRMED committed/pushed QA baseline: 78272d0 on feat/medallion-feature-store.
-The signed temporal package is present in uploaded sources but no later commit hash or QA
-acceptance was reported. This delivery neither assumes that package accepted nor modifies it.
-No outstanding new failure was reported. No direct repository/terminal connector is available.
+The baseline and verification statements below are original delivery-time records,
+not current repository status. User-supplied history subsequently includes signed
+publication temporal evidence at 7ea548cba546da2fe6d7f2d2f79f9f6605fbc981 and
+native refusal decisions at 6cf241974a5825bedd85e5da0cfbfe8dcfc2eaa5.
+The user also confirms the latest native-input package is current, committed and
+QA/test-passed. Its exact commit association has not been established.
 
-Inspected actual current native_publication_temporal.py, signed_temporal_evidence.py, legacy
-strategy/iron_condor.py, strategy/gates.py, core/settings.py, decision_loop.py and native
-admission_capture.py. Existing admission capture already retains policy receipts; it is NOT
-rebuilt or renamed here. Existing legacy paper-loop persistence/order execution is untouched.
+Accordingly, the temporal package is not currently QA-unconfirmed. The accepted
+native-input candidate also is not absent merely because this refusal inventory
+records NOT_ADMITTED or NOT_OBSERVED. Refusal @1 remains refusal-only: native-input
+binding, strategy, portfolio risk and execution stay NOT_RUN after refusal.
 
-This package adds a DISTINCT decision-stage contract and dedicated audited native decision
-recording profile. It records an actual ordered pre-strategy refusal, not a successful strategy
-or risk outcome. It imports no legacy adapter, strategy engine, risk engine or broker at runtime.
+Preserve historical assistant check counts and execution limitations below; later
+user QA is accepted but was not independently reproduced by the assistant.
+scripts/qa was intentionally deleted. References below to qa_native_refusal.ps1
+or a QA runner are historical and must not be followed as current instructions.
+Use the direct commands and status distinctions in
+[CURRENT_NATIVE_STATUS.md](CURRENT_NATIVE_STATUS.md). Do not recreate the runner.
+
+## Baseline and dependency reconciliation (historical delivery record)
+--- /dev/null
 
 ## Implemented scope
 

@@ -1,5 +1,16 @@
 ## Current sprint
 
+# Implementation status reconciliation
+
+For current native-platform status, evidence attribution, remaining gates and
+operational holds, see [CURRENT_NATIVE_STATUS.md](CURRENT_NATIVE_STATUS.md).
+
+The sprint ledger below is retained as a historical legacy/paper-loop record.
+Its checkboxes and "None currently" blockers do not establish native-platform
+acceptance, canonical point-in-time inputs or production decision eligibility.
+Do not infer current operating authorization from its completed acquisition items.
+
+
 ### Objective
 
 Complete Milestone 1 closure validation and harden the evidence, valuation,
