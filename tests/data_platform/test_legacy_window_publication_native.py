@@ -441,3 +441,89 @@ def test_actual_computed_series_through_native_publication(legacy, bronze_target
     assert rows[2]["values"]["sum_squared_simple_returns"] == dict(numerator="2", denominator="1")
     assert rows[3]["values"]["mean_squared_simple_returns"] == dict(numerator="1", denominator="1")
     assert not rows[3]["values"]["authoritative_market_coverage_verified"]
+
+
+def test_second_actual_assembly_failure_no_domain_adoption(publication_target, monkeypatch):
+    original = service.bundle.assemble_window_bundle
+    calls = 0
+
+    def observe(*args, **kwargs):
+        nonlocal calls
+        calls += 1
+        if calls == 2:
+            raise RuntimeError("SYNTHETIC_SECOND_WINDOW_ASSEMBLY")
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(service.bundle, "assemble_window_bundle", observe)
+    with pytest.raises(RuntimeError, match="SECOND_WINDOW_ASSEMBLY"):
+        publish(publication_target)
+    with duckdb.connect(str(publication_target[1]), read_only=True) as c:
+        for n in service.DOMAIN[1:]:
+            table = service.name(c, "gold", n)
+            assert c.execute(f"SELECT count(*) FROM {table}").fetchone() == (0,)
+    with pytest.raises(ValueError, match="FIRST_WRITE"):
+        publish(publication_target)
+
+
+def test_incomplete_original_window_cannot_publish_subset(publication_target):
+    source = service.bundle.source
+    with duckdb.connect(str(publication_target[0][1])) as c:
+        table = source.name(c, "gold", source.DOMAIN[3])
+        c.execute(f"DELETE FROM {table} WHERE ordinal=1000")
+    with pytest.raises(ValueError):
+        publish(publication_target)
+    with pytest.raises(ValueError, match="FIRST_WRITE"):
+        publish(publication_target)
+
+
+def test_same_live_file_alias_preserves_parent(publication_target):
+    with duckdb.connect(str(publication_target[1])) as c:
+        alias = c.cursor()
+        try:
+            with pytest.raises(ValueError, match="SEPARATE"):
+                service.publish_window_research_bundle(
+                    c,
+                    None,
+                    None,
+                    None,
+                    None,
+                    alias,
+                    request=publication_target[2],
+                    expected_bundle_id=publication_target[3],
+                    actor_id="synthetic",
+                    code_revision="a" * 40,
+                    purpose=service.PURPOSE,
+                    allow_research_publication=True,
+                )
+            assert c.execute("SELECT 1").fetchone() == (1,)
+        finally:
+            alias.close()
+
+
+def test_orphan_attempt_blocks_before_source(publication_target, monkeypatch):
+    with duckdb.connect(str(publication_target[1])) as c:
+        table = service.name(c, "gold", service.DOMAIN[2])
+        c.execute(
+            f"INSERT INTO {table} VALUES (?,?,?,?)",
+            [
+                "orphan",
+                service.scope_id(publication_target[2].build_id),
+                publication_target[2].build_id,
+                "a" * 64,
+            ],
+        )
+
+    def forbidden(*args, **kwargs):
+        raise AssertionError("orphan must refuse before source")
+
+    monkeypatch.setattr(service.bundle, "assemble_window_bundle", forbidden)
+    with pytest.raises(ValueError, match="ORPHAN"):
+        publish(publication_target)
+
+
+def test_bundle_input_count_preflight_before_hex_decode(publication_target):
+    doc = json.loads(assemble(publication_target[0], publication_target[2]))
+    doc["inputs"] = ["00"] * 16001
+    raw = service.bundle.canonical(doc)
+    with pytest.raises(ValueError, match="COUNT_BOUND"):
+        service.bundle.replay_window_bundle(raw, expected_bundle_id=service.bundle.sha(raw))

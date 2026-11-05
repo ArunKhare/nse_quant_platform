@@ -234,3 +234,29 @@ New-work repository verification:
 
 Check untracked additions for whitespace too. Package QA is not platform acceptance
 or release of production/data/trading/authority holds.
+
+### Assistant checks executed for this delivery
+
+Python 3.12.8 / DuckDB 1.2.2 isolated dependency-adapter harness:
+
+- 24 summary-policy cases passed in pytest. Request/policy/native dependencies were
+  adapters; this was not repository integration or native publication attestation.
+- Actual new bundle codec and SQL producer/materializer/retained reader/admission
+  roundtrip passed. It retained four source inputs/outputs and replayed the receipt.
+- 21 isolated SQL/filesystem checks passed: content/scalar corruption, original
+  link/audit/contract/definition obligations, actual 140000001-byte aggregate preflight,
+  independent request/policy guards, timezone original-pin invariance, real SQL domain
+  rollback/no adoption, and post-domain PUBLISHED/final-SUCCEEDED refusal/no adoption.
+- Six additional isolated offline-codec checks passed: missing/reordered input/output
+  content, changed policy, eligibility promotion and the explicit limitation that a
+  well-formed rehashed fingerprint declaration is NOT authenticated offline.
+- Source window recomputation/recording, native audit/contracts and lifecycle/request
+  boundaries were adapters. The original analytics kernels were not re-executed as
+  a full source chain here. These checks are NOT native E2E or Windows acceptance.
+- Final payload syntax/line lengths/whitespace and archive exact unique members/CRC/
+  payload equality were checked. No Ruff, mypy or real repository pytest run occurred.
+
+The supplied native suite is inventoried, not assistant-executed. It uses actual
+accepted synthetic producers and actual new producer/readers, including computed
+series and negative-boundary injections. User-confirmed QA through a55f491 remains
+closed and distinct from verification of these new additions.

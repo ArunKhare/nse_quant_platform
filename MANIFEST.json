@@ -1,9 +1,0 @@
-{
-  "docs/RESEARCH_IV_CURRENT_RECOVERY_CAPTURE_INSPECTION.md": "58dd53da24d85717993dbf8a0ce70abf7ed8fb600d0b1bf2b8523263d41356ab",
-  "scripts/inspect/inspect_research_iv_current_recovery_capture.py": "d2a97a0f92145914f29d92a8a5414e512ea90bb4e3911a3c06abf8b86d75944e",
-  "scripts/inspect/qa_research_iv_recovery_capture_inspection.ps1": "91bb62c5e3a1b5cb6a5f5f7e0b8e3a13bbece7bb35e2a983bf2b3afe16e3d815",
-  "src/nse_quant/data_platform/research_iv_current_recovery_capture_cli.py": "6abfbb8cc14b7c41b8fd648cb8c434cbf478acf6b46eaa85db47fc99e8b716e8",
-  "tests/data_platform/test_research_iv_current_recovery_capture_cli.py": "eafee3e62ff04af13940a982af85d11cfbf275a9b71b7c32e98c37758cc06b13",
-  "tests/data_platform/test_research_iv_current_recovery_capture_cli_boundary.py": "f078e9b36f97ef1bf3b6a80bcfa1a4e09dd85384b39c6ce8535f3656a5e70b20",
-  "verify_research_iv_recovery_capture_inspection_zip.py": "d4e1765313b8518ccd0527b43c3286ca9eb902ee7eb4e5cb3f46371b0fba896c"
-}

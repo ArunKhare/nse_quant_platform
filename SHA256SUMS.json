@@ -1,8 +1,0 @@
-{
-  "docs/NATIVE_RESEARCH_OPTION_ANALYTICS.md": "f7f2c77e31f61d682602571c8afef5b6bf0ea5319b20602a90ac558cadab9f32",
-  "scripts/qa/qa_native_research_options.ps1": "6aec72cf33614078039ff8fb33ee21a6807870278e3db3fe95938c519ca5facf",
-  "src/nse_quant/data_platform/native_research_option.py": "b07576967bdb3eee10ec67b03c62c52e6207a48f73a7ee03c53712a117fdaa7d",
-  "src/nse_quant/data_platform/research_option_model.py": "e32e438fe93c43622d30dbda18d930bd0cbbe2a4e43da9b4e86f73d261e780ca",
-  "tests/data_platform/test_native_research_option_boundary.py": "3c39fcc65c707d0d767a93b792cfdd8063a8ab50fa6e3e9f4cbee154d8e283a1",
-  "tests/data_platform/test_research_option_model.py": "f2ce97c971bfaa06ff0af0882122d902df8f350609624026fb2a042a4119e176"
-}
