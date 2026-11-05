@@ -1,28 +1,24 @@
-# Legacy gate-results Silver
+# Legacy gate results Silver
 
-Persisted, source-linked Silver for the separately accepted `gate_results` Bronze family.
+Persisted source-linked gate-results Silver over the actual accepted Bronze reader.
 
 ## Contract
 
 - Store: `legacy-gate-results-silver-recording@1`
 - Command: `normalize.legacy_gate_results@1`
-- Dataset: `silver.legacy_gate_results_observations` / `1` / `APPEND_REVISIONS`
-- Source: actual `legacy_gate_results_bronze.read_gate_results_bronze` and original-recording reader
+- Contract: `silver.legacy_gate_results /1/APPEND_REVISIONS`
+- Each Silver revision is bound to the exact reviewed Bronze recording fingerprint and context hash.
 
-## Retained semantics
+## Retained materialization
 
-All nine source fields are materialized with their retained nullability:
+All nine source fields are materialized with exact nullability: `gate_result_id VARCHAR NOT NULL`; nullable `ts TIMESTAMPTZ`, `run_id`, `proposal_id`, `strategy`, `gate`, `passed BOOLEAN`, `reason`, and `details VARCHAR` (declared retained JSON-cast text).
 
-- `gate_result_id` is the only retained key and is non-null.
-- `ts` remains a nullable aware SQL instant; it is never treated as availability.
-- `passed` remains exact nullable `True`, `False`, or SQL `NULL`; it is not native approval.
-- `reason` remains opaque nullable text.
-- `details` remains exact nullable `CAST(JSON AS VARCHAR)` text; SQL `NULL`, JSON `null` text, and empty text remain distinct.
+No invented natural key: only per-revision `gate_result_id` uniqueness plus ordinal. `passed` retains exact True/False/None; retained True is not native approval. `reason` stays opaque nullable text; `details` stays exact nullable JSON-cast text. SQL NULL, JSON null text, and empty text remain distinct.
 
-No natural key is invented across `run_id`, `proposal_id`, `strategy`, `gate`, or time. Silver enforces only `(revision_id, ordinal)` and `(revision_id, gate_result_id)` uniqueness.
+## Native path
 
-## Scope and obligations
+`observe_gate_results_bronze` reads Bronze records through the public Bronze reader and derives a bounded context. `persist_gate_results_silver` requires two identical Bronze observations, then writes one Silver set, one observation per Bronze record, and one attempt, all inside one transaction with a separate audit job.
 
-The first-write scope is the native capture event, excluding source label and other review pins. The producer reads the pinned Bronze recording twice, reconstructs the complete snapshot and every ordinal, performs independent record/scalar/aggregate SQL preflight, and writes the revision atomically before a separate final audit.
+The public reader verifies the Silver context hash, recording fingerprint, and per-record coverage. Current Bronze equality remains separate from retained Silver replay.
 
-Retained Silver, current native Bronze, and current legacy SQL remain distinct observations. This package adds no gate interpretation, original gate replay, admission, publication, decision eligibility, or positive trading lane.
+This Silver does not parse gate details/reasons as native policy truth, treat passed=True as approval, or grant decision eligibility.

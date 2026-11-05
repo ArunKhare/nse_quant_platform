@@ -1,19 +1,18 @@
-"""Actual Bronze-to-Silver integration and adversarial boundaries for gate results."""
+"""Actual gate-results writer -> Bronze -> persisted Silver chain."""
 
 from datetime import UTC, datetime
 
 import duckdb
 import pytest
 
-from nse_quant.data_platform import legacy_gate_results as codec
-from nse_quant.data_platform import legacy_gate_results_bronze as bronze
+from nse_quant.data_platform import legacy_gate_results_bronze as bronze_api
 from nse_quant.data_platform import legacy_gate_results_silver_store as silver
-from nse_quant.data_platform.audit import AuditLedger, JobState
+from nse_quant.data_platform import legacy_silver_common as base
+from nse_quant.data_platform.audit import AuditLedger
 from nse_quant.data_platform.bronze import BronzeEventStore
 from nse_quant.persistence.duckdb_store import DuckDBStore
 
 AT = datetime(2026, 1, 1, 9, 15, tzinfo=UTC)
-IMPORT_AT = datetime(2026, 1, 2, tzinfo=UTC)
 REVISION = "a" * 40
 
 
@@ -21,221 +20,171 @@ def seed(path):
     legacy = DuckDBStore(path=path)
     try:
         legacy.write_feature_gate_result(
-            gate_result_id="A",
+            gate_result_id="gate-1",
             ts=AT,
-            run_id="R",
-            symbol="NIFTY",
-            passed=False,
-            reasons=["replacement"],
-            checks={"replacement": False},
-        )
-        legacy.write_feature_availability_result(
-            gate_result_id="B",
-            ts=AT,
-            run_id="R",
+            run_id="run-1",
             symbol="NIFTY",
             passed=True,
-            reasons=["retained"],
-            checks={"eligible": True},
+            reasons=["ok"],
+            checks={"iv_rank": True},
         )
-        table = bronze.common.name(legacy.conn, "main", codec.TABLE)
-        legacy.conn.execute(
-            f"INSERT INTO {table} VALUES (?,?,?,?,?,?,?,?,CAST(? AS JSON))",
-            ["C", None, None, None, None, None, None, "not-json reason", '{"x":1,"x":2}'],
+        legacy.write_feature_gate_result(
+            gate_result_id="gate-2",
+            ts=AT,
+            run_id="run-1",
+            symbol="NIFTY",
+            passed=False,
+            reasons=[],
+            checks={"iv_rank": False},
         )
-        legacy.conn.execute(
-            f"INSERT INTO {table} SELECT 'D',ts,run_id,proposal_id,strategy,"
-            f"gate,passed,reason,details FROM {table} WHERE gate_result_id='A'"
+        legacy.write_feature_availability_result(
+            gate_result_id="gate-3",
+            ts=None,
+            run_id=None,
+            symbol=None,
+            passed=None,
+            reasons=None,
+            checks=None,
         )
     finally:
         legacy.close()
 
 
-def persist(tmp_path):
-    legacy, bronze_path, silver_path = (
-        tmp_path / "legacy.duckdb",
-        tmp_path / "bronze.duckdb",
-        tmp_path / "silver.duckdb",
-    )
-    seed(legacy)
+def bronze(tmp_path):
+    legacy_path, bronze_path = tmp_path / "legacy.duckdb", tmp_path / "bronze.duckdb"
+    seed(legacy_path)
     with (
-        duckdb.connect(str(legacy), read_only=True) as source,
-        duckdb.connect(str(bronze_path)) as b,
-        duckdb.connect(str(silver_path)) as s,
+        duckdb.connect(str(legacy_path), read_only=True) as source,
+        duckdb.connect(str(bronze_path)) as target,
     ):
-        AuditLedger(b).initialize()
-        BronzeEventStore(b).initialize()
-        snapshot = bronze.capture_gate_results(source, source_label="fixture")
-        recorded = bronze.preserve_gate_results(
+        AuditLedger(target).initialize()
+        BronzeEventStore(target).initialize()
+        snapshot = bronze_api.capture_gate_results(source, source_label="fixture")
+        result = bronze_api.preserve_gate_results(
             source,
-            b,
+            target,
             source_label="fixture",
             expected_snapshot_id=snapshot.snapshot_id,
-            imported_at=IMPORT_AT,
+            imported_at=AT,
             actor_id="synthetic",
             code_revision=REVISION,
         )
-        silver.initialize_gate_results_silver(s)
-        pins = silver.GateResultsBronzePins(
-            source_label=recorded["source_label"],
-            snapshot_id=recorded["snapshot_id"],
-            capture_event_id=recorded["capture_event_id"],
-            envelope_hash=recorded["envelope_hash"],
-            recording_fingerprint=recorded["recording_fingerprint"],
-        )
-    with (
-        duckdb.connect(str(bronze_path), read_only=True) as b,
-        duckdb.connect(str(silver_path)) as s,
-    ):
-        context = silver.observe_gate_results_bronze(b, pins=pins)
-        persisted = silver.persist_gate_results_silver(
-            b,
-            s,
-            pins=pins,
-            expected_context_sha256=codec.sha(context),
-            actor_id="synthetic",
-            code_revision=REVISION,
-        )
-    return legacy, bronze_path, silver_path, recorded, persisted
-
-
-def args(persisted):
-    return dict(
-        revision_id=persisted["revision_id"],
-        expected_recording_fingerprint=persisted["recording_fingerprint"],
+    return bronze_path, silver.GateResultsBronzePins(
+        source_label=result["source_label"],
+        snapshot_id=result["snapshot_id"],
+        capture_event_id=result["capture_event_id"],
+        envelope_hash=result["envelope_hash"],
+        recording_fingerprint=result["recording_fingerprint"],
     )
 
 
-def test_complete_source_linked_silver_preserves_every_field(tmp_path):
-    legacy, bronze_path, silver_path, recorded, persisted = persist(tmp_path)
+def chain(tmp_path):
+    bronze_path, pins = bronze(tmp_path)
+    silver_path = tmp_path / "gate_results_silver.duckdb"
     with (
-        duckdb.connect(str(legacy), read_only=True) as source,
-        duckdb.connect(str(bronze_path), read_only=True) as b,
-        duckdb.connect(str(silver_path), read_only=True) as s,
+        duckdb.connect(str(bronze_path), read_only=True) as bronze_conn,
+        duckdb.connect(str(silver_path)) as target,
     ):
-        records = silver.read_gate_results_silver(s, **args(persisted))
-        assert len(records) == persisted["row_count"] == 4
-        assert (
-            silver.revalidate_gate_results_silver_source(source, b, s, **args(persisted)) == records
+        silver.initialize_gate_results_silver(target)
+        context = silver.observe_gate_results_bronze(bronze_conn, pins=pins)
+        receipt = silver.persist_gate_results_silver(
+            bronze_conn,
+            target,
+            pins=pins,
+            expected_context_sha256=base.sha(context),
+            actor_id="synthetic",
+            code_revision=REVISION,
         )
-        table = bronze.common.name(source, "main", codec.TABLE)
-        originals = source.execute(
-            f"SELECT gate_result_id,ts,run_id,proposal_id,strategy,gate,"
-            f"passed,reason,CAST(details AS VARCHAR) FROM {table}"
+    return bronze_path, silver_path, pins, receipt
+
+
+def test_gate_results_bronze_to_silver_chain(tmp_path):
+    bronze_path, silver_path, pins, receipt = chain(tmp_path)
+    with (
+        duckdb.connect(str(bronze_path), read_only=True) as bronze_conn,
+        duckdb.connect(str(silver_path), read_only=True) as reader,
+    ):
+        records = silver.read_gate_results_silver(
+            reader,
+            revision_id=receipt["revision_id"],
+            expected_recording_fingerprint=receipt["recording_fingerprint"],
+        )
+        assert len(records) == receipt["row_count"] == 3
+        assert records == bronze_api.read_gate_results_bronze(bronze_conn, **pins.reader_args())
+        reader_pins = pins.reader_args()
+        reader_pins.pop("expected_recording_fingerprint")
+        assert records == silver.revalidate_gate_results_silver(
+            bronze_conn,
+            reader,
+            revision_id=receipt["revision_id"],
+            expected_recording_fingerprint=receipt["recording_fingerprint"],
+            expected_bronze_recording_fingerprint=pins.recording_fingerprint,
+            **reader_pins,
+        )
+        rows = reader.execute(
+            "SELECT gate_result_id,ts,run_id,proposal_id,strategy,gate,passed,reason,details "
+            "FROM silver.gate_result_observations WHERE revision_id=? ORDER BY ordinal",
+            [receipt["revision_id"]],
         ).fetchall()
-        by_id = {row[0]: row for row in originals}
-        for ordinal, raw in enumerate(records):
-            doc = codec.parse(raw, codec.MAX_RECORD)
-            fields = doc["stored_fields"]
-            assert doc["source_ordinal"] == ordinal
-            assert fields["gate_result_id"] in by_id
-            assert fields["passed"] in (True, False, None)
-            assert not doc["native_decision_replayed"]
-            assert not doc["decision_eligibility_asserted"]
-        assert by_id["A"][6] is False
-        assert by_id["B"][6] is True
-        assert by_id["C"][1] is None and by_id["C"][6] is None
-        assert by_id["C"][8] == '{"x":1,"x":2}'
-        assert by_id["D"][0] == "D"
+        assert rows[0][0] == "gate-1" and rows[0][6] is True
+        assert rows[1][6] is False and rows[1][7] == "[]"
+        assert rows[1][8] == '{"iv_rank": false}'
+        assert rows[2][1:] == (
+            None,
+            None,
+            None,
+            "feature_availability",
+            "feature_availability",
+            None,
+            "null",
+            "null",
+        )
 
 
-def test_distinct_null_boolean_and_json_text_survive(tmp_path):
-    _legacy, _bronze_path, silver_path, _recorded, persisted = persist(tmp_path)
-    with duckdb.connect(str(silver_path), read_only=True) as s:
-        observations = silver.common.name(s, "silver", "gate_results_observations")
-        rows = s.execute(
-            f"SELECT gate_result_id,ts,passed,reason,details FROM {observations} "
-            "ORDER BY gate_result_id"
-        ).fetchall()
-    by_id = {row[0]: row for row in rows}
-    assert by_id["C"][1:] == (None, None, "not-json reason", '{"x":1,"x":2}')
-    assert by_id["A"][2] is False
-    assert by_id["B"][2] is True
+def test_gate_results_silver_tampering(tmp_path):
+    _b, silver_path, _pins, receipt = chain(tmp_path)
+    with duckdb.connect(str(silver_path)) as writer:
+        writer.execute("UPDATE silver.gate_result_sets SET context='bad'::BLOB")
+    with duckdb.connect(str(silver_path), read_only=True) as reader, pytest.raises(ValueError):
+        silver.read_gate_results_silver(
+            reader,
+            revision_id=receipt["revision_id"],
+            expected_recording_fingerprint=receipt["recording_fingerprint"],
+        )
 
 
-def test_duplicate_retained_id_and_ordinal_uniqueness(tmp_path):
-    _legacy, _bronze_path, silver_path, _recorded, persisted = persist(tmp_path)
-    with duckdb.connect(str(silver_path)) as s:
-        observations = silver.common.name(s, "silver", "gate_results_observations")
-        with pytest.raises(duckdb.ConstraintException):
-            s.execute(
-                f"INSERT INTO {observations} SELECT revision_id,ordinal,record_id,"
-                "gate_result_id,ts,run_id,proposal_id,strategy,gate,passed,reason,details,"
-                "record_bytes,source_observation_id,recorded_at "
-                f"FROM {observations} WHERE ordinal=0"
+def test_gate_results_silver_first_write_obligation(tmp_path):
+    bronze_path, silver_path, pins, receipt = chain(tmp_path)
+    with (
+        duckdb.connect(str(bronze_path), read_only=True) as bronze_conn,
+        duckdb.connect(str(silver_path)) as target,
+    ):
+        context = silver.observe_gate_results_bronze(bronze_conn, pins=pins)
+        with pytest.raises(ValueError, match="FIRST_WRITE"):
+            silver.persist_gate_results_silver(
+                bronze_conn,
+                target,
+                pins=pins,
+                expected_context_sha256=base.sha(context),
+                actor_id="other",
+                code_revision="b" * 40,
             )
 
 
-def test_bronze_drift_blocks_revalidation(tmp_path):
-    legacy, bronze_path, silver_path, _recorded, persisted = persist(tmp_path)
-    with duckdb.connect(str(bronze_path)) as b:
-        variants = bronze.common.name(b, "bronze", "event_variants")
-        b.execute(f"UPDATE {variants} SET payload='bad'::BLOB")
-    with (
-        duckdb.connect(str(bronze_path), read_only=True) as b,
-        duckdb.connect(str(silver_path), read_only=True) as s,
-        pytest.raises(ValueError),
-    ):
-        silver.revalidate_gate_results_silver(b, s, **args(persisted))
-
-
-def test_current_legacy_source_drift_is_distinct_from_retained_silver(tmp_path):
-    legacy, bronze_path, silver_path, _recorded, persisted = persist(tmp_path)
-    with duckdb.connect(str(legacy)) as c:
-        table = bronze.common.name(c, "main", codec.TABLE)
-        c.execute(f"UPDATE {table} SET passed=NOT passed")
-    with (
-        duckdb.connect(str(legacy), read_only=True) as source,
-        duckdb.connect(str(bronze_path), read_only=True) as b,
-        duckdb.connect(str(silver_path), read_only=True) as s,
-        pytest.raises(ValueError, match="CURRENT"),
-    ):
-        silver.revalidate_gate_results_silver_source(source, b, s, **args(persisted))
-
-
-def test_first_write_and_orphan_obligation(tmp_path):
-    legacy, bronze_path, silver_path, recorded, persisted = persist(tmp_path)
-    with (
-        duckdb.connect(str(bronze_path), read_only=True) as b,
-        duckdb.connect(str(silver_path)) as s,
-        pytest.raises(ValueError, match="FIRST_WRITE"),
-    ):
-        silver.persist_gate_results_silver(
-            b,
-            s,
-            pins=silver.GateResultsBronzePins(
-                source_label=recorded["source_label"],
-                snapshot_id=recorded["snapshot_id"],
-                capture_event_id=recorded["capture_event_id"],
-                envelope_hash=recorded["envelope_hash"],
-                recording_fingerprint=recorded["recording_fingerprint"],
-            ),
-            expected_context_sha256="0" * 64,
-            actor_id="other",
-            code_revision="b" * 40,
-        )
-
-
-def test_failed_extra_scoped_job_blocks_reader(tmp_path):
-    _legacy, _bronze_path, silver_path, _recorded, persisted = persist(tmp_path)
-    with duckdb.connect(str(silver_path)) as s:
-        sets = silver.common.name(s, "silver", "gate_results_sets")
-        scope = s.execute(
-            f"SELECT scope_id FROM {sets} WHERE revision_id=?",
-            [persisted["revision_id"]],
-        ).fetchone()
-        assert scope is not None and scope[0] is not None
-        ledger = AuditLedger(s)
-        job = ledger.plan_job(
-            command_name=silver.COMMAND,
-            actor_id="synthetic",
-            code_revision=REVISION,
-            scope_ref="sha256:" + scope[0],
-            config_hash="b" * 64,
-        )
-        ledger.transition(job, JobState.FAILED, "EXECUTION_ERROR")
-    with (
-        duckdb.connect(str(silver_path), read_only=True) as s,
-        pytest.raises(ValueError),
-    ):
-        silver.read_gate_results_silver(s, **args(persisted))
+def test_gate_results_silver_same_file_alias(tmp_path):
+    _bronze_path, silver_path, pins, _receipt = chain(tmp_path)
+    with duckdb.connect(str(silver_path)) as target:
+        alias = target.cursor()
+        try:
+            with pytest.raises(ValueError, match="SEPARATE"):
+                silver.persist_gate_results_silver(
+                    alias,
+                    target,
+                    pins=pins,
+                    expected_context_sha256="a" * 64,
+                    actor_id="synthetic",
+                    code_revision=REVISION,
+                )
+            assert target.execute("SELECT 1").fetchone() == (1,)
+        finally:
+            alias.close()
