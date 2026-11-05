@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+import json
+from datetime import UTC, datetime
 from typing import Any
 
 from nse_quant.data_platform import legacy_silver_common as base
 from nse_quant.data_platform.audit import AuditLedger
-from nse_quant.data_platform.bronze import BronzeEventStore
 from nse_quant.data_platform.legacy_spot_candles import Rejected, sha
 from nse_quant.data_platform.legacy_spot_candles_bronze import read_spot_candles_bronze
 
@@ -26,6 +26,7 @@ def scope_id(source_label: str) -> str:
 
 
 def initialize_spot_candles_silver(target: Any) -> None:
+    AuditLedger(target).initialize()
     target.execute("CREATE SCHEMA IF NOT EXISTS silver")
     target.execute(
         f"CREATE TABLE IF NOT EXISTS silver.{SETS} ("
@@ -59,7 +60,7 @@ def observe_spot_candles_bronze(bronze: Any, *, pins: base.SilverPins) -> bytes:
                 "envelope_hash": pins.envelope_hash,
                 "recording_fingerprint": pins.recording_fingerprint,
             },
-            snapshot_hex=sha(records[0]).hex() if records else "",
+            snapshot_hex=records[0].hex() if records else "",
             record_hashes=[sha(record) for record in records],
         )
     )
@@ -85,8 +86,6 @@ def persist_spot_candles_silver(
         raise Rejected("REVIEWED_SPOT_CANDLES_SILVER_REQUEST_REQUIRED")
     base.separate(bronze, target)
     base.readonly(bronze)
-    store = BronzeEventStore(target)
-    store.verify_target()
     revision_id = base.sha(
         base.canonical([VERSION, pins.recording_fingerprint, expected_context_sha256])
     )
@@ -115,16 +114,16 @@ def persist_spot_candles_silver(
         try:
             target.execute(
                 f"INSERT INTO silver.{SETS} VALUES (?,?,?,?)",
-                [revision_id, first, expected_context_sha256, base.clock(datetime.now())],
+                [revision_id, first, expected_context_sha256, base.clock(datetime.now(UTC))],
             )
             for ordinal, record in enumerate(records):
                 target.execute(
                     f"INSERT INTO silver.{OBSERVATIONS} VALUES (?,?,?,?)",
-                    [revision_id, ordinal, record, base.clock(datetime.now())],
+                    [revision_id, ordinal, record, base.clock(datetime.now(UTC))],
                 )
             target.execute(
                 f"INSERT INTO silver.{ATTEMPTS} VALUES (?,?)",
-                [revision_id, base.clock(datetime.now())],
+                [revision_id, base.clock(datetime.now(UTC))],
             )
             target.execute("COMMIT")
         except BaseException:
@@ -155,7 +154,7 @@ def _read_recording(target: Any, *, revision_id: str) -> tuple[str, bytes]:
     if rows[0][1] != sha(context):
         raise Rejected("SPOT_CANDLES_SILVER_CONTEXT_HASH_MISMATCH")
     base.clock(rows[0][2])
-    return sha(base.canonical([VERSION, revision_id, context])), context
+    return sha(base.canonical([VERSION, revision_id, context.hex()])), context
 
 
 def read_spot_candles_silver(
@@ -175,40 +174,57 @@ def read_spot_candles_silver(
         -1,
     )
     records = tuple(bytes(row[1]) for row in rows)
-    document = base.canonical(
-        dict(
-            version=VERSION,
-            revision_id=revision_id,
-            context_sha256=sha(context),
-            record_hashes=[sha(record) for record in records],
-        )
+    try:
+        context_document = json.loads(context)
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise Rejected("SPOT_CANDLES_SILVER_CONTEXT_RECORD_MISMATCH") from exc
+    expected_context = dict(
+        version=VERSION,
+        pins=context_document.get("pins") if isinstance(context_document, dict) else None,
+        snapshot_hex=records[0].hex() if records else "",
+        record_hashes=[sha(record) for record in records],
     )
-    if sha(document) != sha(context):
+    if (
+        not isinstance(context_document, dict)
+        or set(context_document) != set(expected_context)
+        or context_document.get("version") != VERSION
+        or not isinstance(context_document.get("pins"), dict)
+        or type(context_document["pins"].get("source_label")) is not str
+        or context_document.get("record_hashes") != expected_context["record_hashes"]
+        or context_document.get("snapshot_hex") != expected_context["snapshot_hex"]
+        or base.canonical(context_document) != context
+    ):
         raise Rejected("SPOT_CANDLES_SILVER_CONTEXT_RECORD_MISMATCH")
+    base.verify_recording(
+        reader,
+        command=COMMAND,
+        scope_ref="sha256:" + scope_id(context_document["pins"]["source_label"]),
+        config_hash=sha(context),
+        revision_id=revision_id,
+        sets_table=f"silver.{SETS}",
+        observations_table=f"silver.{OBSERVATIONS}",
+        attempts_table=f"silver.{ATTEMPTS}",
+        observation_count=len(records),
+    )
     return records
 
 
 def revalidate_spot_candles_silver(bronze: Any, reader: Any, **args: Any) -> tuple[bytes, ...]:
     base.separate(bronze, reader)
-    first = read_spot_candles_silver(reader, **args)
+    first = read_spot_candles_silver(
+        reader,
+        revision_id=args["revision_id"],
+        expected_recording_fingerprint=args["expected_recording_fingerprint"],
+    )
     pins = base.SilverPins(
         source_label=args.get("source_label", ""),
         snapshot_id=args.get("snapshot_id", ""),
         capture_event_id=args.get("capture_event_id", ""),
         envelope_hash=args.get("envelope_hash", ""),
-        recording_fingerprint=args.get("expected_recording_fingerprint", ""),
+        recording_fingerprint=args.get("recording_fingerprint", ""),
     )
     context = observe_spot_candles_bronze(bronze, pins=pins)
-    if sha(context) != sha(
-        first
-        and base.canonical(
-            dict(
-                version=VERSION,
-                revision_id=args["revision_id"],
-                context_sha256=sha(context),
-                record_hashes=[sha(r) for r in first],
-            )
-        )
-    ):
+    _, recorded_context = _read_recording(reader, revision_id=args["revision_id"])
+    if context != recorded_context:
         raise Rejected("SPOT_CANDLES_SILVER_REVALIDATION_MISMATCH")
     return first

@@ -174,7 +174,11 @@ def test_spot_candles_bronze_to_silver_chain(tmp_path):
             reader,
             revision_id=receipt["revision_id"],
             expected_recording_fingerprint=receipt["recording_fingerprint"],
-            **pins.reader_args(),
+            source_label=pins.source_label,
+            snapshot_id=pins.snapshot_id,
+            capture_event_id=pins.capture_event_id,
+            envelope_hash=pins.envelope_hash,
+            recording_fingerprint=pins.recording_fingerprint,
         )
 
 
@@ -196,7 +200,11 @@ def test_daily_rv_bronze_to_silver_chain(tmp_path):
             reader,
             revision_id=receipt["revision_id"],
             expected_recording_fingerprint=receipt["recording_fingerprint"],
-            **pins.reader_args(),
+            source_label=pins.source_label,
+            snapshot_id=pins.snapshot_id,
+            capture_event_id=pins.capture_event_id,
+            envelope_hash=pins.envelope_hash,
+            recording_fingerprint=pins.recording_fingerprint,
         )
 
 
