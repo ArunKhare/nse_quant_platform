@@ -996,8 +996,8 @@ class DuckDBStore:
                 json.dumps(sorted(policy.allowed_regimes)),
                 json.dumps(policy.regime_metrics, default=str),
                 policy.selection_status,
-                datetime.now(UTC),
                 json.dumps(risk_limits or {}, default=str),
+                datetime.now(UTC),
             ],
         )
 
