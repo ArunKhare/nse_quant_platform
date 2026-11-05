@@ -1,224 +1,219 @@
-# Audited persisted decision-evidence Silver with a separate naive-wall clock lane
+# Persisted source-linked retained decision-evidence Silver
 
-## Reported baseline, access and additive delivery
+## Scope and source inspection
 
-Latest supplied Git pointers: de2f3a1 at reported matching HEAD/origin
-feat/medallion-feature-store, predecessor 3ffa8cf. No independent Git/worktree/Windows
-inspection, repository write, commit, push or additional QA result is invented. Earlier
-user-confirmed QA remains CLOSED; historical delivery-time "not run" attribution does
-not reopen it. New-package verification is a separate matter.
+This additive profile persists complete accepted decision-evidence observations from
+actual retained native Bronze. It is not original plugin/strategy decision replay,
+verified availability, evidence interpretation, admission or consumer cutover.
 
-Access was rechecked; no repository/filesystem/execution connector was returned. Project
-Sources are retrieval only. Current decision-evidence Bronze implementation/tests and
-current policy Silver pattern were retrieved. Direct codec-source requests returned the
-Bronze file instead; the codec's current implementation was not independently recovered.
-Its interfaces/semantics are established by the CURRENT audited consumer and tests,
-including wall_fields, strict bool, source schema, make/replay and projection interfaces.
-This consumer IMPORTS the accepted codec unchanged, never inlining/replacing it with an
-older generated payload. Isolated transcribed-dependency checks below are labeled separately.
-
-Copy absent additions only; STOP and compare if a destination exists:
-- src/nse_quant/data_platform/legacy_decision_evidence_silver_store.py
-- tests/data_platform/test_legacy_decision_evidence_silver.py
-- docs/LEGACY_DECISION_EVIDENCE_SILVER.md
-
-No accepted dependency replacement, scripts/qa, PowerShell runner, per-payload manifest
-or standalone ZIP verifier is included. Do not modify logs/live_status.json, infer
-real-data release or cut over consumers. This is persisted source-linked Silver, not an
-archive/reporting wrapper or a fake Gold/decision contract.
-
-## Contract and actual native source integration
-
-Recording: legacy-decision-evidence-silver-recording@1.
+Store: legacy-decision-evidence-silver-recording@1.
 Command: normalize.legacy_decision_evidence@1.
-Dataset: silver.legacy_decision_evidence_observations / 1 / APPEND_REVISIONS.
-Projection: accepted legacy-decision-evidence-observation@1, unchanged.
-Source: actual legacy-decision-evidence-bronze-recording@1 original-recording reader.
+DatasetContract: silver.legacy_decision_evidence_observations / 1 / APPEND_REVISIONS.
+The accepted observation codec/record bytes remain unchanged; no accepted dependency
+or Bronze payload is reconstructed/replaced by this ZIP.
 
-Complete original serialized snapshot bytes are retained in canonical snapshot_hex
-context with all reviewed Bronze pins, including its separate recording fingerprint.
-Every source ordinal receives exactly one full persisted projection and all seven typed
-scalar fields. No partial/good-subset selection or discarded unavailable rows.
+Actual current Bronze implementation, its actual-writer tests and analogous native
+regime-policy Silver store were retrieved. Repeated targeted retrieval returned the
+Bronze module instead of the complete decision-evidence codec file. The implementation
+therefore uses only interfaces exercised by that actual source/tests: SCHEMA, VERSION,
+DEFINITION, canonical/sha/pin/label/parse, replay_snapshot, derive_records, encode_cell
+and wall_fields. It does not guess the writer's JSON/available conversion or implement
+a replacement codec. The exact seven-column dependency/version is checked before use.
 
-observe_decision_evidence_bronze calls actual public pinned native readers, retrieves full
-bytes through actual read_recording_bytes, checks the observed recording fingerprint,
-rebuilds complete context/projections and repeats the public read. Every projected byte
-must match. Persistence repeats that complete native observation and requires the reviewed
-context hash. Operational/corrupt upstream errors propagate under audited failed jobs,
-never fabricated successful lower-source DTOs or native availability observations.
+The retrieved Bronze documentation identifies 3ffa8cf/8489d2f as its delivery baseline;
+this is not independently inspected current Git or a new user QA confirmation. All
+previously user-confirmed QA remains closed. No assistant repository/Windows/uv/Git
+worktree, full hash, commit or push claim is made. Source retrieval is not a checkout.
 
-## Typed scalars and the two-clock rule
+Only disposable synthetic fixtures are authorized. Real-data loading/migration,
+production publication, identities/keys/policies/authority registration, trading and
+cutover remain HELD. No strategy, portfolio risk, broker or execution producer is called.
 
-All source fields are materialized: evidence_id, run_id, ts, symbol, plugin, available,
-payload_json. All remain required as in the accepted retained-cell contract.
-- ts is a genuine SQL TIMESTAMP WITHOUT timezone, NOT TIMESTAMPTZ, epoch or inferred UTC.
-- available is SQL BOOLEAN and explicitly checked as Python bool, never integer 0/1 aliases.
-- payload_json is exact VARCHAR TEXT, not parsed/normalized JSON. Arbitrary non-JSON,
-  whitespace, duplicate keys, embedded available/eligible claims and empty strings survive.
-- Opaque IDs/run/plugin/symbol labels are retained, not authenticated identity or issuer roots.
+## Exact typed stored semantics
 
-Every scalar/full record/source ordinal is reconstructed from the full original snapshot
-on read. Original primary evidence_id uniqueness and natural (run_id,ts,symbol,plugin)
-uniqueness are recomputed by the accepted full snapshot codec. Native SQL additionally
-has per-revision UNIQUE constraints for BOTH axes, as defense in depth, never substituting
-for full replay. Uniqueness is scoped to revision, not arbitrary cross-revision deduplication.
+All seven source fields are retained and materialized without changing their meaning:
 
-The recording fingerprint handles source ts ONLY through accepted codec.wall_fields,
-retaining all calendar/clock/microsecond fields and timezone unknown. It converts the
-materialized naive value to canonical wall TEXT before serializing recording metadata.
-It never passes source ts to the aware-clock serializer, assigns UTC/IST, calls astimezone
-on source wall fields, fabricates an exchange_ts or recovers lost offsets/fold information.
+    evidence_id VARCHAR
+    run_id VARCHAR
+    ts TIMESTAMP
+    symbol VARCHAR
+    plugin VARCHAR
+    available BOOLEAN
+    payload_json VARCHAR
 
-Native import/recording/audit clocks are SEPARATE aware observations using accepted aware
-clock helpers. Aware clock normalization uses astimezone(UTC), never replace(tzinfo=UTC).
-Session TimeZone changes must not alter wall fields OR the reviewed recording fingerprint;
-tests read under UTC and Asia/Kolkata. Source timestamps with zero microseconds retain
-.000000 through the accepted codec, not inferred precision or source decimal spelling.
+All are required/non-null by this profile, as in the accepted snapshot contract.
+Primary evidence ID AND natural (run_id, ts, symbol, plugin) axes are reconciled by
+complete accepted snapshot replay. Dedicated Silver also has per-revision uniqueness
+constraints on both axes. Primary-ID canonical order is retained, not invented causal
+or chronological decision order. UUID/plugin/run labels are not authenticated identity.
 
-The reader verifies the actual ordered observation column names/types against the reviewed
-schema, including TIMESTAMP versus TIMESTAMPTZ and BOOLEAN versus INTEGER. Integer 1 must
-not accidentally compare equal to True under Python tuple equality. Exact bool type and
-wall-codec checks supplement physical SQL schema validation. No existing accepted schema
-or fixture is renamed to conceal a mismatch.
+The source ts is NAIVE WALL FIELDS, not an instant. It is materialized as TIMESTAMP,
+never TIMESTAMPTZ. Encoded canonical wall text has exactly six fractional digits;
+zero microseconds remains .000000. Inversion uses datetime.fromisoformat plus actual
+wall_fields roundtrip, not timezone assignment or astimezone on source values.
+No UTC/IST, epoch, economic-at or original-availability instant is inferred.
 
-Stored available=True stays retained true; native availability/eligibility are separate.
-Classification stays RETAINED_LEGACY_DECISION_EVIDENCE_NOT_ADMISSION. Source instant,
-source_timezone, original availability, identity and economic-validity instants remain
-unknown/null; payload interpretation, recovered original bytes/history, native decision
-replay, publication and decision eligibility remain false. These are NOT original plugin,
-strategy/risk/portfolio/execution runs or decision-admission evidence.
+Native recorded_at, audit and import clocks are separate aware observations using the
+existing aware-clock serializer. Fingerprint metadata explicitly converts the stored
+naive SQL timestamp back through wall_fields BEFORE using that serializer. This avoids
+both assigning a timezone and accidentally rejecting valid wall tuples as aware metadata.
+SQL session timezone changes must leave wall fields AND recording fingerprint unchanged.
+Fold/offset/history information lost by legacy storage is not recovered.
 
-## APIs and synthetic workflow
+available is exact stored BOOLEAN, including true. It is not overwritten to false or
+relabeled as independently verified availability. Native eligibility/availability flags
+remain those of the accepted exact record codec, separate from this stored scalar.
+Original caller representations already coerced by SQL cannot be recovered.
 
-Import nse_quant.data_platform.legacy_decision_evidence_silver_store.
+payload_json is exact opaque stored TEXT. Invalid JSON, duplicate/unknown keys,
+whitespace and embedded eligible/available flags are preserved; no JSON parser is
+called on that field. Outer snapshot/context/record JSON remains separately strict.
+No payload/scalar reconciliation, policy authorization or plugin causality is invented.
 
-1. Construct EvidenceBronzePins(source_label, snapshot_id, capture_event_id, envelope_hash,
-   recording_fingerprint) from actual reviewed native Bronze evidence.
-2. Open native Bronze read-only; Silver production never opens/probes current legacy SQL.
-3. Explicitly initialize a separate EMPTY dedicated file-backed target using
-   initialize_decision_evidence_silver(target). Existing/foreign/partial stores refuse;
-   no automatic repair/adoption. Current catalog itself must be file-backed, not memory
-   with a file attached. Caller owns connections, provides no outer transaction and
-   serializes writers. No multi-writer coordinator is asserted.
-4. Call observe_decision_evidence_bronze(bronze, pins=pins), review full context hash,
-   then persist_decision_evidence_silver(bronze, target, pins=pins,
-   expected_context_sha256=..., actor_id=..., code_revision=...).
-5. Retain/review returned revision_id and recording_fingerprint SEPARATELY. Additional
-   receipt fields are row_count, job_id and decision_eligibility_asserted=false.
-6. Close writer owners BEFORE read-only reopen. Use read_decision_evidence_silver(
-   readonly_silver, revision_id=..., expected_recording_fingerprint=...) for retained replay.
-7. Use revalidate_decision_evidence_silver(readonly_bronze, readonly_silver,
-   revision_id=..., expected_recording_fingerprint=...) for additional current native equality.
+Original classification and explicit unknown/null/false limitations are preserved
+byte-for-byte, including RETAINED_LEGACY_DECISION_EVIDENCE_NOT_ADMISSION,
+stored_ts_instant/source_timezone/original_availability_at null, and false payload
+interpretation, native decision replay, publication and decision eligibility.
 
-The real silver.duckdb catalog/silver schema collision is preserved and tested, not renamed.
-All new mutations/assertions quote actual catalog.schema.table. Same-live-file aliases use
-separate cursor handles, reject without closing parents and retain real owners. Code revision
-is a supplied full lower-case 40-character declaration, not a full hash invented from short
-hashes or authenticated Git/interpreter/issuer/build truth.
+## APIs and actual native producer path
 
-## Scope, atomic writes and original obligations
+legacy_decision_evidence_silver_store.py:
 
-First-write scope = profile + source label + source snapshot ID + capture-event ID.
-Envelope/recording pins, context-review hash, actor/revision labels and recording clocks
-are excluded. Changing excluded fields cannot heal the same failed source-observation
-scope. New source artifacts are new revision scopes, not recovery. Labels do not establish
-legitimate source namespace/governance authority.
+- DecisionEvidenceBronzePins(source_label, snapshot_id, capture_event_id,
+  envelope_hash, recording_fingerprint)
+- initialize_decision_evidence_silver(empty_dedicated_file)
+- observe_decision_evidence_bronze(readonly_bronze, pins=...) -> bounded full context
+- persist_decision_evidence_silver(readonly_bronze, initialized_silver, pins=...,
+  expected_context_sha256=..., actor_id=..., code_revision=...)
+- read_decision_evidence_silver(readonly_silver, revision_id=...,
+  expected_recording_fingerprint=...)
+- revalidate_decision_evidence_silver(readonly_bronze, readonly_silver, revision_id=...,
+  expected_recording_fingerprint=...)
+- revalidate_decision_evidence_silver_source(readonly_legacy, readonly_bronze,
+  readonly_silver, revision_id=..., expected_recording_fingerprint=...)
 
-Prior scoped jobs/sets/attempt links block repeats. Orphan observations for the capture
-event also block adoption after set/job/link deletion. No repair, implicit retry-adoption,
-recovery or orphan healing API exists. Original Bronze obligations are independently
-verified by the actual native reader. Partial initialization cannot be silently adopted.
+Context retains the COMPLETE original legacy snapshot bytes under bounded hex, all
+reviewed Bronze pins and the new store version. Every original source ordinal and
+exact accepted projected record is persisted; full scalars and native event link are
+materialized. There is no caller-successful record/context import into the producer.
 
-Native AuditLedger job precedes source observation. Context/set, every full projection,
-all scalar indices and attempt link commit atomically in ONE domain transaction. Second-
-INSERT failure rolls back partial domain writes while failed audit remains. Final audit
-SUCCEEDED remains separate from domain commit; failure leaves committed rows unreadable
-and non-adoptable. No positive decision or release permission results from any receipt.
+observe calls ACTUAL read_decision_evidence_bronze, ACTUAL read_recording_bytes,
+checks its separately reviewed recording fingerprint, derives full content using
+ACTUAL accepted codecs, and repeats the public reader. The producer requires a
+separately reviewed context hash and repeats the complete native observation again.
+No direct raw legacy SQL substitute or fabricated successful lower-source result is
+used as source proof. Deterministic retained reconstruction is not independent audit
+attestation; native producer/current-source readers still establish original obligations.
 
-## Three distinct replay/revalidation questions
+## First-write, transaction and original obligations
 
-read_decision_evidence_silver requires read-only dedicated storage and exact reviewed
-revision/recording pins. It checks supported definitions/contract/physical scalar types,
-full context/snapshot, all source ordinals/links/scalars/bytes, revision identity, attempt
-link, original single scoped job and exact PLANNED/RUNNING/SUCCEEDED history.
-The recording fingerprint binds selected set/observation metadata and clocks, all scalar
-indices (with source wall fields serialized separately), original jobs/events/links and
-source/context hashes. Registration clocks are not independent time truth.
+First-write scope binds profile version and native capture_event_id only. Source label,
+snapshot/envelope/recording review pins, context hash, runtime/actor/revision labels
+cannot heal a failed attempt for that SAME native event. A genuinely different event
+is another subject, not authenticated namespace authority or recovery of the old job.
+The scope deliberately excludes more review pins than older family-specific profiles;
+those accepted contracts are unchanged.
 
-Offline hash/replay proves retained content, NOT authentic declared Bronze pins or original
-provider/decision provenance. Retained reading never probes Bronze or legacy SQL and can
-succeed after Bronze is missing or its audit no longer validates.
+Any original set/attempt/scoped job or orphan row for the native event blocks before
+source observation. The producer uses actual AuditLedger and DatasetContract. Complete
+set/context, EVERY observation and original attempt link commit in one domain transaction.
+A domain error rolls them all back but leaves the original failed audit obligation.
+Final SUCCEEDED audit is separate. Committed content without original success is
+unreadable and cannot be adopted. Successful retries are also deliberately disallowed.
+No repair, deletion, reset, recovery, supersession or old-good fallback exists.
 
-revalidate_decision_evidence_silver requires TWO repeated actual pinned native Bronze
-observations equal to frozen full context, bracketed by pinned Silver reads. Changed or
-corrupt original Bronze audit fails that check while retained Silver may still replay.
-Current legacy SQL equality remains accepted Bronze's separate
-revalidate_decision_evidence_source check; tests mutate legacy SQL while native layers
-remain equal, then separately corrupt original Bronze audit. Sequential observations are
-NOT atomic cross-resource snapshots, source-file hashes or replay of unrun domain stages.
+Retained reader verifies exact profile/contract definition, complete snapshot and
+projected record bytes, all seven scalars and materialized indices, revision/scope,
+original attempt/job/config and exact three-phase original audit. Queries include
+same-event rows under OTHER revisions so a good subset cannot hide orphan coverage.
+A separately reviewed recording fingerprint binds clocks, scalars and all selected
+recording/audit metadata in addition to revision/content identity.
 
-Definitions bind supported codec/source definitions and actual DatasetContract, not whole-
-repository source hashes, independently authenticated interpreters/builds/issuer roots,
-environment recovery or silent reinterpretation of changed definitions.
+This verifies application recording integrity, not DB permissions or an independently
+authenticated root against someone who rewrites storage and supplies new trusted pins.
+Object inventory/definition contracts and full materialized content are verified; no
+independently authenticated source constraint-DDL or hostile-file safety claim is made.
 
-## Independent bounds and transfer ordering
+## Three distinct read/revalidation levels
 
-Accepted evidence limits remain unchanged: 1..1000 rows; five text cells <=65536 UTF-8 bytes;
-snapshot <=1048576 bytes; projection <=524288 bytes and <=4194304 bytes aggregate.
-Complete canonical hex-snapshot context <=2200000 bytes. Hex <=2097152 characters is checked
-BEFORE decode; strict reconstruction rejects casing/whitespace aliases, extra keys or
-source mismatch. Wall-field/boolean spellings remain governed by the accepted codec.
+1. Retained Silver replay: original Silver recording/audit and complete retained
+   snapshot/projected/scalar reconciliation, without consulting current Bronze/legacy.
+2. Current native Bronze revalidation: two complete actual current Bronze observations
+   compared to retained full context, bracketed by pinned Silver reads.
+3. Current legacy SQL revalidation: additionally invokes actual accepted whole-table
+   source revalidation, then repeats native/Silver checks.
 
-Materialized text scalar aggregate <=1048576 bytes independently; snapshot encoding already
-includes those strings, so this does not inflate source limits. SQL preflights count,
-aggregate/max record bytes, aggregate scalar bytes and EVERY text/ID overflow in one read
-transaction BEFORE transferring observation rows. Independent CASE guards remain on
-materialized text, record bytes and IDs. Context/definition/contract/metadata/physical-column
-and catalog inventories have independent bounded guards and row limits. Accepted metadata
-<=32768 serialized bytes per query remains. Resource overflow rejects the whole recording,
-not selected business rows. Bounds are not scan-cost, allocator/process-memory, hostile-file
-safety or external concurrency guarantees. No paging, partial success or silent limit growth.
+Changed current legacy SQL does not invalidate unchanged original native evidence.
+Missing current original Bronze audit blocks level 2/3 while retained Silver can still
+replay. SQL/operational errors propagate; they are not unavailable/accepted business
+outcomes. Repeated observations do not establish an atomic multi-database snapshot,
+source-file hash, independent time truth or original plugin/decision execution replay.
 
-## Tests and honest verification attribution
+Caller owns connections, no outer transactions/shared writers. Explicit initialization
+requires an empty dedicated file; partial initialization cannot be adopted. Public
+readers require actual readonly mode. Close writers before read-only reopen. Actual
+same-live-file cursor aliases reject while parent owners remain usable. SQL mutations
+and assertions quote actual catalog.schema.table, including silver.duckdb/silver schema.
 
-Delivered tests import actual DuckDBStore writer, accepted native evidence Bronze
-producer/readers and native AuditLedger/BronzeEventStore with new Silver. Positive fixtures
-use real writer/upsert calls, plus an explicit opaque TEXT boundary through actual SQL,
-then native Bronze, persisted Silver, writer closure and read-only reopen. Source boolean/
-payload assertions compare against native retained records, not assumed writer formatting.
-No original plugin/domain computation, authentic changed-source permission or decision replay
-is claimed by synthetic dict inputs.
+## Independent resource bounds
 
-Coverage includes all seven scalar mutations; naive TIMESTAMP and strict BOOLEAN physical
-types; rejected BOOLEAN-to-INTEGER drift; microseconds/session timezone; both SQL key
-constraints; original bytes/coverage/context/record/aggregate/cell/link/audit/clock faults;
-reviewed-pin non-healing; native-vs-legacy source checks; missing Bronze; contracts/definitions/
-duplicate jobs/orphans; partial SQL rollback; final-audit failure; aliases/init; predecode
-hex bound; maximum-payload native persistence with SHORT ID/full payload; and second actual
-observation then injected drift. Boundary injections are not authentic source evidence.
+All accepted Bronze/source limits remain unchanged:
 
-Assistant-executed independent checks, Python 3.12.8 / DuckDB 1.2.2:
-- New implementation/test syntax compiled; line lengths/trailing whitespace checked.
-- 24 actual SQL/materializer probes passed: roundtrip/revalidation, mutation of ALL seven
-  fields, record bytes/missing rows/clocks/orphan link, oversized context/record/cell,
-  independent scalar aggregate, reviewed-context non-healing, partial second-INSERT rollback,
-  audit rejection, BOOLEAN-to-INTEGER schema rejection, both SQL UNIQUE constraints,
-  maximum payload and session-timezone invariance. Bronze/audit/contract boundaries were
-  substituted; codec/helpers were transcribed from the observed interface/semantic contract.
-  These are NOT actual accepted-dependency native integration, actual repository writer/
-  codec execution, original domain replay or repository/native E2E QA.
-- ZIP exact three-member set, uniqueness, CRC, nonempty payloads and byte equality verified.
+- 1..1000 whole-source rows; no selected windows/prefixes/paging.
+- Snapshot <=1048576 bytes; source text <=65536 UTF-8 bytes/cell.
+- Full wrapper context <=2200000 bytes, bounded before strict parsing/hex decoding.
+- Exact records <=524288 bytes each and <=4194304 aggregate, checked before persistence.
+- Materialized text independently <=65536 bytes/cell and <=1048576 aggregate.
+- SQL count/aggregate/max record and scalar-byte preflight BEFORE transferring row BLOBs
+  or scalar text; independent CASE guards remain on transferred fields.
+- Metadata definitions/contracts <=32768 bytes, bounded schema inventory and overflow
+  row detection for original jobs/attempts/events; guarded identifiers.
 
-NOT run: Windows/uv interpreter check; actual accepted-dependency native chain; repository
-focused/data-platform/full pytest; Ruff; mypy; git diff --check; Git untracked whitespace
-checks. These are NEW-package verification gaps, not reopening earlier confirmed QA.
-Acceptance uses uv/configured tests/lint/types plus tracked/untracked whitespace checks.
-No substituted dependencies or external verification wrappers are delivered.
+No limits are inflated for this new store. Escaping can independently exhaust record/
+context bounds. Bounds do not guarantee scan cost or peak process memory. No partial
+success, approximate fallback, implicit paging or unbounded artifact transfer.
 
-## Operational holds
+## Tests and verification attribution
 
-Retained decision evidence is now represented in this delivered Silver implementation,
-not authenticated availability, native decision admission/replay, legitimate identity/
-governance/time roots, complete strategy/portfolio inputs, operational recovery, real-data
-release or consumer cutover. Existing numerical solvers, research-only admission and legacy
-loop remain unchanged. No native-platform completion percentage is claimed.
+New tests reuse the retrieved actual-writer/native Bronze fixture helper, then invoke
+the new native producer/readers. They compare all seven materialized fields to actual
+source-codec bytes, retain opaque/duplicate-key TEXT and true stored booleans separately
+from false native eligibility, and check wall timestamps remain naive at microsecond
+precision. Tests cover all materialized scalar/record corruption, original rows/links/
+audits/contracts, same-event variants, review/context-pin failures, extra scoped jobs,
+orphan adoption refusal, real SQL domain rollback, final-audit failure, second actual
+source-read failure, record/scalar/context budgets, session timezones, live-file aliases,
+three read levels and actual complete 1000-row source capture through native Silver.
+These repository-dependent tests are supplied, NOT assistant-executed.
+
+The legacy writer's serialization expressions were not independently reconstructed:
+actual source SQL/accepted codecs are the test oracle. Native fixture reuse is not
+proof that those tests ran in this assistant environment. Any isolated source/audit/
+codec adapters are explicitly attributed separately in delivery verification and are
+not native E2E. No accepted dependency/transcription or fake source implementation is
+delivered in the ZIP.
+
+Syntax/line lengths/whitespace and archive nonempty/exact members/uniqueness/CRC/payload
+equality are checked before final delivery. They do not imply Windows/uv, actual
+repository focused/full pytest, Ruff, mypy, Git or platform operational acceptance.
+Earlier user-confirmed QA stays CLOSED; new verification gaps do not reopen it.
+
+## Applying absent additions and new-work verification
+
+Copy absent additions only; STOP/compare if a destination exists. No accepted source,
+QA repair, logs/live_status.json, pyproject/lock or scripts/qa is replaced. No PowerShell
+runner, per-payload SHA256 manifest or standalone ZIP verifier is supplied. Distributed
+pytest dependency work is untouched; parallel safety/speedup is not certified here.
+
+    uv run python -c "import sys; print(sys.executable); print(sys.version)"
+    uv run pytest tests/data_platform/test_legacy_decision_evidence_silver.py -q
+    uv run pytest tests/data_platform -q
+    uv run pytest tests -q
+    uv run ruff check src/nse_quant/data_platform scripts/inspect scripts/ingest tests/data_platform
+    uv run mypy
+    git diff --check
+
+Check untracked additions for whitespace as well. Package QA is not platform acceptance
+or a release of data/production/authority/trading/cutover holds. evidence_snapshots is
+a distinct remaining family; this package does not claim to migrate it or add Gold,
+publication, verified availability or replay original native/legacy decisions.
