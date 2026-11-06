@@ -486,6 +486,14 @@ def _load_yaml(path: Path) -> dict[str, Any]:
     return value
 
 
+class LLMEnrichmentSettings(BaseModel):
+    enabled: bool = False
+    provider: str = "manual"
+    max_headline_length: int = Field(default=512, ge=1)
+    min_confidence: float = Field(default=0.0, ge=0.0, le=1.0)
+    allowed_symbols: list[str] = Field(default_factory=list)
+
+
 class Settings(BaseSettings):
     """Inherits from BaseSettings to correctly process environmental variables and YAML loading."""
 

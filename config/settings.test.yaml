@@ -229,3 +229,9 @@ evidence:
       term_structure_tolerance: 0.002
       max_term_observation_age_seconds: 300
       max_term_observation_gap_seconds: 30
+llm_enrichment:
+    enabled: false
+    provider: "manual"
+    max_headline_length: 512
+    min_confidence: 0
+    allowed_symbols: []
