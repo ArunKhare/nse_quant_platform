@@ -285,6 +285,12 @@ class BacktestReadinessSettings(BaseModel):
     min_regime_days: int = 10
 
 
+class EventOutcomePanelSettings(BaseModel):
+    adverse_return_threshold_pct: float = -1.0
+    iv_crush_threshold: float = -0.02
+    min_confidence: float = Field(default=0.0, ge=0.0, le=1.0)
+
+
 class ResearchSettings(BaseModel):
     enforce_feature_availability: bool = True
     enforce_regime_policy: bool = True
@@ -292,6 +298,7 @@ class ResearchSettings(BaseModel):
     min_history_observations: int = 1
     enable_parameter_experiments: bool = False
     backtest_readiness: BacktestReadinessSettings = Field(default_factory=BacktestReadinessSettings)
+    event_outcomes: EventOutcomePanelSettings = EventOutcomePanelSettings()
 
 
 class WalkForwardSettings(BaseModel):

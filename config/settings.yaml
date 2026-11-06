@@ -41,6 +41,11 @@ analytics:
   atr14_window: 14
 
 risk:
+  event_policy:
+    enabled: false
+    reduce_size_on_high_volatility: false
+    max_size_reduction_pct: 50.0
+    review_iv_crush_threshold: -0.02
   max_lots_per_order: 2
   max_open_positions: 3
   max_notional_exposure: 2000000
@@ -92,6 +97,10 @@ market_data:
       kite_interval: day
 
 research:
+  event_outcomes:
+    adverse_return_threshold_pct: -1.0
+    iv_crush_threshold: -0.02
+    min_confidence: 0.0
   enforce_feature_availability: false
   enforce_regime_policy: true
   enforce_strategy_eligibility: true
