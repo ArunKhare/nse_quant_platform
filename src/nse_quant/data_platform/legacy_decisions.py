@@ -6,7 +6,7 @@ import hashlib
 import json
 import re
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from typing import Any
 
 VERSION = "legacy-decisions-snapshot@1"
@@ -96,10 +96,15 @@ def encode_cell(value: object, kind: str) -> object:
             raise Rejected("AWARE_STORED_DECISION_INSTANT_REQUIRED")
         return value.astimezone(UTC).isoformat()
     if kind == "DATE":
-        if not isinstance(value, str) or len(value) != 10:
-            raise Rejected("CANONICAL_STORED_DECISION_DATE_REQUIRED")
-        datetime.strptime(value, "%Y-%m-%d")
-        return value
+        if type(value) is date:
+            return value.isoformat()
+        if type(value) is str and len(value) == 10:
+            try:
+                date.fromisoformat(value)
+            except ValueError:
+                raise Rejected("CANONICAL_STORED_DECISION_DATE_REQUIRED") from None
+            return value
+        raise Rejected("CANONICAL_STORED_DECISION_DATE_REQUIRED")
     if kind == "BOOLEAN":
         if type(value) is not bool:
             raise Rejected("EXACT_STORED_DECISION_BOOLEAN_REQUIRED")
@@ -125,6 +130,13 @@ def _row(row: object) -> list[object]:
             if type(original) is not str or len(original) > 64:
                 raise Rejected("CANONICAL_STORED_DECISION_INSTANT_REQUIRED")
             value = datetime.fromisoformat(original)
+        elif original is not None and kind == "DATE":
+            if type(original) is not str or len(original) != 10:
+                raise Rejected("CANONICAL_STORED_DECISION_DATE_REQUIRED")
+            try:
+                value = date.fromisoformat(original)
+            except ValueError:
+                raise Rejected("CANONICAL_STORED_DECISION_DATE_REQUIRED") from None
         if encode_cell(value, kind) != original:
             raise Rejected("CANONICAL_STORED_DECISION_CELL_REQUIRED")
         checked.append(original)
