@@ -99,6 +99,13 @@ market_data:
       kite_interval: day
 
 research:
+  event_risk:
+    enabled: false
+    block_new_entries: false
+    blackout_minutes_before: 30
+    blackout_minutes_after: 30
+    allowed_event_types: ["RBI_POLICY"]
+    max_events: 10
   event_ingestion:
     enabled: false
     allowed_sources: ["manual_review"]
