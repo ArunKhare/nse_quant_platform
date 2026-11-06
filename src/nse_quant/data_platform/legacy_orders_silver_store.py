@@ -160,7 +160,7 @@ def persist_orders_silver(
             total_record += len(record)
             if total_record > MAX_RECORDS:
                 raise Rejected("ORDERS_SILVER_AGGREGATE_BOUND")
-            document = __import__("json").loads(record)
+            document = json.loads(record)
             fields = document["stored_fields"]
             order_id = fields["order_id"]
             if type(order_id) is not str or not 0 < len(order_id.encode()) <= MAX_SCALAR:
