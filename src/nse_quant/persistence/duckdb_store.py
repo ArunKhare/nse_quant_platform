@@ -472,6 +472,33 @@ class DuckDBStore:
         """
         self.conn.execute(MARKET_EVENTS)
 
+        LLM_ENRICHMENT = """
+            CREATE TABLE IF NOT EXISTS llm_enrichment (
+                enrichment_id VARCHAR PRIMARY KEY,
+                provider VARCHAR,
+                headline VARCHAR,
+                symbols JSON,
+                topics JSON,
+                sentiment VARCHAR,
+                relevance_confidence DOUBLE,
+                enrichment JSON,
+                ingested_at TIMESTAMPTZ
+            )
+        """
+        self.conn.execute(LLM_ENRICHMENT)
+
+        LLM_ENRICHMENT_EVENT_LINKS = """
+            CREATE TABLE IF NOT EXISTS llm_enrichment_event_links (
+                link_id VARCHAR PRIMARY KEY,
+                enrichment_id VARCHAR,
+                event_id VARCHAR,
+                instrument VARCHAR,
+                linked_at TIMESTAMPTZ,
+                payload JSON
+            )
+        """
+        self.conn.execute(LLM_ENRICHMENT_EVENT_LINKS)
+
         EVENT_IMPACT_EVIDENCE = """
             CREATE TABLE IF NOT EXISTS event_impact_evidence (
                 impact_id VARCHAR PRIMARY KEY,
