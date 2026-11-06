@@ -99,6 +99,9 @@ market_data:
       kite_interval: day
 
 research:
+  llm_enrichment_links:
+    enabled: false
+    max_link_window_minutes: 60
   event_risk:
     enabled: false
     block_new_entries: false
