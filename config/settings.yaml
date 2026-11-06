@@ -97,6 +97,15 @@ market_data:
       kite_interval: day
 
 research:
+  event_ingestion:
+    enabled: false
+    allowed_sources: ["manual_review"]
+    max_payload_bytes: 65536
+  news_enrichment:
+    enabled: false
+    allowed_symbols: ["NIFTY", "BANKNIFTY"]
+    max_headline_length: 512
+    min_relevance_confidence: 0.0
   event_outcomes:
     adverse_return_threshold_pct: -1.0
     iv_crush_threshold: -0.02
