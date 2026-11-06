@@ -204,8 +204,10 @@ def test_query_is_look_ahead_safe() -> None:
     _query, params = store.conn.queries[0]
     lower_bound, upper_bound = params[0], params[1]
 
-    assert lower_bound == DECISION_TS
+    assert lower_bound == DECISION_TS - timedelta(minutes=30)
     assert upper_bound == DECISION_TS + timedelta(minutes=30)
+    assert params[2] == DECISION_TS
+    assert "ingested_at <= ?" in _query
 
 
 def test_affected_underlyings_accepts_dictionary_mapping() -> None:
