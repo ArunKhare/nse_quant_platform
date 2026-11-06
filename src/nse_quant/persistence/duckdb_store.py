@@ -491,6 +491,27 @@ class DuckDBStore:
         """
         self.conn.execute(EVENT_IMPACT_EVIDENCE)
 
+        EVENT_REACTIONS = """
+            CREATE TABLE IF NOT EXISTS event_reactions (
+                reaction_id VARCHAR PRIMARY KEY,
+                event_id VARCHAR,
+                instrument VARCHAR,
+                event_ts TIMESTAMPTZ,
+                observation_window_minutes INTEGER,
+                observed_at TIMESTAMPTZ,
+                spot_return_pct DOUBLE,
+                realized_range_points DOUBLE,
+                atm_iv_change DOUBLE,
+                expected_move_change_points DOUBLE,
+                pcr_change DOUBLE,
+                relevant_oi_change BIGINT,
+                option_spread_change_pct DOUBLE,
+                payload JSON,
+                ingested_at TIMESTAMPTZ
+            )
+        """
+        self.conn.execute(EVENT_REACTIONS)
+
     def _compute_option_iv(
         self,
         *,

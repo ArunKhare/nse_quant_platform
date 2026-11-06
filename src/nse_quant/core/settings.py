@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any, Self
 
 import yaml
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 CONFIG_DIR = Path("config")
@@ -159,6 +159,24 @@ class EventRiskSettings(BaseModel):
     high_impact_types: list[str] = Field(
         default_factory=lambda: ["RBI_POLICY", "FED_POLICY", "UNION_BUDGET"]
     )
+
+
+class EventReactionSettings(BaseModel):
+    enabled: bool = False
+    observation_windows: list[int] = Field(
+        default_factory=lambda: [5, 15, 30, 60],
+        min_length=1,
+    )
+    max_reactions: int = Field(default=1000, ge=1)
+
+    @field_validator("observation_windows")
+    @classmethod
+    def validate_windows(cls, value: list[int]) -> list[int]:
+        if any(window <= 0 for window in value):
+            raise ValueError("event reaction windows must be positive")
+        if len(value) != len(set(value)):
+            raise ValueError("event reaction windows must not contain duplicates")
+        return value
 
 
 class PaperExecutionSettings(BaseModel):
@@ -431,6 +449,7 @@ class EvidencePluginsSettings(BaseModel):
     multi_timeframe: MultiTimeframeEvidenceSettings = MultiTimeframeEvidenceSettings()
     event_risk: EventRiskSettings = EventRiskSettings()
     event_impact: EventImpactSettings = EventImpactSettings()
+    event_reactions: EventReactionSettings = EventReactionSettings()
     technical_indicators: TechnicalIndicatorSettings = TechnicalIndicatorSettings()
     volume_flow: VolumeFlowSettings = VolumeFlowSettings()
     option_positioning: OptionPositioningSettings = OptionPositioningSettings()

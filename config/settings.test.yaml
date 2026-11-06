@@ -161,6 +161,10 @@ evidence:
       enabled: false
       blackout_minutes_before: 30
       blackout_minutes_after: 30
+    event_reactions:
+      enabled: false
+      observation_windows: [5, 15, 30, 60]
+      max_reactions: 1000
     technical_indicator:
       enabled: true
       timeframes: [1m, 15m, 60m]
