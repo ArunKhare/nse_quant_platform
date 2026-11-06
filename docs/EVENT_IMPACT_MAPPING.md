@@ -17,6 +17,21 @@
 - Malformed mapping text marks the result incomplete rather than fabricating a mapping.
 - Confidence outside `0.0..1.0` is retained as null.
 
+## Decision-loop integration
+
+The mapper is registered in `DecisionLoop` only when both `evidence.enabled` and `evidence.plugins.event_impact.enabled` are true.
+
+```yaml
+evidence:
+  plugins:
+    event_impact:
+      enabled: false
+      blackout_minutes_before: 30
+      blackout_minutes_after: 30
+```
+
+The default configuration keeps the mapper disabled. Enabling it adds observational evidence; it does not create a blocking gate or alter execution authorization.
+
 ## Safety
 
 - `ingested_at <= decision_ts` prevents future-ingested records from leaking into historical evaluations.

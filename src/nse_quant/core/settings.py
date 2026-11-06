@@ -415,9 +415,22 @@ class InstitutionalRegimeSettings(BaseModel):
         return self
 
 
+class EventImpactSettings(BaseModel):
+    enabled: bool = False
+    blackout_minutes_before: int = 30
+    blackout_minutes_after: int = 30
+
+    @model_validator(mode="after")
+    def validate_blackout_windows(self) -> Self:
+        if self.blackout_minutes_before < 0 or self.blackout_minutes_after < 0:
+            raise ValueError("event_impact blackout minutes must be >= 0")
+        return self
+
+
 class EvidencePluginsSettings(BaseModel):
     multi_timeframe: MultiTimeframeEvidenceSettings = MultiTimeframeEvidenceSettings()
     event_risk: EventRiskSettings = EventRiskSettings()
+    event_impact: EventImpactSettings = EventImpactSettings()
     technical_indicators: TechnicalIndicatorSettings = TechnicalIndicatorSettings()
     volume_flow: VolumeFlowSettings = VolumeFlowSettings()
     option_positioning: OptionPositioningSettings = OptionPositioningSettings()

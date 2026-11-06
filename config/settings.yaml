@@ -150,6 +150,10 @@ evidence:
       block_new_entries: false
       blackout_minutes_before: 30
       blackout_minutes_after: 30
+    event_impact:
+      enabled: false
+      blackout_minutes_before: 30
+      blackout_minutes_after: 30
     technical_indicator:
       enabled: true
       timeframes: [1m, 15m, 60m]
