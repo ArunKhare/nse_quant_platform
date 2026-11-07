@@ -13,6 +13,10 @@ from nse_quant.research.evidence_plugins.base import (
     DecisionContext,
     EvidencePlugin,
 )
+from nse_quant.research.institutional_regime_price_action import (
+    InstitutionalRegimePriceActionSettings,
+    compute_price_action,
+)
 from nse_quant.research.institutional_regime_skew import (
     InstitutionalRegimeSkewSettings,
     compute_skew,
@@ -33,6 +37,7 @@ class InstitutionalRegimePlugin(EvidencePlugin):
         self._store = store
         self._settings = settings
         self._skew_settings = InstitutionalRegimeSkewSettings()
+        self._price_action_settings = InstitutionalRegimePriceActionSettings()
 
     def build(self, context: DecisionContext) -> dict[str, Any]:
         as_of = self._utc(context.ts)
@@ -157,11 +162,12 @@ class InstitutionalRegimePlugin(EvidencePlugin):
         )
 
         skew_component = self._skew(snapshot)
+        price_action_component = self._price_action(context)
 
         components = {
             "iv_state": iv_component,
             "skew": skew_component,
-            "price_action": self._pending_price_action(),
+            "price_action": price_action_component,
             "term_structure": term_component,
         }
 
@@ -172,7 +178,7 @@ class InstitutionalRegimePlugin(EvidencePlugin):
             "symbol": context.symbol,
             "expiry": snapshot.expiry.isoformat(),
             "snapshot_ts": snapshot_ts.isoformat(),
-            "classifier_version": "institutional_iv_term_components_v3",
+            "classifier_version": "institutional_iv_term_components_v4",
             "mode": "observation",
             "regime_label": None,
             "components": components,
@@ -186,7 +192,9 @@ class InstitutionalRegimePlugin(EvidencePlugin):
                 if not term_component["complete"]
                 else skew_component["reason"]
                 if not skew_component["complete"]
-                else "price_action_not_implemented"
+                else price_action_component["reason"]
+                if not price_action_component["complete"]
+                else None
             ),
         }
 
@@ -211,6 +219,42 @@ class InstitutionalRegimePlugin(EvidencePlugin):
             put_iv=put_iv,
             call_iv=call_iv,
             settings=self._skew_settings,
+        )
+
+    def _price_action(self, context: DecisionContext) -> dict[str, Any]:
+        token = context.spot_instrument_token
+        rows = self._store.conn.execute(
+            """
+            SELECT ts, open, high, low, close, volume
+            FROM spot_candles
+            WHERE instrument_token = ?
+              AND interval = '1m'
+              AND ts <= ?
+            ORDER BY ts DESC
+            LIMIT ?
+            """,
+            [token, context.ts, 6000],
+        ).fetchall()
+
+        if not rows:
+            return {
+                "available": False,
+                "complete": False,
+                "state": "INSUFFICIENT_DATA",
+                "reason": "no_1m_history",
+                "decision_eligibility_asserted": False,
+            }
+
+        rows = list(reversed(rows))
+        closes = [float(row[4]) for row in rows]
+        highs = [float(row[2]) for row in rows]
+        lows = [float(row[3]) for row in rows]
+
+        return compute_price_action(
+            closes=closes,
+            highs=highs,
+            lows=lows,
+            settings=self._price_action_settings,
         )
 
     def _term_structure(
@@ -372,7 +416,7 @@ class InstitutionalRegimePlugin(EvidencePlugin):
             "complete": False,
             "as_of": as_of.isoformat(),
             "symbol": context.symbol,
-            "classifier_version": "institutional_iv_term_components_v3",
+            "classifier_version": "institutional_iv_term_components_v4",
             "mode": "observation",
             "regime_label": None,
             "components": {
@@ -388,7 +432,12 @@ class InstitutionalRegimePlugin(EvidencePlugin):
                     "state": None,
                     "reason": reason,
                 },
-                "price_action": self._pending_price_action(),
+                "price_action": {
+                    "available": False,
+                    "complete": False,
+                    "state": "INSUFFICIENT_DATA",
+                    "reason": reason,
+                },
                 "term_structure": {
                     "available": False,
                     "complete": False,
@@ -403,15 +452,6 @@ class InstitutionalRegimePlugin(EvidencePlugin):
                 "price_action",
             ],
             "reason": reason,
-        }
-
-    @staticmethod
-    def _pending_price_action() -> dict[str, Any]:
-        return {
-            "available": False,
-            "complete": False,
-            "state": None,
-            "reason": "not_implemented",
         }
 
     @staticmethod
