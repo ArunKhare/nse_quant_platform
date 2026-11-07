@@ -171,30 +171,45 @@ class InstitutionalRegimePlugin(EvidencePlugin):
             "term_structure": term_component,
         }
 
+        all_complete = all(component["complete"] for component in components.values())
+        regime_label = (
+            "_".join(
+                [
+                    iv_component["state"],
+                    term_component["state"],
+                    skew_component["state"],
+                    price_action_component["state"],
+                ]
+            )
+            if all_complete
+            else None
+        )
+
         return {
             "available": True,
-            "complete": False,
+            "complete": all_complete,
             "as_of": as_of.isoformat(),
             "symbol": context.symbol,
             "expiry": snapshot.expiry.isoformat(),
             "snapshot_ts": snapshot_ts.isoformat(),
             "classifier_version": "institutional_iv_term_components_v4",
             "mode": "observation",
-            "regime_label": None,
+            "regime_label": regime_label,
             "components": components,
             "missing_components": [
                 name for name, component in components.items() if not component["complete"]
             ],
             "reason": (
-                iv_reason
-                if iv_reason is not None
-                else term_component["reason"]
-                if not term_component["complete"]
-                else skew_component["reason"]
-                if not skew_component["complete"]
-                else price_action_component["reason"]
-                if not price_action_component["complete"]
-                else None
+                None
+                if all_complete
+                else next(
+                    (
+                        component["reason"]
+                        for component in components.values()
+                        if not component["complete"]
+                    ),
+                    "incomplete_components",
+                )
             ),
         }
 
