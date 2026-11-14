@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import re
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -29,6 +30,7 @@ SCHEMA = (
     ("atr_60m_14", "DOUBLE"),
     ("range_position_60m", "DOUBLE"),
 )
+NAMES = tuple(name for name, _kind in SCHEMA)
 KEY = ("symbol", "ts")
 MAX_ROWS = 1000
 MAX_CELL = 65536
@@ -76,7 +78,7 @@ def parse(raw: bytes, maximum: int) -> dict[str, Any]:
     if type(raw) is not bytes or not 0 < len(raw) <= maximum:
         raise Rejected("SPOT_FEATURE_CONTENT_BYTE_BOUND")
     try:
-        value = json.loads(raw, parse_constant=_invalid)
+        value = json.loads(raw, object_pairs_hook=_pairs, parse_constant=_invalid)
         if type(value) is not dict or canonical(value) != raw:
             raise Rejected("EXACT_CANONICAL_SPOT_FEATURE_OUTER_OBJECT_REQUIRED")
         return value
@@ -84,6 +86,15 @@ def parse(raw: bytes, maximum: int) -> dict[str, Any]:
         raise
     except (TypeError, ValueError, UnicodeError, RecursionError, OverflowError):
         raise Rejected("MALFORMED_SPOT_FEATURE_OUTER_JSON") from None
+
+
+def _pairs(items: list[tuple[str, Any]]) -> dict[str, Any]:
+    result: dict[str, Any] = {}
+    for key, value in items:
+        if key in result:
+            raise Rejected("DUPLICATE_JSON_KEY")
+        result[key] = value
+    return result
 
 
 def encode_cell(value: object, kind: str) -> object:
@@ -94,7 +105,7 @@ def encode_cell(value: object, kind: str) -> object:
             raise Rejected("AWARE_STORED_SPOT_FEATURE_INSTANT_REQUIRED")
         return value.astimezone(UTC).isoformat()
     if kind == "DOUBLE":
-        if type(value) is not float or value.hex() != value.hex():
+        if type(value) is not float or not math.isfinite(value):
             raise Rejected("FINITE_STORED_SPOT_FEATURE_BINARY64_REQUIRED")
         return value.hex()
     if kind != "VARCHAR" or type(value) is not str:
@@ -223,6 +234,9 @@ def derive_records(
                 feature_interpreted=False,
                 trend_interpreted=False,
                 volatility_interpreted=False,
+                native_features_recomputed=False,
+                analytical_assumptions_verified=False,
+                authoritative_market_coverage_verified=False,
                 original_provider_bytes_retained=False,
                 overwritten_history_recovered=False,
                 original_feature_execution_replayed=False,

@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import json
+from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from typing import Any
 
 from nse_quant.data_platform import legacy_daily_rv_gold as rv_gold
+from nse_quant.data_platform import legacy_market_gold as price_codec
+from nse_quant.data_platform import legacy_market_gold_store as price_store
 from nse_quant.data_platform import legacy_market_regimes_gold as regime_gold
 from nse_quant.data_platform import legacy_silver_common as base
 from nse_quant.data_platform import legacy_spot_candles_gold as candle_gold
@@ -15,6 +18,10 @@ from nse_quant.data_platform import legacy_underlying_iv_gold as iv_gold
 from nse_quant.data_platform.audit import AuditLedger
 from nse_quant.data_platform.legacy_spot_candles import Rejected, sha
 
+# Compatibility namespace for legacy_market_publication, which addresses the
+# shared hash/canonical/pin helpers as bundle.gold.*.
+gold = base
+
 VERSION = "legacy-market-gold-bundle-recording@1"
 COMMAND = "persist.legacy_market_gold_bundle@1"
 TABLE = "market_gold_bundle"
@@ -22,6 +29,10 @@ OBSERVATIONS = "market_gold_bundle_observations"
 SETS = "market_gold_bundle_sets"
 ATTEMPTS = "market_gold_bundle_attempts"
 MAX_CONTEXT = 1048576
+MAX_BYTES = 16 * 1024 * 1024
+MAX_COMPONENTS = 16000
+BUNDLE_VERSION = "legacy-market-gold-bundle@1"
+PURPOSE = "RESEARCH_ONLY"
 MEMBERS = (
     "spot_candles",
     "spot_features",
@@ -30,6 +41,28 @@ MEMBERS = (
     "daily_rv",
 )
 DEFINITION = (VERSION, COMMAND, "derived only from the five reviewed per-table Gold recordings")
+_DOCUMENT_KEYS = {
+    "version",
+    "request",
+    "inputs",
+    "outputs",
+    "gold_definition",
+    "runtime",
+    "purpose",
+    "publication_asserted",
+    "decision_eligibility_asserted",
+    "canonical_contract_id",
+}
+
+
+@dataclass(frozen=True)
+class LegacyGoldBundleRequest:
+    build_id: str
+    recording_fingerprint: str
+
+    def __post_init__(self) -> None:
+        if not base.pin(self.build_id) or not base.pin(self.recording_fingerprint):
+            raise ValueError("EXACT_MARKET_GOLD_BUNDLE_REQUEST_PINS_REQUIRED")
 
 
 def scope_id(source_label: str) -> str:
@@ -353,3 +386,149 @@ def revalidate_market_gold_bundle(
     if context != recorded_context:
         raise Rejected("MARKET_GOLD_BUNDLE_REVALIDATION_MISMATCH")
     return first
+
+
+def _pairs(items: list[tuple[str, Any]]) -> dict[str, Any]:
+    result: dict[str, Any] = {}
+    for key, value in items:
+        if key in result:
+            raise ValueError("DUPLICATE_MARKET_GOLD_BUNDLE_JSON_KEY")
+        result[key] = value
+    return result
+
+
+def _hex(value: object) -> bytes:
+    if type(value) is not str or len(value) % 2:
+        raise ValueError("MARKET_GOLD_BUNDLE_COMPONENT_FORMAT_INVALID")
+    try:
+        return bytes.fromhex(value)
+    except ValueError as exc:
+        raise ValueError("MARKET_GOLD_BUNDLE_COMPONENT_FORMAT_INVALID") from exc
+
+
+def _component_bound(values: object, label: str) -> list[bytes]:
+    if type(values) is not list or not 1 <= len(values) <= MAX_COMPONENTS:
+        raise ValueError("MARKET_GOLD_BUNDLE_COMPONENT_BOUND")
+    return [_hex(value) for value in values]
+
+
+def assemble_legacy_gold_bundle(
+    bronze: Any,
+    silver: Any,
+    gold: Any,
+    *,
+    request: LegacyGoldBundleRequest,
+) -> bytes:
+    if type(request) is not LegacyGoldBundleRequest:
+        raise TypeError("TYPED_MARKET_GOLD_BUNDLE_REQUEST_REQUIRED")
+
+    first = price_store.revalidate_legacy_price_gold(
+        bronze,
+        silver,
+        gold,
+        build_id=request.build_id,
+        expected_recording_fingerprint=request.recording_fingerprint,
+    )
+    fingerprint, outputs, inputs, _pins = price_store._recording(gold, request.build_id)
+    if fingerprint != request.recording_fingerprint or outputs != first:
+        raise ValueError("REVIEWED_MARKET_GOLD_RECORDING_CHANGED")
+
+    second = price_store.revalidate_legacy_price_gold(
+        bronze,
+        silver,
+        gold,
+        build_id=request.build_id,
+        expected_recording_fingerprint=request.recording_fingerprint,
+    )
+    if second != first:
+        raise ValueError("MARKET_GOLD_BUNDLE_NATIVE_SOURCE_DRIFT")
+
+    raw = base.canonical(
+        dict(
+            version=BUNDLE_VERSION,
+            request=asdict(request),
+            inputs=[record.hex() for record in inputs],
+            outputs=[record.hex() for record in outputs],
+            gold_definition=price_store._definition().hex(),
+            runtime=price_store._runtime().hex(),
+            purpose=PURPOSE,
+            publication_asserted=False,
+            decision_eligibility_asserted=False,
+            canonical_contract_id=None,
+        )
+    )
+    if len(raw) > MAX_BYTES:
+        raise ValueError("MARKET_GOLD_BUNDLE_BYTE_BOUND")
+    return raw
+
+
+def replay_legacy_gold_bundle(raw: bytes, *, expected_bundle_id: str) -> bytes:
+    if type(raw) is not bytes or not 0 < len(raw) <= MAX_BYTES:
+        raise ValueError("MARKET_GOLD_BUNDLE_BYTE_BOUND")
+    if not base.pin(expected_bundle_id) or base.sha(raw) != expected_bundle_id:
+        raise ValueError("EXACT_MARKET_GOLD_BUNDLE_PIN_REQUIRED")
+
+    try:
+        document = json.loads(raw, object_pairs_hook=_pairs)
+    except (UnicodeDecodeError, json.JSONDecodeError, ValueError) as exc:
+        raise ValueError("MARKET_GOLD_BUNDLE_CONTENT_MALFORMED") from exc
+
+    if (
+        type(document) is not dict
+        or set(document) != _DOCUMENT_KEYS
+        or document["version"] != BUNDLE_VERSION
+        or type(document["request"]) is not dict
+        or set(document["request"]) != {"build_id", "recording_fingerprint"}
+        or type(document["request"]["build_id"]) is not str
+        or type(document["request"]["recording_fingerprint"]) is not str
+        or not base.pin(document["request"]["recording_fingerprint"])
+        or document["purpose"] != PURPOSE
+        or document["publication_asserted"] is not False
+        or document["decision_eligibility_asserted"] is not False
+        or document["canonical_contract_id"] is not None
+        or document["gold_definition"] != price_store._definition().hex()
+        or document["runtime"] != price_store._runtime().hex()
+    ):
+        raise ValueError("MARKET_GOLD_BUNDLE_CONTRACT_MISMATCH")
+
+    inputs = _component_bound(document["inputs"], "inputs")
+    outputs = _component_bound(document["outputs"], "outputs")
+    if len(inputs) != len(outputs):
+        raise ValueError("MARKET_GOLD_BUNDLE_COMPONENT_BOUND")
+
+    try:
+        source_pins = price_codec.GoldSourcePins(**json.loads(outputs[0])["source_pins"])
+    except (TypeError, ValueError, KeyError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise ValueError("MARKET_GOLD_BUNDLE_SOURCE_PINS_MALFORMED") from exc
+
+    try:
+        derived = price_codec.derive_gold_records(tuple(inputs), pins=source_pins)
+    except (TypeError, ValueError, KeyError, OverflowError, RecursionError) as exc:
+        raise ValueError("MARKET_GOLD_BUNDLE_OFFLINE_RECOMPUTATION_MISMATCH") from exc
+
+    if [record.hex() for record in derived] != document["outputs"]:
+        raise ValueError("MARKET_GOLD_BUNDLE_OFFLINE_RECOMPUTATION_MISMATCH")
+
+    return raw
+
+
+def revalidate_legacy_gold_bundle(
+    bronze: Any,
+    silver: Any,
+    gold: Any,
+    *,
+    raw: bytes,
+    expected_bundle_id: str,
+) -> bytes:
+    document = json.loads(replay_legacy_gold_bundle(raw, expected_bundle_id=expected_bundle_id))
+    request = LegacyGoldBundleRequest(**document["request"])
+    current = price_store.revalidate_legacy_price_gold(
+        bronze,
+        silver,
+        gold,
+        build_id=request.build_id,
+        expected_recording_fingerprint=request.recording_fingerprint,
+    )
+    if [record.hex() for record in current] != document["outputs"]:
+        raise ValueError("MARKET_GOLD_BUNDLE_CURRENT_NATIVE_SOURCE_CHANGED")
+    return raw

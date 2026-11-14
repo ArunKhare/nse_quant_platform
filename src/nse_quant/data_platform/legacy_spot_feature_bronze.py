@@ -55,7 +55,9 @@ def capture_spot_features(source: Any, *, source_label: str) -> codec.Snapshot:
             raise codec.Rejected("WHOLE_TABLE_ROW_BOUND")
         if totals[1] > codec.MAX_BYTES or totals[2] > codec.MAX_CELL:
             raise codec.Rejected("TEXT_TRANSFER_BOUND")
-        numeric_columns = ",".join('"' + n + '"' for n in codec.NAMES[2:])
+        numeric_columns = ",".join(
+            '"' + name + '"' for name, kind in codec.SCHEMA[2:] if kind == "DOUBLE"
+        )
         rows = source.execute(
             f"SELECT CASE WHEN octet_length(encode(symbol))<=? THEN symbol END,ts,"
             f"{numeric_columns} FROM {table} LIMIT ?",

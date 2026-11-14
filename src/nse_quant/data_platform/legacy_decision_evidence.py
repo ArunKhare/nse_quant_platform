@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import re
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 
@@ -11,7 +13,7 @@ from nse_quant.data_platform import legacy_silver_common as base
 from nse_quant.data_platform.audit import AuditLedger
 from nse_quant.data_platform.legacy_spot_candles import Rejected, sha
 
-VERSION = "legacy-decision-evidence-recording@1"
+VERSION = "legacy-decision-evidence-snapshot@1"
 COMMAND = "persist.legacy_decision_evidence@1"
 TABLE = "decision_evidence"
 OBSERVATIONS = "decision_evidence_observations"
@@ -24,6 +26,260 @@ DEFINITION = (
     COMMAND,
     "derived only from the reviewed market Gold bundle; no eligibility granted",
 )
+
+# Retained legacy decision-evidence codec contract. These are wall-clock fields:
+# no timezone, availability, validity, or decision eligibility is inferred.
+SCHEMA = (
+    ("evidence_id", "VARCHAR"),
+    ("run_id", "VARCHAR"),
+    ("ts", "TIMESTAMP"),
+    ("symbol", "VARCHAR"),
+    ("plugin", "VARCHAR"),
+    ("available", "BOOLEAN"),
+    ("payload_json", "VARCHAR"),
+)
+MAX_ROWS = 1000
+MAX_CELL = 65536
+MAX_BYTES = 1048576
+MAX_RECORD = 524288
+MAX_RECORDS = 4194304
+
+_NATURAL_KEY = ("run_id", "ts", "symbol", "plugin")
+
+
+def canonical(value: object) -> bytes:
+    return json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
+
+
+def pin(value: object) -> bool:
+    return type(value) is str and re.fullmatch(r"[a-f0-9]{64}", value) is not None
+
+
+def label(value: object) -> bool:
+    return type(value) is str and re.fullmatch(r"[A-Za-z0-9_-]{1,64}", value) is not None
+
+
+def wall_fields(value: object) -> str:
+    if not isinstance(value, datetime) or value.tzinfo is not None:
+        raise Rejected("NAIVE_STORED_WALL_FIELDS_REQUIRED")
+    return value.isoformat()
+
+
+def _pairs(items: list[tuple[str, Any]]) -> dict[str, Any]:
+    result: dict[str, Any] = {}
+    for key, value in items:
+        if key in result:
+            raise Rejected("DUPLICATE_JSON_KEY")
+        result[key] = value
+    return result
+
+
+def _invalid(_value: str) -> Any:
+    raise Rejected("NONFINITE_DECISION_EVIDENCE_OUTER_JSON")
+
+
+def parse(raw: bytes, maximum: int) -> dict[str, Any]:
+    if type(raw) is not bytes or not 0 < len(raw) <= maximum:
+        raise Rejected("DECISION_EVIDENCE_CONTENT_BYTE_BOUND")
+    try:
+        value = json.loads(raw, object_pairs_hook=_pairs, parse_constant=_invalid)
+        if type(value) is not dict or canonical(value) != raw:
+            raise Rejected("EXACT_CANONICAL_DECISION_EVIDENCE_OUTER_OBJECT_REQUIRED")
+        return value
+    except Rejected:
+        raise
+    except (TypeError, ValueError, RecursionError, OverflowError):
+        raise Rejected("MALFORMED_DECISION_EVIDENCE_OUTER_JSON") from None
+
+
+def encode_cell(value: object, kind: str) -> object:
+    if kind == "BOOLEAN":
+        if type(value) is not bool:
+            raise Rejected("DECISION_EVIDENCE_BOOLEAN_CELL_REQUIRED")
+        return value
+
+    if value is None:
+        return None
+
+    if kind == "TIMESTAMP":
+        if isinstance(value, datetime):
+            if value.tzinfo is not None:
+                raise Rejected("NAIVE_STORED_WALL_FIELDS_REQUIRED")
+            return wall_fields(value)
+
+        if isinstance(value, str):
+            try:
+                parsed = datetime.strptime(
+                    value,
+                    "%Y-%m-%dT%H:%M:%S.%f",
+                )
+            except ValueError as exc:
+                raise Rejected("NAIVE_STORED_WALL_FIELDS_REQUIRED") from exc
+
+            if wall_fields(parsed) != value:
+                raise Rejected("NAIVE_STORED_WALL_FIELDS_REQUIRED")
+
+            return value
+
+        raise Rejected("NAIVE_STORED_WALL_FIELDS_REQUIRED")
+
+    if kind == "VARCHAR":
+        if type(value) is not str:
+            raise Rejected("DECISION_EVIDENCE_TEXT_CELL_REQUIRED")
+        if len(value.encode("utf-8")) > MAX_CELL:
+            raise Rejected("TEXT_TRANSFER_BOUND")
+        return value
+
+    raise Rejected("DECISION_EVIDENCE_CELL_KIND_UNSUPPORTED")
+
+
+def _row(row: object) -> list[object]:
+    if type(row) is not list or len(row) != len(SCHEMA):
+        raise Rejected("EXACT_DECISION_EVIDENCE_ROW_SCHEMA_REQUIRED")
+
+    checked = [encode_cell(value, kind) for value, (_name, kind) in zip(row, SCHEMA, strict=True)]
+
+    if not checked[0]:
+        raise Rejected("DECISION_EVIDENCE_PRIMARY_KEY_UNKNOWN")
+
+    natural = (checked[1], checked[2], checked[3], checked[4])
+    if any(value is None for value in natural):
+        raise Rejected("DECISION_EVIDENCE_NATURAL_KEY_UNKNOWN")
+
+    return checked
+
+
+@dataclass(frozen=True)
+class Snapshot:
+    snapshot_id: str
+    payload: bytes
+    row_count: int
+
+
+def make_snapshot(source_label: str, rows: list[list[object]]) -> Snapshot:
+    if not label(source_label):
+        raise Rejected("EXPLICIT_DECISION_EVIDENCE_SOURCE_LABEL_REQUIRED")
+    if type(rows) is not list or not 1 <= len(rows) <= MAX_ROWS:
+        raise Rejected("WHOLE_DECISION_EVIDENCE_TABLE_ROW_BOUND")
+
+    try:
+        checked = [_row(row) for row in rows]
+
+        if (
+            sum(
+                len(value.encode())
+                for row in checked
+                for index, value in enumerate(row)
+                if index != 2 and isinstance(value, str)
+            )
+            > MAX_BYTES
+        ):
+            raise Rejected("DECISION_EVIDENCE_TEXT_AGGREGATE_BOUND")
+
+        primary_keys = [row[0] for row in checked]
+        if len(set(primary_keys)) != len(primary_keys):
+            raise Rejected("DUPLICATE_PRIMARY_OR_NATURAL_EVIDENCE_KEY")
+
+        natural_keys = [tuple(row[index] for index in (1, 2, 3, 4)) for row in checked]
+        if len(set(natural_keys)) != len(natural_keys):
+            raise Rejected("DUPLICATE_PRIMARY_OR_NATURAL_EVIDENCE_KEY")
+
+        ordered = sorted(checked, key=lambda row: canonical(row[0]))
+        raw = canonical(
+            dict(
+                version=VERSION,
+                table=TABLE,
+                source_label=source_label,
+                rows=ordered,
+            )
+        )
+
+        if len(raw) > MAX_BYTES:
+            raise Rejected("DECISION_EVIDENCE_SNAPSHOT_BYTE_BOUND")
+
+        return Snapshot(sha(raw), raw, len(ordered))
+    except Rejected:
+        raise
+    except (
+        ValueError,
+        TypeError,
+        KeyError,
+        OverflowError,
+        RecursionError,
+    ):
+        raise Rejected("MALFORMED_RETAINED_DECISION_EVIDENCE_ROWS") from None
+
+
+def replay_snapshot(raw: bytes, *, expected_snapshot_id: str) -> dict[str, Any]:
+    document = parse(raw, MAX_BYTES)
+
+    if not pin(expected_snapshot_id) or sha(raw) != expected_snapshot_id:
+        raise Rejected("EXACT_DECISION_EVIDENCE_SNAPSHOT_PIN_REQUIRED")
+
+    try:
+        replayed = make_snapshot(document["source_label"], document["rows"])
+        if replayed.payload != raw:
+            raise Rejected("COMPLETE_DECISION_EVIDENCE_REPLAY_MISMATCH")
+        return document
+    except Rejected:
+        raise
+    except (
+        ValueError,
+        TypeError,
+        KeyError,
+        OverflowError,
+        RecursionError,
+    ):
+        raise Rejected("MALFORMED_DECISION_EVIDENCE_SNAPSHOT_CONTRACT") from None
+
+
+def derive_records(
+    raw: bytes,
+    *,
+    snapshot_id: str,
+    capture_event_id: str,
+    envelope_hash: str,
+) -> tuple[bytes, ...]:
+    if not pin(capture_event_id) or not pin(envelope_hash):
+        raise Rejected("EXACT_DECISION_EVIDENCE_NATIVE_PINS_REQUIRED")
+
+    document = replay_snapshot(raw, expected_snapshot_id=snapshot_id)
+    records: list[bytes] = []
+    total = 0
+
+    for ordinal, row in enumerate(document["rows"]):
+        fields = dict(zip((name for name, _kind in SCHEMA), row, strict=True))
+        record = canonical(
+            dict(
+                version="legacy-decision-evidence-observation@1",
+                source_label=document["source_label"],
+                snapshot_id=snapshot_id,
+                capture_event_id=capture_event_id,
+                envelope_hash=envelope_hash,
+                source_ordinal=ordinal,
+                stored_key=[row[0]],
+                stored_fields=fields,
+                classification="RETAINED_LEGACY_DECISION_EVIDENCE_NOT_NATIVE_TRUTH",
+                stored_ts_instant=None,
+                source_timezone=None,
+                original_availability_at=None,
+                payload_interpreted=False,
+                native_decision_replayed=False,
+                canonical_contract_id=None,
+                availability_evidence_verified=False,
+                economic_validity_verified=False,
+                publication_asserted=False,
+                decision_eligibility_asserted=False,
+            )
+        )
+
+        total += len(record)
+        if len(record) > MAX_RECORD or total > MAX_RECORDS:
+            raise Rejected("EVIDENCE_RECORD_BYTE_BOUND")
+
+        records.append(record)
+
+    return tuple(records)
 
 
 def scope_id(source_label: str) -> str:

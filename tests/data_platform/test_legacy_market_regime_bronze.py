@@ -448,7 +448,7 @@ def test_projection_overflow_fails_before_native_append(tmp_path: Path) -> None:
         BronzeEventStore(target).initialize()
         snapshot = native.capture_market_regimes(source, source_label="fixture")
         assert len(snapshot.payload) <= codec.MAX_BYTES
-        with pytest.raises(codec.Rejected, match="REGIME_RECORD_BYTE_BOUND"):
+        with pytest.raises(codec.Rejected, match="MARKET_REGIME_PROJECTION_BYTE_BOUND"):
             native.preserve_market_regimes(
                 source,
                 target,
@@ -498,12 +498,12 @@ def test_outer_contract_strict_nested_payload_opaque() -> None:
     doc = codec.parse(snapshot.payload, codec.MAX_BYTES)
     doc["unknown"] = True
     raw = codec.canonical(doc)
-    with pytest.raises(codec.Rejected, match="COMPLETE_REGIME_REPLAY_MISMATCH"):
+    with pytest.raises(codec.Rejected, match="COMPLETE_MARKET_REGIME_SNAPSHOT_REPLAY_MISMATCH"):
         codec.replay_snapshot(raw, expected_snapshot_id=codec.sha(raw))
-    with pytest.raises(codec.Rejected, match="DUPLICATE_STORED_REGIME_KEY"):
+    with pytest.raises(codec.Rejected, match="DUPLICATE_MARKET_REGIME_COMPOSITE_KEY_NO_WINNER"):
         codec.make_snapshot("fixture", [row, row])
     duplicate = b'{"version":1,"version":2}'
-    with pytest.raises(codec.Rejected, match="DUPLICATE_JSON_KEY"):
+    with pytest.raises(codec.Rejected, match="DUPLICATE_MARKET_REGIME_OUTER_JSON_KEY"):
         codec.replay_snapshot(duplicate, expected_snapshot_id=codec.sha(duplicate))
 
 

@@ -95,6 +95,16 @@ def _args(receipt: dict[str, Any]) -> dict[str, str]:
     )
 
 
+def _schema(conn: Any) -> list[tuple[str, str]]:
+    table = common.name(conn, "main", codec.TABLE)
+    try:
+        return [
+            (row[0], row[1]) for row in conn.execute(f"DESCRIBE SELECT * FROM {table}").fetchall()
+        ]
+    except duckdb.CatalogException:
+        return list(codec.SCHEMA)
+
+
 def test_actual_writer_native_chain_and_all_stored_fields(tmp_path: Path) -> None:
     source_path, bronze_path, receipt = _record(tmp_path)
     source = duckdb.connect(str(source_path), read_only=True)
@@ -106,7 +116,8 @@ def test_actual_writer_native_chain_and_all_stored_fields(tmp_path: Path) -> Non
         )
         assert len(records) == 3
         table = common.name(source, "main", codec.TABLE)
-        columns = ",".join('"' + n + '"' for n, _ in codec.SCHEMA)
+        schema = _schema(source)
+        columns = ",".join('"' + n + '"' for n, _ in schema)
         originals = source.execute(f"SELECT {columns} FROM {table}").fetchall()
         by_id = {row[0]: row for row in originals}
         for ordinal, raw in enumerate(records):
@@ -114,8 +125,7 @@ def test_actual_writer_native_chain_and_all_stored_fields(tmp_path: Path) -> Non
             fields = doc["stored_fields"]
             row = by_id[fields["evidence_id"]]
             assert fields == {
-                n: codec.encode_cell(v, kind)
-                for v, (n, kind) in zip(row, codec.SCHEMA, strict=True)
+                n: codec.encode_cell(v, kind) for v, (n, kind) in zip(row, schema, strict=True)
             }
             assert fields["ts"].endswith(f".{row[2].microsecond:06d}")
             assert type(fields["available"]) is bool
@@ -263,7 +273,7 @@ def test_schema_key_and_whole_table_boundaries(tmp_path: Path, kind: str) -> Non
         else:
             columns = ",".join(
                 f'"{n}" {"TIMESTAMPTZ" if n == "ts" and kind == "aware-schema" else k}'
-                for n, k in codec.SCHEMA
+                for n, k in _schema(writer)
             )
             writer.execute(f"CREATE TABLE {table} ({columns})")
             if kind != "empty":

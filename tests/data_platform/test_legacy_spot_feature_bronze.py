@@ -433,13 +433,13 @@ def test_second_actual_capture_then_injected_drift(tmp_path: Path, monkeypatch: 
 
 def test_strict_outer_json_and_duplicate_key() -> None:
     row = ["N", AT.isoformat(), *([None] * 13)]
-    with pytest.raises(codec.Rejected, match="DUPLICATE_STORED_SPOT_KEY"):
+    with pytest.raises(codec.Rejected, match="DUPLICATE_SPOT_FEATURE_COMPOSITE_KEY_NO_WINNER"):
         codec.make_snapshot("fixture", [row, row])
     snapshot = codec.make_snapshot("fixture", [row])
     doc = codec.parse(snapshot.payload, codec.MAX_BYTES)
     doc["unknown"] = True
     changed = codec.canonical(doc)
-    with pytest.raises(codec.Rejected, match="COMPLETE_SPOT_FEATURE_REPLAY_MISMATCH"):
+    with pytest.raises(codec.Rejected, match="COMPLETE_SPOT_FEATURE_SNAPSHOT_REPLAY_MISMATCH"):
         codec.replay_snapshot(changed, expected_snapshot_id=codec.sha(changed))
     duplicate = b'{"version":1,"version":2}'
     with pytest.raises(codec.Rejected, match="DUPLICATE_JSON_KEY"):

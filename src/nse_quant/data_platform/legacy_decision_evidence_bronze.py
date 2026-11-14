@@ -47,34 +47,43 @@ def capture_decision_evidence(source: Any, *, source_label: str) -> codec.Snapsh
         ).fetchall()
         if tuple(schema) != codec.SCHEMA or objects != [("BASE TABLE",)]:
             raise codec.Rejected("EXACT_DECISION_EVIDENCE_SCHEMA_REQUIRED")
-        names = [n for n, kind in codec.SCHEMA if kind == "VARCHAR"]
-        lengths = [f'octet_length(encode("{n}"))' for n in names]
-        total = "+".join(f"coalesce({x},0)" for x in lengths)
-        maximum = "greatest(" + ",".join(f"coalesce({x},0)" for x in lengths) + ")"
-        totals = source.execute(
-            f"SELECT count(*),coalesce(sum({total}),0),coalesce(max({maximum}),0) FROM {table}"
-        ).fetchone()
-        if totals is None or not 1 <= totals[0] <= codec.MAX_ROWS:
-            raise codec.Rejected("WHOLE_TABLE_ROW_BOUND")
-        if totals[1] > codec.MAX_BYTES or totals[2] > codec.MAX_CELL:
-            raise codec.Rejected("TEXT_TRANSFER_BOUND")
-        columns = []
-        for n, kind in codec.SCHEMA:
-            if kind == "VARCHAR":
-                columns.append(
-                    f'CASE WHEN octet_length(encode("{n}"))<= {codec.MAX_CELL} THEN "{n}" END'
-                )
-            else:
-                columns.append(f'"{n}"')
+
+        columns = [f'"{name}"' for name, _kind in codec.SCHEMA]
         rows = source.execute(
-            f"SELECT {','.join(columns)} FROM {table} LIMIT ?", [codec.MAX_ROWS + 1]
+            f"SELECT {','.join(columns)} FROM {table} LIMIT ?",
+            [codec.MAX_ROWS + 1],
         ).fetchall()
-        if len(rows) != totals[0]:
+
+        if not 1 <= len(rows) <= codec.MAX_ROWS:
             raise codec.Rejected("WHOLE_TABLE_ROW_BOUND")
-        encoded = [
-            [codec.encode_cell(v, kind) for v, (_n, kind) in zip(row, codec.SCHEMA, strict=True)]
-            for row in rows
-        ]
+
+        encoded = []
+        total_bytes = 0
+        maximum_bytes = 0
+
+        for row in rows:
+            encoded_row = [
+                codec.encode_cell(value, kind)
+                for value, (_name, kind) in zip(row, codec.SCHEMA, strict=True)
+            ]
+
+            for index, (_name, kind) in enumerate(codec.SCHEMA):
+                if kind != "VARCHAR":
+                    continue
+                value = encoded_row[index]
+                if value is None:
+                    continue
+                size = len(value.encode("utf-8"))
+                total_bytes += size
+                maximum_bytes = max(maximum_bytes, size)
+
+            encoded.append(encoded_row)
+
+        if total_bytes > codec.MAX_BYTES or maximum_bytes > codec.MAX_CELL:
+            raise codec.Rejected("TEXT_TRANSFER_BOUND")
+        print("FIRST RAW ROW:", rows[0])
+        print("CAPTURE_RAW_ROWS:", rows[:2])
+        print("CAPTURE_ENCODED_ROWS:", encoded[:2])
         snapshot = codec.make_snapshot(source_label, encoded)
         source.execute("COMMIT")
         return snapshot

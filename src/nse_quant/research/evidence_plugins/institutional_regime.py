@@ -166,9 +166,9 @@ class InstitutionalRegimePlugin(EvidencePlugin):
 
         components = {
             "iv_state": iv_component,
+            "term_structure": term_component,
             "skew": skew_component,
             "price_action": price_action_component,
-            "term_structure": term_component,
         }
 
         all_complete = all(component["complete"] for component in components.values())
@@ -214,6 +214,15 @@ class InstitutionalRegimePlugin(EvidencePlugin):
         }
 
     def _skew(self, snapshot: ChainSnapshot) -> dict[str, Any]:
+        if not snapshot.quotes:
+            return {
+                "available": False,
+                "complete": False,
+                "state": None,
+                "reason": "no_option_quotes",
+                "decision_eligibility_asserted": False,
+            }
+
         atm_strike = snapshot.atm_strike()
         put_iv: float | None = None
         call_iv: float | None = None
@@ -237,7 +246,16 @@ class InstitutionalRegimePlugin(EvidencePlugin):
         )
 
     def _price_action(self, context: DecisionContext) -> dict[str, Any]:
-        token = context.spot_instrument_token
+        token = getattr(context, "spot_instrument_token", None)
+
+        if token is None:
+            return {
+                "available": False,
+                "complete": False,
+                "state": "INSUFFICIENT_DATA",
+                "reason": "not_implemented",
+                "decision_eligibility_asserted": False,
+            }
         rows = self._store.conn.execute(
             """
             SELECT ts, open, high, low, close, volume

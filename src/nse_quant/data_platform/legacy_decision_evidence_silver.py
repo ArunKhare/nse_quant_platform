@@ -368,8 +368,11 @@ def _scalar_queries() -> tuple[str, str, str]:
     for field, kind in codec.SCHEMA:
         quoted = '"' + field + '"'
         if kind == "VARCHAR":
-            size = f"octet_length(encode({quoted}))"
-            selected.append(f"CASE WHEN {size}<={codec.MAX_CELL} THEN {quoted} END")
+            size = f"octet_length(CAST({quoted} AS BLOB))"
+            selected.append(
+                f"CASE WHEN octet_length(CAST({quoted} AS BLOB))<={codec.MAX_CELL} \
+                    THEN {quoted} END"
+            )
             lengths.append(f"coalesce({size},0)")
             overflow.append(f"coalesce({size}>{codec.MAX_CELL},false)")
         else:
