@@ -483,7 +483,7 @@ def test_alias_parent_survives_and_outer_json_is_strict(tmp_path: Path) -> None:
         alias.close()
         owner.close()
     row = ["P", *([None] * 10)]
-    with pytest.raises(codec.Rejected, match="DUPLICATE_STORED_POLICY_KEY"):
+    with pytest.raises(codec.Rejected, match="DUPLICATE_REGIME_POLICY_PRIMARY_KEY_NO_WINNER"):
         codec.make_snapshot("fixture", [row, row], layout_id=codec.RISK_BEFORE_CLOCK)
     with pytest.raises(codec.Rejected):
         codec.make_snapshot(
@@ -492,7 +492,7 @@ def test_alias_parent_survives_and_outer_json_is_strict(tmp_path: Path) -> None:
             layout_id=codec.RISK_BEFORE_CLOCK,
         )
     duplicate = b'{"version":1,"version":2}'
-    with pytest.raises(codec.Rejected, match="DUPLICATE_JSON_KEY"):
+    with pytest.raises(codec.Rejected, match="DUPLICATE_REGIME_POLICY_OUTER_JSON_KEY"):
         codec.replay_snapshot(duplicate, expected_snapshot_id=codec.sha(duplicate))
 
 
@@ -570,7 +570,7 @@ def test_row_and_projection_limits_fail_whole_capture(tmp_path: Path) -> None:
     ]
     snapshot = codec.make_snapshot("fixture", [row], layout_id=codec.RISK_BEFORE_CLOCK)
     assert len(snapshot.payload) <= codec.MAX_BYTES
-    with pytest.raises(codec.Rejected, match="POLICY_RECORD_BYTE_BOUND"):
+    with pytest.raises(codec.Rejected, match="REGIME_POLICY_PROJECTION_BYTE_BOUND"):
         codec.derive_records(
             snapshot.payload,
             snapshot_id=snapshot.snapshot_id,

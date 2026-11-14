@@ -133,12 +133,12 @@ def encode_cell(value: object, kind: str) -> object:
     return value
 
 
-def _row(row: object, layout: tuple[tuple[str, str], ...]) -> list[object]:
-    if type(row) is not list or len(row) != len(layout):
+def _row(row: object) -> list[object]:
+    if type(row) is not list or len(row) != len(SCHEMA):
         raise Rejected("EXACT_REGIME_POLICY_ROW_SCHEMA_REQUIRED")
 
     checked: list[object] = []
-    for original, (_name, kind) in zip(row, layout, strict=True):
+    for original, (_name, kind) in zip(row, SCHEMA, strict=True):
         value = original
 
         if original is not None and kind == "DATE":
@@ -182,9 +182,9 @@ def make_snapshot(
         raise Rejected("WHOLE_REGIME_POLICY_TABLE_ROW_BOUND")
 
     try:
-        checked = [_row(row, layout) for row in rows]
+        checked = [_row(row) for row in rows]
         created_index = next(
-            index for index, (name, _kind) in enumerate(layout) if name == "created_at"
+            index for index, (name, _kind) in enumerate(SCHEMA) if name == "created_at"
         )
 
         if (
@@ -278,13 +278,12 @@ def derive_records(
 
     document = replay_snapshot(raw, expected_snapshot_id=snapshot_id)
     layout = checked_layout(document["layout_id"])
-    physical_names = [name for name, _kind in layout]
+    _ = [name for name, _kind in layout]
     records: list[bytes] = []
     total = 0
 
     for ordinal, row in enumerate(document["rows"]):
-        physical = dict(zip(physical_names, row, strict=True))
-        fields = {name: physical[name] for name, _kind in SCHEMA}
+        fields = dict(zip((name for name, _kind in SCHEMA), row, strict=True))
 
         flags: list[str] = []
 
