@@ -135,9 +135,7 @@ def test_retained_policy_is_not_native_truth(tmp_path):
     _legacy, bronze, result = record(tmp_path)
     for raw in read(bronze, result):
         document = codec.parse(raw, codec.MAX_RECORD)
-        assert document["classification"] == (
-            "RETAINED_LEGACY_REGIME_POLICY_NOT_NATIVE_POLICY_TRUTH"
-        )
+        assert document["classification"] == ("RETAINED_LEGACY_REGIME_POLICY_NOT_NATIVE_POLICY_TRUTH")
         assert not document["allowed_regimes_interpreted"]
         assert not document["regime_metrics_interpreted"]
         assert not document["risk_limits_interpreted"]

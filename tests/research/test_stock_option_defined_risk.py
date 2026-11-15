@@ -114,7 +114,7 @@ def test_iron_fly_invalid_wing_order():
     result = evaluate_iron_fly(
         put_long_strike=100.0,
         center_strike=90.0,
-        call_long_strike=95.0,
+        call_long_strike=85.0,
         net_credit=3.0,
     )
     assert result["valid"] is False

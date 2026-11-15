@@ -1044,8 +1044,8 @@ class DuckDBStore:
                 json.dumps(sorted(policy.allowed_regimes)),
                 json.dumps(policy.regime_metrics, default=str),
                 policy.selection_status,
-                datetime.now(UTC),
                 json.dumps(risk_limits or {}, default=str),
+                datetime.now(UTC),
             ],
         )
 
@@ -1386,11 +1386,7 @@ class DuckDBStore:
             return_1m = (closes[-1] / closes[-2]) - 1
 
         if len(closes) >= 3:
-            returns = [
-                (closes[index] / closes[index - 1]) - 1
-                for index in range(1, len(closes))
-                if closes[index - 1]
-            ]
+            returns = [(closes[index] / closes[index - 1]) - 1 for index in range(1, len(closes)) if closes[index - 1]]
 
             if len(returns) >= 2:
                 mean_return = sum(returns) / len(returns)
@@ -1441,9 +1437,7 @@ class DuckDBStore:
             mean_volume = sum(recent_volumes) / len(recent_volumes)
 
             if mean_volume > 0:
-                variance = sum((value - mean_volume) ** 2 for value in recent_volumes) / len(
-                    recent_volumes
-                )
+                variance = sum((value - mean_volume) ** 2 for value in recent_volumes) / len(recent_volumes)
 
                 std_volume = variance**0.5
 
@@ -1826,9 +1820,7 @@ class DuckDBStore:
             "open_positions": int(open_positions),
             "stale_leg_marks": int(stale_leg_marks),
             "exits": int(exits),
-            "rejection_reason_counts": {
-                (row[0] or "unknown"): int(row[1]) for row in rejection_rows
-            },
+            "rejection_reason_counts": {(row[0] or "unknown"): int(row[1]) for row in rejection_rows},
             "exit_reason_counts": {(row[0] or "unknown"): int(row[1]) for row in exit_rows},
             "evidence_rows": int(evidence_rows[0]) if evidence_rows else 0,
             "evidence_available": int(evidence_rows[1]) if evidence_rows else 0,
