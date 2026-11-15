@@ -5,6 +5,7 @@
 **Status: Core live decision loop complete; closure validation in progress.**
 
 Completed:
+
 - Dynamic NIFTY chain discovery.
 - Unified option-stream schema.
 - IV/Greeks, IV rank, RV, OI/PCR, liquidity, regime.
@@ -34,6 +35,7 @@ Remaining for full Milestone 1 closure:
 ## Milestone 2 — Research depth
 
 Completed:
+
 - Historical Parquet warehouse.
 - Warehouse validation and research-grade day selection.
 - IV surface, daily IV, IV regime, and RV regime research.
@@ -49,8 +51,10 @@ Completed:
 - Stock-option defined-risk strategies (research-only structure validator).
 - Stock-option execution quality (research-only evaluator).
 - Stock-option paper strategy launch readiness (research-only evaluator).
+- Cash-stock swing strategy promoted to `src/nse_quant/strategy/cash_stock_swing.py` (proposal-producing, paper-mode ready).
 
 Remaining:
+
 - Backtests with vectorbt.
 - Walk-forward experiment validation.
 - Multi-complete-trading-day reliability evidence.
