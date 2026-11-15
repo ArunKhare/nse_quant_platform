@@ -15,9 +15,7 @@ class ParquetWarehouse:
         self.warehouse_dir = Path(warehouse_dir)
 
         if not self.warehouse_dir.exists():
-            raise FileNotFoundError(
-                f"Parquet warehouse directory does not exist: {self.warehouse_dir}"
-            )
+            raise FileNotFoundError(f"Parquet warehouse directory does not exist: {self.warehouse_dir}")
 
     def load_option_stream(
         self,
@@ -90,15 +88,7 @@ class ParquetWarehouse:
         while current <= end:
             months.add((current.year, current.month))
 
-            if current.month == 12:
-                current = date(current.year + 1, 1, 1)
-            else:
-                current = date(
-                    current.year,
-                    current.month + 1,
-                    1,
-                )
-
+            current = date(current.year + 1, 1, 1) if current.month == 12 else date(current.year, current.month + 1, 1)
         patterns = [
             str(
                 self.warehouse_dir
