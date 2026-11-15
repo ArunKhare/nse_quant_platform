@@ -1,30 +1,15 @@
 # Current native-platform status
 
-Status reconciliation: 2026-11-04. This document separates source inspection,
+Status reconciliation: 2026-11-15. This document separates source inspection,
 user-confirmed repository QA and supplied Git history. It is not an independent
 inspection of the local Windows repository or an authority to release held work.
 
 ## Evidence basis
 
 The user confirms that Sources represent the latest committed implementation and
-that repository QA/tests passed, including the latest native-input package.
+that repository QA/tests passed, including the latest native-input package and
+the regime-policy timestamp repair.
 That confirmation is accepted; it is not assistant-reproduced repository QA.
-
-Reported HEAD: 6cf241974a5825bedd85e5da0cfbfe8dcfc2eaa5 on
-feat/medallion-feature-store. Later confirmation says changes are committed but
-provides no newer exact hash. The native-input package's exact commit association
-has not been established; do not assign it to the reported HEAD by inference.
-
-Reported commits:
-- 7ea548cba546da2fe6d7f2d2f79f9f6605fbc981: signed publication temporal evidence.
-- 78272d0d522d7385776405423e30f392ff8ac050: observed governance key lifecycle.
-- f5d9bd5e4ed3ed591b0762a5fed53a10a42d0730: native failure acceptance coverage.
-- 3c260114c5be9f81395b8e0cd2dc4726f41b22ab: fixture lifecycle/frame-format repair.
-- 37733d7: joint delta-gamma-vega stress attribution; only a short hash supplied.
-
-Last supplied worktree observation listed one worktree and only
-logs/live_status.json modified. This is historical user evidence, not a current
-clean-worktree claim. Preserve that runtime log.
 
 ## Native architecture and existing boundaries
 
@@ -36,37 +21,30 @@ Provider tokens, symbols, labels and self-hashes are not canonical identities.
 Unknown provenance and source times remain unknown. Build native services rather
 than extending transitional legacy adapters.
 
-Inspected source contracts include:
-- native_strategy_requirements.py: direct iron-condor proposal inventory only,
-  not complete strategy, portfolio-risk or decision-loop readiness.
-- native_refusal_service.py: two actual admission observations, after early
-  safety checks; full encoded observations retained for the refusal kernel.
-- native_refusal_decision.py: refusal-only @1; strategy/risk/execution NOT_RUN;
-  complete original pre-strategy refusal replay, not complete strategy replay.
-- native_refusal_store.py: dedicated first-write recording, exact decision and
-  recording pins, original audit obligations, separate domain/final-audit commits.
-- native_publication_temporal.py: actual lifecycle/publication integration while
-  reproducing existing research admission refusal; no independent time truth.
-- kite_decoder.py: both binary and kite_ws_binary_payload are accepted; ordered
-  depth tuples are preserved without inferred authoritative bid/ask semantics.
+## Recent additive research modules
 
-## Accepted native-input package
+The following pure additive research evaluators/generators were delivered and
+user-QA-confirmed. They are observational only and do not grant decision
+eligibility, execution authority, or close any status gate.
 
-User-confirmed implemented, QA/test-passed and committed. Delivery scope reported:
-exact-price/depth DTOs and codecs, bounded supplied-subset validation, assembly
-through actual native readers with repeated full-context checks, fourteen pure
-DTO/codec tests and eight supplied native integration cases using real disposable
-Bronze -> Silver -> Gold producers. The later user QA confirmation is accepted;
-no separate per-case assistant execution result is inferred from it.
+- Cash-stock swing strategy signal generator (`src/nse_quant/research/cash_stock_swing.py`): SMA/breakout/RVOL/ATR entry with event filter; `compute_rvol` uses a shift(1) baseline to avoid look-ahead.
+- Corporate-actions and earnings calendar (`src/nse_quant/research/corporate_actions_calendar.py`): blackout and upcoming-event research registry.
+- Stock-option liquidity thresholds (`src/nse_quant/research/stock_option_liquidity.py`): spread/depth/OI/volume tradability evaluator.
+- Stock-option event-risk rules (`src/nse_quant/research/stock_option_event_risk.py`): earnings blackout, size reduction, short-volatility block evaluator.
+- Stock-option defined-risk strategies (`src/nse_quant/research/stock_option_defined_risk.py`): bull call spread, bear put spread, iron condor, iron fly structure validator.
+- Stock-option execution quality (`src/nse_quant/research/stock_option_execution_quality.py`): quote age, spread, depth, risk-reward, slippage, time-to-event evaluator.
+- Stock-option paper strategy launch readiness (`src/nse_quant/research/stock_option_launch_readiness.py`): combines liquidity, event risk, defined-risk validity, and execution quality into a single launch-readiness check.
 
-The package preserves decoder-order depth, absent OI/volume versus zero and each
-option's exchange/last-trade times without synthesizing a chain timestamp. It does
-not select latest-good quotes, infer canonical identity or grant decision admission.
+All of these return `decision_eligibility_asserted=False` and are research-only.
 
-Its actual source paths/interfaces were not recovered by the retrieval tool in
-this session. That is a retrieval limitation, not evidence of absent/stale code.
-Do not replace it with requirements-only, price-only bundle or older research-IV
-services. Inspect its current interfaces before choosing implementation changes.
+## Regime-policy timestamp repair
+
+`save_regime_policy` in `src/nse_quant/persistence/duckdb_store.py` was repaired
+so that `risk_limits` JSON is written to the `risk_limits` JSON column and
+`datetime.now(UTC)` is written to the `created_at` TIMESTAMPTZ column, matching
+the actual DDL column order. The matching Bronze test
+`tests/data_platform/test_legacy_regime_policies_bronze.py` retains index-9
+assertions for `risk_limits`, consistent with the DDL. User QA and tests passed.
 
 ## Remaining gates
 
@@ -108,19 +86,11 @@ is available, checking the actual uv-selected interpreter rather than prompt lab
 Check untracked additions for whitespace separately; git diff --check does not
 cover them. Do not auto-stage, clean, discard or delete runtime logs.
 
-Inspected pyproject.toml: project version 0.4.0, Python >=3.12, SciPy >=1.14.0,
-cryptography >=46.0.0 and DuckDB >=1.1.0. Ruff targets py312, line length 100,
-rules E/F/I/B/UP/SIM. Mypy covers src/, scripts/, tests/ with untyped-definition
-checks and warnings for unused ignores/redundant casts. These are configuration
-requirements, not evidence of an installed interpreter or successful current QA.
-
 ## Verification attribution
 
-- User-confirmed repository QA: accepted, including the native-input package.
+- User-confirmed repository QA: accepted, including the native-input package and
+  the regime-policy timestamp repair.
 - Supplied Git history: retained above, not independently verified locally.
 - Historical assistant sandbox checks: keep original attribution and scope.
 - This documentation delivery: text/patch/archive checks only; no repository
   execution, native integration, pytest, Ruff, mypy, uv or local Git verification.
-
-Historical delivery records remain useful, but their then-current baseline,
-'unconfirmed' temporal status and runner instructions are not current policy.

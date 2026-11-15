@@ -1,72 +1,88 @@
-# Durable audited admission-input receipt capture
+# NSE Quant Decision Platform
 
-## Baseline / actual source inspection
-User baseline 9ef2f23, QA/tests passed, local/origin aligned by provided Git log.
-Local checkout/branch/HEAD cannot be independently inspected. This turn inspected
-actual publication_admission.py model/request/receipt fields, variable-length reasons
-annotation, exact identity/encode/replay and public assessment API, plus its docs
-and native publication context. Existing policy/codec/reader/Ruff/mypy fixes are
-not regenerated or overwritten. Migration and source eligibility remain unchanged.
+A Python-based quantitative decision platform for NSE index options, cash stocks,
+and stock options. The platform follows a medallion-style data architecture:
+received artifacts -> immutable Bronze -> typed source-linked Silver -> versioned
+Gold -> published bundles -> native decisions and exact replay.
 
-## Add only
-src/nse_quant/data_platform/admission_capture.py
-src/nse_quant/data_platform/admission_capture_cli.py
-scripts/ingest/capture_publication_admission.py
-tests/data_platform/test_admission_capture.py
-docs/ADMISSION_CAPTURE_STORAGE.md
+## Status
 
-## This increment
-Dedicated file-backed decision_inputs store with immutable native contract/policy
-registry, complete exact receipt bytes and frozen inputs, accepted/rejected outcome
-metadata, per-request reassessment history and audited attempt links. Fresh native
-assessment per attempt, not offline receipt import. Domain contract/definition/
-receipt/link writes are atomic; final audit is separate. Exact retries deduplicate
-content while preserving attempts, timestamps and first job. Corruption/unsupported
-versions/legacy output targets reject; old records are never updated/deleted.
-These are post-publication business records, not medallion observations/analytics:
-no fake Gold/Silver layer metadata or weakened DatasetContract enum is introduced.
+- Core NIFTY paper decision loop is implemented and user-QA-confirmed.
+- Research depth (warehouse, IV/RV research, replay backtests, QuantStats,
+  experiments) is implemented.
+- Controlled execution (Kite order placement, reconciliation, margin, partial
+  fills, rule-based exits) remains roadmap work.
+- All additive research modules are observational only and do not grant decision
+  eligibility or execution authority.
+- Live trading, production publication, and decision-loop cutover remain held.
 
-API:
-capture_publication_admission(publications, target, publication_id=...,
-    request=AdmissionRequest(...), actor_id=..., code_revision=..., initialize=False)
+See `docs/CURRENT_NATIVE_STATUS.md` for the authoritative current status,
+remaining gates, and operational holds.
 
-Plan:
-uv run python scripts/ingest/capture_publication_admission.py --publication-db <registry.duckdb> --receipt-db <admission-receipts.duckdb> --publication-id <64hex> --use-case ARCHIVED_RESEARCH_ANALYSIS
+## Architecture
 
-Execution adds --execute --actor <actor> --code-revision <revision> and --initialize
-for a new dedicated receipt DB. Parent directory must exist. Publication source is
-read-only. POINT_IN_TIME_DECISION also needs --knowledge-cutoff <aware-ISO> and
---economic-at <aware-ISO>; current research-only input remains rejected.
-COMMITTED/exit 0 records a completed capture even when domain status=REJECTED; it
-is not trading permission. Raw receipt rows or successful fresh retries cannot
-manufacture an earlier incomplete audit's success. See storage doc before execution.
+- `src/nse_quant/` — application and research code.
+- `src/nse_quant/data_platform/` — medallion data-platform modules (Bronze,
+  Silver, Gold, publication, admission, refusal, lifecycle).
+- `src/nse_quant/research/` — pure additive research evaluators and signal
+  generators (cash-stock swing, corporate actions, stock-option liquidity,
+  event risk, defined-risk strategies, execution quality, launch readiness).
+- `src/nse_quant/persistence/` — DuckDB persistence layer.
+- `tests/` — pytest test suite (data platform, research, and more).
+- `docs/` — per-module contracts, status addenda, and roadmap documents.
+- `config/` — YAML settings (base and test).
 
-## Safe apply / mandatory local QA
-Inspect git branch --show-current, git log -1 and git status --short in
-C:\Projects\nse_quant_platform. Require feat/medallion-feature-store; reconcile
-9ef2f23 or newer without resetting/discarding work. Compare actual native admission
-and audit APIs. Copy only five repository additions. STOP on existing paths and
-compare rather than overwrite. Run verify-local.ps1 from extracted bundle; review
-untracked additions as well as git diff. No existing deps/tests/configs/typing or
-architecture weakened. No source data loaded, migrated, acquired or published.
+## Key research modules
 
-## Verification disclosure
-29 focused tests passed under Python 3.12.8 with actual file-backed DuckDB domain/
-audit transactions. Covers full frozen-byte replay, native contract/definition,
-rejection capture, exact retry/reassessment, alias/legacy/schema/policy/byte/history
-limits, rollback of contract+definition+receipt+attempt, incomplete final audit,
-no history revival, non-UTC request retries, quoted namespace ambiguity, no-I/O
-plan and CLI read-only/source-error boundaries.
-In repository tests only the publication verifier boundary is substituted; actual
-policy/receipt codecs are imported. The sandbox cannot read checkout modules, so
-baseline audit was reconstructed and policy/codec/model behavior used an interface
-harness. Those harness dependencies are NOT shipped. These tests do not establish
-full source/audit authenticity, decision execution or strategy replay. Full required
-QA, Ruff and mypy were not run here and remain mandatory locally. Python line
-length, static import scan, patch whitespace and ZIP/file checksums were checked.
+| Module | Purpose | Safety |
+|---|---|---|
+| `cash_stock_swing` | SMA/breakout/RVOL/ATR swing signal generator | Research only, no execution authority |
+| `corporate_actions_calendar` | Dividends, splits, bonuses, buybacks, earnings blackout | Research registry only |
+| `stock_option_liquidity` | Spread/depth/OI/volume tradability evaluator | Observational only |
+| `stock_option_event_risk` | Earnings blackout, size reduction, short-vol block | Observational only |
+| `stock_option_defined_risk` | Bull call / bear put / iron condor / iron fly validator | Observational only |
+| `stock_option_execution_quality` | Quote age, spread, depth, risk-reward, slippage, time-to-event | Observational only |
+| `stock_option_launch_readiness` | Combines liquidity + event risk + structure + execution quality | Observational only |
 
-Suggested commit after local QA:
-feat(data-platform): persist audited admission receipts and frozen decision inputs
+Every research module returns `decision_eligibility_asserted=False`.
 
-Next boundary: verified captured-receipt/provenance consumption, not automatic
-promotion of research data. Loading/migration remains held until platform acceptance.
+## Setup
+
+Requires Python >= 3.12 and `uv`.
+
+```powershell
+uv sync
+uv run pytest tests -q
+```
+
+## QA commands
+
+```powershell
+uv run pytest tests/data_platform -q
+uv run pytest tests -q
+uv run ruff check .
+uv run mypy .
+git diff --check
+```
+
+## Safety boundary
+
+- Persistent kill switch.
+- Paper-only mode.
+- Dry-run behavior.
+- Market-hours enforcement.
+- Data-quality gates.
+- Liquidity gates.
+- Per-strategy risk limits.
+- Portfolio-level exposure limits.
+- EOD review and warehouse exports.
+
+A new strategy must never bypass these controls.
+
+## Documentation
+
+- `docs/CURRENT_NATIVE_STATUS.md` — authoritative current status, gates, holds.
+- `docs/ROADMAP.md` — milestone roadmap.
+- `docs/TRADING_UNIVERSE_ROADMAP.md` — instrument-family expansion plan.
+- `docs/FUTURE_IMPLEMENTATION.md` — future configuration designs.
+- Per-module docs in `docs/` for each research evaluator and data-platform family.
