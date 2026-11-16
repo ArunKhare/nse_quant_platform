@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 
 import duckdb
 import pytest
-from native_failure_acceptance_lab import NativeFailureLab, table
+from native_failure_acceptance_lab import table
 
 from nse_quant.data_platform import native_refusal_decision as kernel
 from nse_quant.data_platform import native_refusal_store as store
@@ -14,8 +14,7 @@ from nse_quant.data_platform.native_refusal_service import evaluate_native_refus
 
 
 @pytest.fixture
-def case(tmp_path):
-    lab = NativeFailureLab(tmp_path)
+def case(lab, tmp_path):
     pub = lab.publication()
     assert pub.evidence_fingerprint is not None
     request = kernel.RefusalRequest(
@@ -55,9 +54,7 @@ def test_actual_admission_to_audited_decision_and_complete_refusal_replay(case):
     receipt = record(case)
     before = hashlib.sha256(case[2].read_bytes()).hexdigest()
     recording = read(case, receipt)
-    value = kernel.replay_refusal_entry(
-        recording.entry_bytes, expected_decision_id=recording.decision_id
-    )
+    value = kernel.replay_refusal_entry(recording.entry_bytes, expected_decision_id=recording.decision_id)
     result = value["result"]
     assert result["failed_stage"] == "publication_admission"
     assert result["reason_codes"][0] == "POINT_IN_TIME_ADMISSION_REJECTED"
@@ -89,18 +86,14 @@ def test_early_unknown_switch_is_audited_without_source_probe(tmp_path):
     request = kernel.RefusalRequest("early", "a" * 64, "b" * 64, at, at, "c" * 40)
     path = tmp_path / "early.duckdb"
     with duckdb.connect(str(path)) as target:
-        receipt = store.record_native_refusal(
-            object(), target, request=request, actor_id="synthetic", initialize=True
-        )
+        receipt = store.record_native_refusal(object(), target, request=request, actor_id="synthetic", initialize=True)
     with duckdb.connect(str(path), read_only=True) as source:
         recorded = store.read_native_refusal_recording(
             source,
             decision_id=receipt["decision_id"],
             expected_recording_fingerprint=receipt["recording_fingerprint"],
         )
-    value = kernel.replay_refusal_entry(
-        recorded.entry_bytes, expected_decision_id=receipt["decision_id"]
-    )
+    value = kernel.replay_refusal_entry(recorded.entry_bytes, expected_decision_id=receipt["decision_id"])
     assert value["result"]["reason_codes"] == ["KILL_SWITCH_STATE_UNKNOWN"]
     assert value["frozen_input"]["admission_receipts_hex"] == []
 
@@ -133,9 +126,7 @@ def test_final_audit_failure_preserves_unusable_domain_and_no_retry_adoption(cas
             match="ORIGINAL_AUDIT_NOT_SUCCESSFUL",
         ),
     ):
-        store.read_native_refusal_recording(
-            source, decision_id=row[0], expected_recording_fingerprint="0" * 64
-        )
+        store.read_native_refusal_recording(source, decision_id=row[0], expected_recording_fingerprint="0" * 64)
 
 
 def test_domain_link_failure_rolls_back_and_prior_failed_job_remains_blocker(case):
@@ -159,9 +150,7 @@ def test_operational_source_failure_is_not_manufactured_policy_decision(case):
         source.execute(f"DROP TABLE {records}")
     with lab.opened("publications") as (publications,), duckdb.connect(str(path)) as target:
         with pytest.raises(duckdb.Error):
-            store.record_native_refusal(
-                publications, target, request=request, actor_id="synthetic", initialize=True
-            )
+            store.record_native_refusal(publications, target, request=request, actor_id="synthetic", initialize=True)
         records = store.name(target, "native_decisions", "decisions")
         assert target.execute(f"SELECT count(*) FROM {records}").fetchone() == (0,)
 
@@ -175,9 +164,9 @@ def test_original_refusal_replays_after_current_publication_changes(case):
     assert read(case, receipt).entry_bytes == original
     with case[0].opened("publications") as (source,):
         now = evaluate_native_refusal(source, request=case[1])
-    assert kernel.replay_refusal_entry(now, expected_decision_id=kernel.sha(now))["result"][
-        "reason_codes"
-    ] == ["REVIEWED_PUBLICATION_EVIDENCE_PIN_MISMATCH"]
+    assert kernel.replay_refusal_entry(now, expected_decision_id=kernel.sha(now))["result"]["reason_codes"] == [
+        "REVIEWED_PUBLICATION_EVIDENCE_PIN_MISMATCH"
+    ]
 
 
 def test_unlinked_scoped_work_and_corrupt_bytes_are_not_old_good_cache(case):

@@ -4,7 +4,7 @@ from datetime import timedelta
 
 import duckdb
 import pytest
-from native_failure_acceptance_lab import NativeFailureLab, table
+from native_failure_acceptance_lab import table
 from temporal_evidence_fixture import (
     SUPPORT,
     T,
@@ -23,8 +23,7 @@ from nse_quant.data_platform.publication_admission import (
 
 
 @pytest.fixture
-def native_case(tmp_path):
-    lab = NativeFailureLab(tmp_path)
+def native_case(lab):
     root, signer = key(), key()
     life, scope = lifecycle_event(root, signer, root)
     publication = lab.publication()
@@ -154,8 +153,7 @@ def test_rotated_old_signer_refused_until_exact_new_revision_is_supplied(native_
     )
     chain_changes = dict(
         lifecycle_records=args["lifecycle_records"] + (second,),
-        expected_lifecycle_record_sha256s=args["expected_lifecycle_record_sha256s"]
-        + (temporal.sha(second),),
+        expected_lifecycle_record_sha256s=args["expected_lifecycle_record_sha256s"] + (temporal.sha(second),),
     )
     refused = run_case(native_case, **chain_changes)
     assert refused.reason_codes == ("FINAL_DECLARATION_SIGNER_RETIRED_IN_SUPPLIED_CHAIN",)
@@ -168,9 +166,7 @@ def test_rotated_old_signer_refused_until_exact_new_revision_is_supplied(native_
         predecessor=temporal.sha(original),
         lifecycle_tip=temporal.sha(second),
     )
-    value = run_case(
-        native_case, **chain_changes, **declaration_changes(native_case, (original, revised))
-    )
+    value = run_case(native_case, **chain_changes, **declaration_changes(native_case, (original, revised)))
     assert value.status == "refused_existing_research_contract"
     assert value.temporal_evaluation is not None
     assert value.temporal_evaluation.declared_time_constraints_satisfied
@@ -189,8 +185,7 @@ def test_full_supplied_lifecycle_revocation_has_precedence(native_case):
     value = run_case(
         native_case,
         lifecycle_records=args["lifecycle_records"] + (terminal,),
-        expected_lifecycle_record_sha256s=args["expected_lifecycle_record_sha256s"]
-        + (temporal.sha(terminal),),
+        expected_lifecycle_record_sha256s=args["expected_lifecycle_record_sha256s"] + (temporal.sha(terminal),),
     )
     assert value.reason_codes == ("SUPPLIED_LIFECYCLE_TIP_REVOKED",)
     assert value.admission_receipt is None

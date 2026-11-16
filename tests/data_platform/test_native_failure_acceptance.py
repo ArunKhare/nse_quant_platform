@@ -4,16 +4,15 @@ from datetime import timedelta
 
 import duckdb
 import pytest
-from native_failure_acceptance_lab import NativeFailureLab, table
+from native_failure_acceptance_lab import table
 
 from nse_quant.data_platform import admission_frontier as frontier
 from nse_quant.data_platform import publication_admission as policy
 from nse_quant.data_platform.audit import JobState
 
-
-@pytest.fixture
-def lab(tmp_path):
-    return NativeFailureLab(tmp_path)
+# @pytest.fixture
+# def lab(tmp_path):
+#     return NativeFailureLab(tmp_path)
 
 
 def assert_denials(value):
@@ -93,9 +92,7 @@ def test_stage_artifact_damage_does_not_repair_or_destroy_retained_refusal(lab, 
 def test_missing_capture_final_audit_is_not_healed_by_successful_retry(lab):
     with lab.opened("captures", writable=True) as (conn,):
         events = table(conn, "medallion_audit", "job_events")
-        conn.execute(
-            f"DELETE FROM {events} WHERE job_id=? AND state='SUCCEEDED'", [lab.capture["job_id"]]
-        )
+        conn.execute(f"DELETE FROM {events} WHERE job_id=? AND state='SUCCEEDED'", [lab.capture["job_id"]])
     retry = lab.retry()
     assert retry["inserted"] is False
     assert retry["receipt_id"] == lab.original.receipt_id
@@ -197,9 +194,7 @@ def test_actual_frontier_text_bound_no_limit_monkeypatch_or_salvage(lab):
     with lab.opened("captures", writable=True) as (conn,):
         jobs = table(conn, "medallion_audit", "jobs")
         conn.execute(f"UPDATE {jobs} SET actor_id=repeat('x', ?)", [frontier.MAX_TEXT_CELL + 1])
-    with pytest.raises(
-        frontier.FrontierReviewRequired, match="^FRONTIER_TEXT_BOUND_REVIEW_REQUIRED$"
-    ):
+    with pytest.raises(frontier.FrontierReviewRequired, match="^FRONTIER_TEXT_BOUND_REVIEW_REQUIRED$"):
         lab.frontier()
     lab.replay()
 
@@ -208,9 +203,7 @@ def test_frontier_rejects_unknown_objects_and_operational_failure_is_not_refusal
     with lab.opened("captures", writable=True) as (conn,):
         extra = table(conn, "decision_inputs", "unexpected")
         conn.execute(f"CREATE TABLE {extra} (id INTEGER)")
-    with pytest.raises(
-        frontier.FrontierReviewRequired, match="^FRONTIER_UNSUPPORTED_OBJECT_INVENTORY$"
-    ):
+    with pytest.raises(frontier.FrontierReviewRequired, match="^FRONTIER_UNSUPPORTED_OBJECT_INVENTORY$"):
         lab.frontier()
     assert lab.archived().status == "review_required"
     with lab.opened("publications", writable=True) as (conn,):
@@ -232,9 +225,7 @@ def test_actual_frontier_row_bound_is_not_hidden_by_success_filter(lab):
             f"j.config_hash,j.created_at FROM {jobs} j CROSS JOIN range(?) r(i)",
             [limit],
         )
-    with pytest.raises(
-        frontier.FrontierReviewRequired, match="^FRONTIER_ROW_BOUND_REVIEW_REQUIRED$"
-    ):
+    with pytest.raises(frontier.FrontierReviewRequired, match="^FRONTIER_ROW_BOUND_REVIEW_REQUIRED$"):
         lab.frontier()
     lab.replay()
 
@@ -280,9 +271,7 @@ def test_real_capture_final_audit_exception_preserves_domain_and_failed_origin(l
             with pytest.raises(OSError, match="^SYNTHETIC_FINAL_AUDIT_UNAVAILABLE$"):
                 capture_publication_admission(publications, target, **args)
         records = table(target, "decision_inputs", "admission_receipts")
-        row = target.execute(
-            f"SELECT receipt_id,first_job_id,receipt_bytes FROM {records}"
-        ).fetchone()
+        row = target.execute(f"SELECT receipt_id,first_job_id,receipt_bytes FROM {records}").fetchone()
         assert row is not None
         assert row[0] == lab.original.receipt_id
         assert bytes(row[2]) == lab.raw
