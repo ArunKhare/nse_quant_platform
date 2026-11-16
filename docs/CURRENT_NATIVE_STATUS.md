@@ -259,3 +259,99 @@ Delivered (packaged, pending user QA): persisted source-linked `positions` Silve
 - No mark interpretation, PnL interpretation, execution replay, or positive decision eligibility
 
 All 7 open native gates remain open. Package QA is not platform acceptance.
+
+
+## 2026-11-16 addendum: spot-features Silver
+
+Delivered (packaged, pending user QA): persisted source-linked `spot_features` Silver over the actual accepted Bronze reader.
+
+- Store: `legacy-spot-features-silver-recording@1`
+- Command: `normalize.legacy_spot_features@1`
+- Contract: `silver.legacy_spot_feature_observations@1` `APPEND_REVISIONS`
+- Materialized: `symbol` + `ts` composite key, plus 13 nullable retained finite binary64 feature values
+- Per-revision composite-key uniqueness plus ordinal; no invented single natural key
+- Original first-write, audit, orphan, and final-audit obligations; no healing or adoption
+- Retained Silver, current native Bronze, and current legacy SQL remain distinct
+- No feature interpretation, execution replay, or positive decision eligibility
+
+All 7 open native gates remain open. Package QA is not platform acceptance.
+
+
+## 2026-11-16 addendum: daily-RV Silver (materialized)
+
+Delivered (packaged, pending user QA): persisted source-linked materialized `daily_rv_observations` Silver over the actual accepted Bronze reader.
+
+- Store: `legacy-daily-rv-observations-silver-materialized@1`
+- Command: `normalize.legacy_daily_rv_observations@1`
+- Contract: `silver.legacy_daily_rv_materialized_observations@1` `APPEND_REVISIONS`
+- Materialized: `symbol` + `trading_date` composite key, plus non-null `rv` and `observation_count`
+- Per-revision composite-key uniqueness plus ordinal; no invented single natural key
+- Original first-write, audit, orphan, and final-audit obligations; no healing or adoption
+- Retained Silver, current native Bronze, and current legacy SQL remain distinct
+- No RV interpretation, execution replay, or positive decision eligibility
+
+All 7 open native gates remain open. Package QA is not platform acceptance.
+
+
+## 2026-11-16 addendum: daily-RV Silver (materialized)
+
+Delivered (packaged, pending user QA): persisted source-linked materialized `daily_rv_observations` Silver over the actual accepted Bronze reader.
+
+- Store: `legacy-daily-rv-observations-silver-materialized@1`
+- Command: `normalize.legacy_daily_rv_observations@1`
+- Contract: `silver.legacy_daily_rv_materialized_observations@1` `APPEND_REVISIONS`
+- Materialized: `symbol` + `trading_date` composite key, plus non-null `rv` and `observation_count`
+- Per-revision composite-key uniqueness plus ordinal; no invented single natural key
+- Original first-write, audit, orphan, and final-audit obligations; no healing or adoption
+- Retained Silver, current native Bronze, and current legacy SQL remain distinct
+- No RV interpretation, execution replay, or positive decision eligibility
+
+All 7 open native gates remain open. Package QA is not platform acceptance.
+
+
+## 2026-11-16 addendum: daily-RV Silver (materialized)
+
+Delivered (packaged, pending user QA): persisted source-linked materialized `daily_rv_observations` Silver over the actual accepted Bronze reader.
+
+- Store: `legacy-daily-rv-observations-silver-materialized@1`
+- Command: `normalize.legacy_daily_rv_observations@1`
+- Contract: `silver.legacy_daily_rv_materialized_observations@1` `APPEND_REVISIONS`
+- Materialized: `symbol` + `trading_date` composite key, plus non-null `rv` and `observation_count`
+- Per-revision composite-key uniqueness plus ordinal; no invented single natural key
+- Original first-write, audit, orphan, and final-audit obligations; no healing or adoption
+- Retained Silver, current native Bronze, and current legacy SQL remain distinct
+- No RV interpretation, execution replay, or positive decision eligibility
+
+All 7 open native gates remain open. Package QA is not platform acceptance.
+
+
+## 2026-11-16 addendum: daily-RV Silver (materialized)
+
+Delivered (packaged, pending user QA): persisted source-linked materialized `daily_rv_observations` Silver over the actual accepted Bronze reader.
+
+- Store: `legacy-daily-rv-observations-silver-materialized@1`
+- Command: `normalize.legacy_daily_rv_observations@1`
+- Contract: `silver.legacy_daily_rv_materialized_observations@1` `APPEND_REVISIONS`
+- Materialized: `symbol` + `trading_date` composite key, plus non-null `rv` and `observation_count`
+- Per-revision composite-key uniqueness plus ordinal; no invented single natural key
+- Original first-write, audit, orphan, and final-audit obligations; no healing or adoption
+- Retained Silver, current native Bronze, and current legacy SQL remain distinct
+- No RV interpretation, execution replay, or positive decision eligibility
+
+All 7 open native gates remain open. Package QA is not platform acceptance.
+
+
+## 2026-11-16 addendum: daily-RV Silver (materialized)
+
+Delivered (packaged, pending user QA): persisted source-linked materialized `daily_rv_observations` Silver over the actual accepted Bronze reader.
+
+- Store: `legacy-daily-rv-observations-silver-materialized@1`
+- Command: `normalize.legacy_daily_rv_observations@1`
+- Contract: `silver.legacy_daily_rv_materialized_observations@1` `APPEND_REVISIONS`
+- Materialized: `symbol` + `trading_date` composite key, plus non-null `rv` and `observation_count`
+- Per-revision composite-key uniqueness plus ordinal; no invented single natural key
+- Original first-write, audit, orphan, and final-audit obligations; no healing or adoption
+- Retained Silver, current native Bronze, and current legacy SQL remain distinct
+- No RV interpretation, execution replay, or positive decision eligibility
+
+All 7 open native gates remain open. Package QA is not platform acceptance.
