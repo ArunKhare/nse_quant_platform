@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+import os
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -28,6 +30,22 @@ from nse_quant.persistence.duckdb_store import DuckDBStore
 from nse_quant.research.evidence_plugins.base import DecisionContext
 from nse_quant.research.regime_risk_policy import RegimeRiskLimits
 from nse_quant.strategy.decision_loop import DecisionLoop
+
+
+def pytest_configure(config):
+    """Give each xdist worker its own separate log file."""
+    Path("test_results").mkdir(parents=True, exist_ok=True)
+    worker_id = os.environ.get("PYTEST_XDIST_WORKER", "master")
+    config.option.log_file = f"test_results/pytest_{worker_id}.log"
+
+
+@pytest.hookimpl(hookwrapper=True)
+def pytest_runtest_protocol(item, nextitem):
+    """Log exact START and END markers for every test in the worker log file."""
+    worker_id = os.environ.get("PYTEST_XDIST_WORKER", "master")
+    logging.info(f"[{worker_id}] START: {item.nodeid}")
+    yield
+    logging.info(f"[{worker_id}] END:   {item.nodeid}")
 
 
 @pytest.fixture
