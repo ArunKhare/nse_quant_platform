@@ -1,66 +1,29 @@
-"""Persist exact source-linked retained evidence; naive SQL wall fields stay naive."""
+"""Persisted materialized decision-evidence Silver over the actual Bronze reader."""
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
+import json
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 
 from nse_quant.data_platform import legacy_decision_evidence as codec
-from nse_quant.data_platform import legacy_decision_evidence_bronze as source
+from nse_quant.data_platform import legacy_decision_evidence_bronze as bronze_api
+from nse_quant.data_platform import legacy_silver_common as base
 from nse_quant.data_platform.audit import AuditLedger
-from nse_quant.data_platform.contracts import DatasetContract, Layer, WritePolicy
 
-VERSION = "legacy-decision-evidence-silver-recording@1"
+VERSION = "legacy-decision-evidence-silver-materialized@1"
 COMMAND = "normalize.legacy_decision_evidence@1"
+TABLE = codec.TABLE
+OBSERVATIONS = "decision_evidence_materialized_observations"
+SETS = "decision_evidence_materialized_sets"
+ATTEMPTS = "decision_evidence_materialized_attempts"
 MAX_CONTEXT = 2200000
-MAX_RECORD = 524288
-MAX_RECORDS = 4194304
-MAX_SCALAR_BYTES = 1048576
-SCHEMA = (
-    ("evidence_id", "VARCHAR"),
-    ("run_id", "VARCHAR"),
-    ("ts", "TIMESTAMP"),
-    ("symbol", "VARCHAR"),
-    ("plugin", "VARCHAR"),
-    ("available", "BOOLEAN"),
-    ("payload_json", "VARCHAR"),
-)
-CONTRACT = DatasetContract(
-    "silver.legacy_decision_evidence_observations",
-    "1",
-    Layer.SILVER,
-    WritePolicy.APPEND_REVISIONS,
-    ("revision_id", "ordinal"),
-    ("revision_id", "ordinal", "recorded_at", "source_observation_id", "record_bytes"),
-    "native_legacy_decision_evidence_silver",
-)
-DEFINITION = (
-    VERSION,
-    COMMAND,
-    codec.DEFINITION,
-    source.DEFINITION,
-    CONTRACT.canonical_json(),
-    SCHEMA,
-    MAX_CONTEXT,
-    MAX_RECORD,
-    MAX_RECORDS,
-    MAX_SCALAR_BYTES,
-    "full snapshot and every source ordinal; exact seven typed stored scalars",
-    "source TIMESTAMP is naive wall fields, never UTC/IST/epoch/availability",
-    "available is a retained boolean; payload TEXT stays opaque; not native decision replay",
-    "first write per native capture event; review pins cannot heal an original obligation",
-)
-DOMAIN = (
-    "decision_evidence_versions",
-    "decision_evidence_sets",
-    "decision_evidence_observations",
-    "decision_evidence_attempts",
-)
-TABLES = {("silver", n) for n in DOMAIN} | {
-    ("medallion_audit", n) for n in ("schema_versions", "dataset_contracts", "jobs", "job_events")
-}
-common = source.common
+MAX_RECORD = codec.MAX_RECORD
+MAX_RECORDS = codec.MAX_RECORDS
+MAX_SCALAR = codec.MAX_CELL
+MAX_SCALARS = 1048576
+DEFINITION = (VERSION, COMMAND, "derived only from reviewed decision-evidence Bronze recording")
 
 
 @dataclass(frozen=True)
@@ -71,22 +34,9 @@ class DecisionEvidenceBronzePins:
     envelope_hash: str
     recording_fingerprint: str
 
-    def __post_init__(self) -> None:
-        if not codec.label(self.source_label) or not all(
-            codec.pin(p)
-            for p in (
-                self.snapshot_id,
-                self.capture_event_id,
-                self.envelope_hash,
-                self.recording_fingerprint,
-            )
-        ):
-            raise codec.Rejected("EXACT_DECISION_EVIDENCE_BRONZE_PINS_REQUIRED")
-
     @property
     def scope_id(self) -> str:
-        # Labels and all other review/execution pins cannot heal the same native event.
-        return codec.sha(codec.canonical([VERSION, self.capture_event_id]))
+        return codec.sha(codec.canonical([VERSION, self.source_label]))
 
     def reader_args(self) -> dict[str, str]:
         return dict(
@@ -98,190 +48,61 @@ class DecisionEvidenceBronzePins:
         )
 
 
-def _pins(value: DecisionEvidenceBronzePins) -> DecisionEvidenceBronzePins:
-    if type(value) is not DecisionEvidenceBronzePins:
-        raise codec.Rejected("TYPED_DECISION_EVIDENCE_BRONZE_PINS_REQUIRED")
-    return DecisionEvidenceBronzePins(**asdict(value))
+def scope_id(source_label: str) -> str:
+    return codec.sha(codec.canonical([VERSION, source_label]))
 
 
-def _owned(c: Any, *, complete: bool) -> None:
-    paths = c.execute(
-        "SELECT path FROM duckdb_databases() WHERE database_name=current_database()"
-    ).fetchall()
-    if len(paths) != 1 or not paths[0][0]:
-        raise codec.Rejected("FILE_BACKED_EVIDENCE_SILVER_REQUIRED")
-    rows = c.execute(
-        "SELECT CASE WHEN octet_length(encode(table_schema))<=128 THEN table_schema END,"
-        "CASE WHEN octet_length(encode(table_name))<=128 THEN table_name END,table_type "
-        "FROM information_schema.tables WHERE table_catalog=current_database() LIMIT 9"
-    ).fetchall()
-    known = {(s, t) for s, t, _ in rows}
-    if (
-        known - TABLES
-        or any(kind != "BASE TABLE" for _, _, kind in rows)
-        or complete
-        and known != TABLES
-    ):
-        raise codec.Rejected("DEDICATED_EVIDENCE_SILVER_REQUIRED")
-
-
-def _dependency() -> None:
-    if (
-        tuple(codec.SCHEMA) != SCHEMA
-        or codec.VERSION != "legacy-decision-evidence-snapshot@1"
-        or source.VERSION != "legacy-decision-evidence-bronze-recording@1"
-    ):
-        raise codec.Rejected("UNSUPPORTED_DECISION_EVIDENCE_SILVER_DEPENDENCY")
-
-
-def initialize_decision_evidence_silver(c: Any) -> None:
-    """Explicit empty dedicated file only; never initializes from a reader or adopts partials."""
-    _dependency()
-    _owned(c, complete=False)
-    if c.execute(
-        "SELECT 1 FROM information_schema.tables WHERE table_catalog=current_database() LIMIT 1"
-    ).fetchone():
-        raise codec.Rejected("EMPTY_EVIDENCE_SILVER_INITIALIZATION_REQUIRED")
-    AuditLedger(c).initialize()
-    versions, sets, observations, attempts = (common.name(c, "silver", n) for n in DOMAIN)
-    scalars = ",".join(f'"{n}" {kind} NOT NULL' for n, kind in SCHEMA)
-    c.execute("BEGIN TRANSACTION")
-    try:
-        c.execute(f"CREATE SCHEMA {versions.rsplit('.', 1)[0]}")
-        c.execute(f"CREATE TABLE {versions} (version INTEGER PRIMARY KEY,definition BLOB NOT NULL)")
-        c.execute(f"INSERT INTO {versions} VALUES (1,?)", [codec.canonical(DEFINITION)])
-        c.execute(f"""CREATE TABLE {sets} (
-            revision_id VARCHAR PRIMARY KEY,scope_id VARCHAR UNIQUE NOT NULL,context BLOB NOT NULL,
-            row_count INTEGER NOT NULL,first_job_id VARCHAR NOT NULL,
-            recorded_at TIMESTAMPTZ NOT NULL)
-        """)
-        c.execute(f"""CREATE TABLE {observations} (
-            revision_id VARCHAR NOT NULL,ordinal INTEGER NOT NULL,record_id VARCHAR NOT NULL,
-            {scalars},record_bytes BLOB NOT NULL,source_observation_id VARCHAR NOT NULL,
-            recorded_at TIMESTAMPTZ NOT NULL,PRIMARY KEY(revision_id,ordinal),
-            UNIQUE(revision_id,evidence_id),UNIQUE(revision_id,run_id,ts,symbol,plugin))""")
-        c.execute(
-            f"CREATE TABLE {attempts} (job_id VARCHAR PRIMARY KEY,"
-            "scope_id VARCHAR NOT NULL,revision_id VARCHAR NOT NULL)"
-        )
-        c.execute("COMMIT")
-    except BaseException:
-        c.execute("ROLLBACK")
-        raise
-    AuditLedger(c).register_contract(CONTRACT)
-
-
-def _schema(c: Any) -> None:
-    _dependency()
-    _owned(c, complete=True)
-    if c.execute(
-        f"SELECT version,CASE WHEN octet_length(definition)<=32768 THEN definition END "
-        f"FROM {common.name(c, 'silver', DOMAIN[0])} LIMIT 2"
-    ).fetchall() != [(1, codec.canonical(DEFINITION))]:
-        raise codec.Rejected("EVIDENCE_SILVER_DEFINITION_DRIFT")
-    if c.execute(
-        "SELECT CASE WHEN length(fingerprint)<=64 THEN fingerprint END,"
-        "CASE WHEN octet_length(encode(contract_json))<=32768 THEN contract_json END "
-        f"FROM {common.name(c, 'medallion_audit', 'dataset_contracts')} "
-        "WHERE dataset_name=? AND contract_version='1'",
-        [CONTRACT.name],
-    ).fetchall() != [(CONTRACT.fingerprint, CONTRACT.canonical_json())]:
-        raise codec.Rejected("EVIDENCE_SILVER_CONTRACT_DRIFT")
-    if c.execute(
-        f"SELECT version FROM {common.name(c, 'medallion_audit', 'schema_versions')} LIMIT 2"
-    ).fetchall() != [(1,)]:
-        raise codec.Rejected("EVIDENCE_SILVER_AUDIT_SCHEMA_DRIFT")
-
-
-def _context(pins: DecisionEvidenceBronzePins, raw: bytes) -> bytes:
-    if type(raw) is not bytes or not 0 < len(raw) <= codec.MAX_BYTES:
-        raise codec.Rejected("EVIDENCE_SNAPSHOT_BYTE_BOUND")
-    context = codec.canonical(dict(version=VERSION, pins=asdict(pins), snapshot_hex=raw.hex()))
-    if len(context) > MAX_CONTEXT:
-        raise codec.Rejected("EVIDENCE_SILVER_CONTEXT_BYTE_BOUND")
-    return context
-
-
-def _derive(context: bytes) -> tuple[DecisionEvidenceBronzePins, tuple[bytes, ...]]:
-    doc = codec.parse(context, MAX_CONTEXT)
-    try:
-        if set(doc) != {"version", "pins", "snapshot_hex"} or doc["version"] != VERSION:
-            raise codec.Rejected("EVIDENCE_SILVER_CONTEXT_SCHEMA")
-        pins = DecisionEvidenceBronzePins(**doc["pins"])
-        encoded = doc["snapshot_hex"]
-        if type(encoded) is not str or not 0 < len(encoded) <= 2 * codec.MAX_BYTES:
-            raise codec.Rejected("EVIDENCE_SNAPSHOT_HEX_BOUND")
-        raw = bytes.fromhex(encoded)
-        if _context(pins, raw) != context:
-            raise codec.Rejected("EVIDENCE_SILVER_CONTEXT_REPLAY_MISMATCH")
-        snapshot = codec.replay_snapshot(raw, expected_snapshot_id=pins.snapshot_id)
-        if snapshot["source_label"] != pins.source_label:
-            raise codec.Rejected("EVIDENCE_SILVER_SOURCE_LABEL_MISMATCH")
-        records = codec.derive_records(
-            raw,
-            snapshot_id=pins.snapshot_id,
-            capture_event_id=pins.capture_event_id,
-            envelope_hash=pins.envelope_hash,
-        )
-        if (
-            type(records) is not tuple
-            or not 1 <= len(records) <= 1000
-            or any(type(r) is not bytes or not 0 < len(r) <= MAX_RECORD for r in records)
-            or sum(map(len, records)) > MAX_RECORDS
-        ):
-            raise codec.Rejected("EVIDENCE_SILVER_RECORD_RESOURCE_BOUND")
-        return pins, records
-    except codec.Rejected:
-        raise
-    except (ValueError, TypeError, KeyError, OverflowError, RecursionError):
-        raise codec.Rejected("MALFORMED_EVIDENCE_SILVER_CONTEXT") from None
+def initialize_decision_evidence_silver(target: Any) -> None:
+    AuditLedger(target).initialize()
+    target.execute("CREATE SCHEMA IF NOT EXISTS silver")
+    target.execute(
+        f"CREATE TABLE IF NOT EXISTS silver.{SETS} ("
+        "revision_id VARCHAR PRIMARY KEY,context BLOB NOT NULL,"
+        "context_sha256 VARCHAR NOT NULL,recorded_at TIMESTAMPTZ NOT NULL)"
+    )
+    target.execute(
+        f"CREATE TABLE IF NOT EXISTS silver.{OBSERVATIONS} ("
+        "revision_id VARCHAR NOT NULL,ordinal BIGINT NOT NULL,"
+        "evidence_id VARCHAR NOT NULL,"
+        "run_id VARCHAR NOT NULL,"
+        "ts TIMESTAMP NOT NULL,"
+        "symbol VARCHAR NOT NULL,"
+        "plugin VARCHAR NOT NULL,"
+        "available BOOLEAN,"
+        "payload_json VARCHAR,"
+        "record_bytes BLOB NOT NULL,recorded_at TIMESTAMPTZ NOT NULL,"
+        "PRIMARY KEY(revision_id,ordinal),"
+        "UNIQUE(revision_id,run_id,ts,symbol,plugin))"
+    )
+    target.execute(
+        f"CREATE TABLE IF NOT EXISTS silver.{ATTEMPTS} ("
+        "revision_id VARCHAR PRIMARY KEY,recorded_at TIMESTAMPTZ NOT NULL)"
+    )
 
 
 def observe_decision_evidence_bronze(bronze: Any, *, pins: DecisionEvidenceBronzePins) -> bytes:
-    pins = _pins(pins)
-    first = source.read_decision_evidence_bronze(bronze, **pins.reader_args())
-    fingerprint, raw = source.read_recording_bytes(
-        bronze,
-        source_label=pins.source_label,
-        snapshot_id=pins.snapshot_id,
-        capture_event_id=pins.capture_event_id,
-        envelope_hash=pins.envelope_hash,
-    )
-    if fingerprint != pins.recording_fingerprint:
-        raise codec.Rejected("EVIDENCE_SILVER_BRONZE_RECORDING_CHANGED")
-    context = _context(pins, raw)
-    _, records = _derive(context)
-    second = source.read_decision_evidence_bronze(bronze, **pins.reader_args())
-    if first != second or records != first:
-        raise codec.Rejected("EVIDENCE_SILVER_COMPLETE_BRONZE_OBSERVATION_DRIFT")
-    return context
-
-
-def _revision(context: bytes, records: tuple[bytes, ...]) -> str:
-    return codec.sha(
-        codec.canonical(
-            [
-                codec.sha(codec.canonical(DEFINITION)),
-                codec.sha(context),
-                [codec.sha(r) for r in records],
-            ]
+    if not codec.pin(pins.recording_fingerprint):
+        raise codec.Rejected("EXACT_DECISION_EVIDENCE_SILVER_BRONZE_PIN_REQUIRED")
+    base.readonly(bronze)
+    records = bronze_api.read_decision_evidence_bronze(bronze, **pins.reader_args())
+    if not 1 <= len(records) <= codec.MAX_ROWS:
+        raise codec.Rejected("DECISION_EVIDENCE_SILVER_ROW_BOUND")
+    context = codec.canonical(
+        dict(
+            version=VERSION,
+            pins={
+                "source_label": pins.source_label,
+                "snapshot_id": pins.snapshot_id,
+                "capture_event_id": pins.capture_event_id,
+                "envelope_hash": pins.envelope_hash,
+                "recording_fingerprint": pins.recording_fingerprint,
+            },
+            record_hashes=[codec.sha(record) for record in records],
         )
     )
-
-
-def _values(raw: bytes) -> tuple[object, ...]:
-    doc = codec.parse(raw, MAX_RECORD)
-    fields = doc["stored_fields"]
-    if set(fields) != {n for n, _ in SCHEMA} or type(fields["available"]) is not bool:
-        raise codec.Rejected("EXACT_EVIDENCE_SCALARS_REQUIRED")
-    wall = fields["ts"]
-    if type(wall) is not str or len(wall) != 26:
-        raise codec.Rejected("EXACT_NAIVE_EVIDENCE_WALL_FIELDS_REQUIRED")
-    ts = datetime.fromisoformat(wall)
-    if codec.wall_fields(ts) != wall:
-        raise codec.Rejected("NONCANONICAL_EVIDENCE_WALL_FIELDS")
-    scalars = [ts if n == "ts" else fields[n] for n, _kind in SCHEMA]
-    return (doc["source_ordinal"], codec.sha(raw), *scalars)
+    if len(context) > MAX_CONTEXT:
+        raise codec.Rejected("DECISION_EVIDENCE_SILVER_CONTEXT_BOUND")
+    return context
 
 
 def persist_decision_evidence_silver(
@@ -293,62 +114,111 @@ def persist_decision_evidence_silver(
     actor_id: str,
     code_revision: str,
 ) -> dict[str, Any]:
-    pins = _pins(pins)
-    if (
-        not codec.pin(expected_context_sha256)
-        or not common._actor(actor_id)
-        or len(actor_id.encode()) > 128
-        or not common._revision(code_revision)
-    ):
-        raise codec.Rejected("REVIEWED_EVIDENCE_SILVER_REQUEST_REQUIRED")
-    common._separate(bronze, target)
-    _schema(target)
-    sets, observations, attempts = (common.name(target, "silver", n) for n in DOMAIN[1:])
-    jobs = common.name(target, "medallion_audit", "jobs")
-    for table, field, value in (
-        (sets, "scope_id", pins.scope_id),
-        (attempts, "scope_id", pins.scope_id),
-        (jobs, "scope_ref", "sha256:" + pins.scope_id),
-        (observations, "source_observation_id", pins.capture_event_id),
-    ):
-        if target.execute(f'SELECT 1 FROM {table} WHERE "{field}"=? LIMIT 1', [value]).fetchone():
-            raise codec.Rejected("EVIDENCE_SILVER_FIRST_WRITE_OR_ORPHAN_OBLIGATION")
+    if not codec.pin(expected_context_sha256) or not base.actor(actor_id) or not base.revision(code_revision):
+        raise codec.Rejected("REVIEWED_DECISION_EVIDENCE_SILVER_REQUEST_REQUIRED")
+    base.separate(bronze, target)
+    base.readonly(bronze)
+    revision_id = codec.sha(codec.canonical([VERSION, pins.scope_id, pins.capture_event_id, expected_context_sha256]))
+    for table, field in ((f"silver.{SETS}", "revision_id"), (f"silver.{ATTEMPTS}", "revision_id")):
+        if target.execute(f"SELECT 1 FROM {table} WHERE {field}=? LIMIT 1", [revision_id]).fetchone():
+            raise codec.Rejected("DECISION_EVIDENCE_SILVER_FIRST_WRITE_ORIGINAL_OBLIGATION")
     ledger = AuditLedger(target)
     job = ledger.plan_job(
         command_name=COMMAND,
         actor_id=actor_id,
         code_revision=code_revision,
-        scope_ref="sha256:" + pins.scope_id,
-        config_hash=codec.sha(codec.canonical([DEFINITION, expected_context_sha256])),
+        scope_ref="sha256:" + scope_id(pins.source_label),
+        config_hash=expected_context_sha256,
     )
     with ledger.execution(job):
-        context = observe_decision_evidence_bronze(bronze, pins=pins)
-        if codec.sha(context) != expected_context_sha256:
-            raise codec.Rejected("REVIEWED_EVIDENCE_SILVER_CONTEXT_CHANGED")
-        _, records = _derive(context)
-        if observe_decision_evidence_bronze(bronze, pins=pins) != context:
-            raise codec.Rejected("EVIDENCE_SILVER_BRONZE_CONTEXT_DRIFT")
-        revision = _revision(context, records)
-        at = datetime.now(UTC)
+        first = observe_decision_evidence_bronze(bronze, pins=pins)
+        if codec.sha(first) != expected_context_sha256:
+            raise codec.Rejected("REVIEWED_DECISION_EVIDENCE_BRONZE_CONTEXT_CHANGED")
+        second = observe_decision_evidence_bronze(bronze, pins=pins)
+        if second != first:
+            raise codec.Rejected("DECISION_EVIDENCE_BRONZE_CONTEXT_DRIFT")
+        records = bronze_api.read_decision_evidence_bronze(bronze, **pins.reader_args())
+        materialized = []
+        total_scalar = 0
+        total_record = 0
+        for ordinal, record in enumerate(records):
+            if len(record) > MAX_RECORD:
+                raise codec.Rejected("DECISION_EVIDENCE_SILVER_RECORD_BOUND")
+            total_record += len(record)
+            if total_record > MAX_RECORDS:
+                raise codec.Rejected("DECISION_EVIDENCE_SILVER_AGGREGATE_BOUND")
+            document = json.loads(record)
+            fields = document["stored_fields"]
+            evidence_id = fields["evidence_id"]
+            run_id = fields["run_id"]
+            ts = fields["ts"]
+            symbol = fields["symbol"]
+            plugin = fields["plugin"]
+            if (
+                type(evidence_id) is not str
+                or not 0 < len(evidence_id.encode()) <= MAX_SCALAR
+                or type(run_id) is not str
+                or not 0 < len(run_id.encode()) <= MAX_SCALAR
+                or type(ts) is not str
+                or type(symbol) is not str
+                or not 0 < len(symbol.encode()) <= MAX_SCALAR
+                or type(plugin) is not str
+                or not 0 < len(plugin.encode()) <= MAX_SCALAR
+            ):
+                raise codec.Rejected("DECISION_EVIDENCE_SILVER_KEY_REQUIRED")
+            total_scalar += len(evidence_id.encode()) + len(run_id.encode())
+            total_scalar += len(symbol.encode()) + len(plugin.encode())
+            instant = datetime.fromisoformat(ts)
+            if instant.tzinfo is not None:
+                raise codec.Rejected("DECISION_EVIDENCE_SILVER_WALL_TS_REQUIRED")
+            available = fields["available"]
+            payload_json = fields["payload_json"]
+            if type(available) is not bool:
+                raise codec.Rejected("DECISION_EVIDENCE_SILVER_BOOLEAN_REQUIRED")
+            if payload_json is not None:
+                if type(payload_json) is not str:
+                    raise codec.Rejected("DECISION_EVIDENCE_SILVER_TEXT_REQUIRED")
+                size = len(payload_json.encode())
+                if size > MAX_SCALAR:
+                    raise codec.Rejected("DECISION_EVIDENCE_SILVER_SCALAR_BOUND")
+                total_scalar += size
+            if total_scalar > MAX_SCALARS:
+                raise codec.Rejected("DECISION_EVIDENCE_SILVER_SCALAR_AGGREGATE_BOUND")
+            materialized.append(
+                (
+                    ordinal,
+                    evidence_id,
+                    run_id,
+                    instant,
+                    symbol,
+                    plugin,
+                    available,
+                    payload_json,
+                    record,
+                )
+            )
         target.execute("BEGIN TRANSACTION")
         try:
             target.execute(
-                f"INSERT INTO {sets} VALUES (?,?,?,?,?,?)",
-                [revision, pins.scope_id, context, len(records), job, at],
+                f"INSERT INTO silver.{SETS} VALUES (?,?,?,?)",
+                [revision_id, first, expected_context_sha256, base.clock(datetime.now(UTC))],
             )
-            for raw in records:
+            for row in materialized:
                 target.execute(
-                    f"INSERT INTO {observations} VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
-                    [revision, *_values(raw), raw, pins.capture_event_id, at],
+                    f"INSERT INTO silver.{OBSERVATIONS} VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                    [revision_id, *row, base.clock(datetime.now(UTC))],
                 )
-            target.execute(f"INSERT INTO {attempts} VALUES (?,?,?)", [job, pins.scope_id, revision])
+            target.execute(
+                f"INSERT INTO silver.{ATTEMPTS} VALUES (?,?)",
+                [revision_id, base.clock(datetime.now(UTC))],
+            )
             target.execute("COMMIT")
         except BaseException:
             target.execute("ROLLBACK")
             raise
-    fingerprint, _context_bytes, _records = _recording(target, revision)
+    fingerprint, _ = _read_recording(target, revision_id=revision_id)
     return dict(
-        revision_id=revision,
+        revision_id=revision_id,
         recording_fingerprint=fingerprint,
         row_count=len(records),
         job_id=job,
@@ -356,200 +226,183 @@ def persist_decision_evidence_silver(
     )
 
 
-def _scalar_queries() -> tuple[str, str, str]:
-    selected: list[str] = []
-    sizes: list[str] = []
-    overflow: list[str] = []
-    for field, kind in SCHEMA:
-        quoted = '"' + field + '"'
-        if kind == "VARCHAR":
-            length = f"octet_length(encode({quoted}))"
-            selected.append(f"CASE WHEN {length}<={codec.MAX_CELL} THEN {quoted} END")
-            sizes.append(f"coalesce({length},0)")
-            overflow.append(f"coalesce({length}>{codec.MAX_CELL},false)")
-        else:
-            selected.append(quoted)
-    overflow += [
-        "length(record_id)>64",
-        "length(source_observation_id)>64",
-        "length(revision_id)>64",
-    ]
-    return ",".join(selected), "+".join(sizes), " OR ".join(overflow)
+def _read_recording(target: Any, *, revision_id: str) -> tuple[str, bytes]:
+    if not codec.pin(revision_id):
+        raise codec.Rejected("EXACT_DECISION_EVIDENCE_SILVER_REVISION_PIN_REQUIRED")
+    rows = base.metadata(
+        target,
+        f"SELECT CASE WHEN octet_length(context)<=? THEN to_hex(context) END,"
+        f"CASE WHEN length(context_sha256)<=64 THEN context_sha256 END,recorded_at "
+        f"FROM silver.{SETS} WHERE revision_id=?",
+        [MAX_CONTEXT, revision_id],
+        1,
+    )
+    context = bytes.fromhex(rows[0][0])
+    if rows[0][1] != codec.sha(context):
+        raise codec.Rejected("DECISION_EVIDENCE_SILVER_CONTEXT_HASH_MISMATCH")
+    base.clock(rows[0][2])
+    return codec.sha(codec.canonical([VERSION, revision_id, context.hex()])), context
 
 
-def _recording(c: Any, revision: str) -> tuple[str, bytes, tuple[bytes, ...]]:
-    if not codec.pin(revision):
-        raise codec.Rejected("EXACT_EVIDENCE_SILVER_REVISION_REQUIRED")
-    c.execute("BEGIN TRANSACTION")
-    try:
-        _schema(c)
-        sets, observations, attempts = (common.name(c, "silver", n) for n in DOMAIN[1:])
-        jobs = common.name(c, "medallion_audit", "jobs")
-        events = common.name(c, "medallion_audit", "job_events")
-        head = c.execute(
-            "SELECT CASE WHEN length(scope_id)<=64 THEN scope_id END,"
-            "CASE WHEN octet_length(context)<=? THEN context END,row_count,"
-            "CASE WHEN length(first_job_id)<=128 THEN first_job_id END,recorded_at "
-            f"FROM {sets} WHERE revision_id=?",
-            [MAX_CONTEXT, revision],
-        ).fetchone()
-        if head is None or any(head[i] is None for i in (0, 1, 3)):
-            raise codec.Rejected("EVIDENCE_SILVER_SET_MISSING_OR_UNBOUNDED")
-        context = bytes(head[1])
-        pins, expected = _derive(context)
-        selected, size, overflow = _scalar_queries()
-        predicate = "revision_id=? OR source_observation_id=?"
-        args = [revision, pins.capture_event_id]
-        totals = c.execute(
-            "SELECT count(*),coalesce(sum(octet_length(record_bytes)),0),"
-            "coalesce(max(octet_length(record_bytes)),0),"
-            f"coalesce(sum({size}),0),coalesce(bool_or({overflow}),false) "
-            f"FROM {observations} WHERE {predicate}",
-            args,
-        ).fetchone()
-        if (
-            totals is None
-            or not 1 <= totals[0] <= 1000
-            or totals[1] > MAX_RECORDS
-            or totals[2] > MAX_RECORD
-            or totals[3] > MAX_SCALAR_BYTES
-            or totals[4]
-        ):
-            raise codec.Rejected("EVIDENCE_SILVER_TRANSFER_BOUND")
-        stored = c.execute(
-            "SELECT CASE WHEN length(revision_id)<=64 THEN revision_id END,ordinal,"
-            f"CASE WHEN length(record_id)<=64 THEN record_id END,{selected},"
-            "CASE WHEN octet_length(record_bytes)<=? THEN record_bytes END,"
-            "CASE WHEN length(source_observation_id)<=64 THEN source_observation_id END,"
-            "recorded_at "
-            f"FROM {observations} WHERE {predicate} ORDER BY ordinal LIMIT 1001",
-            [MAX_RECORD, *args],
-        ).fetchall()
-        links = c.execute(
-            "SELECT CASE WHEN length(job_id)<=128 THEN job_id END,"
-            "CASE WHEN length(scope_id)<=64 THEN scope_id END,"
-            f"CASE WHEN length(revision_id)<=64 THEN revision_id END FROM {attempts} "
-            "WHERE scope_id=? OR revision_id=? OR job_id=? LIMIT 3",
-            [head[0], revision, head[3]],
-        ).fetchall()
-        scoped = common._metadata(
-            c,
-            "SELECT CASE WHEN length(job_id)<=128 THEN job_id END,"
-            "CASE WHEN parent_job_id IS NULL THEN NULL ELSE 'PRESENT' END,"
-            "CASE WHEN length(command_name)<=128 THEN command_name END,"
-            "CASE WHEN octet_length(encode(actor_id))<=128 THEN actor_id END,"
-            "CASE WHEN length(code_revision)<=40 THEN code_revision END,"
-            f"CASE WHEN length(config_hash)<=64 THEN config_hash END,created_at FROM {jobs} "
-            "WHERE scope_ref=? OR job_id=?",
-            ["sha256:" + head[0], head[3]],
-            1,
-        )
-        history = common._metadata(
-            c,
-            "SELECT event_index,CASE WHEN length(state)<=32 THEN state END,recorded_at,"
-            f"CASE WHEN reason_code IS NULL THEN NULL ELSE 'PRESENT' END FROM {events} "
-            "WHERE job_id=? ORDER BY event_index",
-            [head[3]],
-            3,
-        )
-        c.execute("COMMIT")
-    except BaseException:
-        c.execute("ROLLBACK")
-        raise
+def _materialized_values(record: bytes) -> tuple[object, ...]:
+    document = json.loads(record)
+    fields = document["stored_fields"]
+    evidence_id = fields["evidence_id"]
+    run_id = fields["run_id"]
+    ts = fields["ts"]
+    symbol = fields["symbol"]
+    plugin = fields["plugin"]
     if (
-        pins.scope_id != head[0]
-        or _revision(context, expected) != revision
-        or head[2] != len(expected)
-        or len(stored) != len(expected)
-        or links != [(head[3], pins.scope_id, revision)]
+        type(evidence_id) is not str
+        or not 0 < len(evidence_id.encode()) <= MAX_SCALAR
+        or type(run_id) is not str
+        or not 0 < len(run_id.encode()) <= MAX_SCALAR
+        or type(ts) is not str
+        or type(symbol) is not str
+        or not 0 < len(symbol.encode()) <= MAX_SCALAR
+        or type(plugin) is not str
+        or not 0 < len(plugin.encode()) <= MAX_SCALAR
     ):
-        raise codec.Rejected("EVIDENCE_SILVER_SET_OR_COMPLETE_COVERAGE_MISMATCH")
-    for got, raw in zip(stored, expected, strict=True):
-        if (
-            got[:10] != (revision, *_values(raw))
-            or got[10] is None
-            or bytes(got[10]) != raw
-            or got[11:] != (pins.capture_event_id, head[4])
-        ):
-            raise codec.Rejected("EVIDENCE_SILVER_FULL_RECORD_RECOMPUTATION_MISMATCH")
-    config = codec.sha(codec.canonical([DEFINITION, codec.sha(context)]))
-    if (
-        len(scoped) != 1
-        or scoped[0][0] != head[3]
-        or scoped[0][1] is not None
-        or scoped[0][2] != COMMAND
-        or not common._actor(scoped[0][3])
-        or not common._revision(scoped[0][4])
-        or scoped[0][5] != config
-        or [(h[0], h[1], h[3]) for h in history]
-        != [(1, "PLANNED", None), (2, "RUNNING", None), (3, "SUCCEEDED", None)]
-    ):
-        raise codec.Rejected("ORIGINAL_EVIDENCE_SILVER_AUDIT_NOT_VERIFIED")
-    for clock in [head[4], scoped[0][6], *(h[2] for h in history)]:
-        common._clock(clock)
-    # NEVER feed a naive stored SQL timestamp to the aware metadata serializer.
-    metadata_rows = [
-        [*r[:5], codec.wall_fields(r[5]), *r[6:10], codec.sha(bytes(r[10])), *r[11:]]
-        for r in stored
-    ]
-    metadata = [
-        VERSION,
-        revision,
-        head[0],
-        codec.sha(context),
-        list(head[2:]),
-        metadata_rows,
-        links,
-        scoped,
-        history,
-    ]
-    return codec.sha(common._json(metadata)), context, expected
+        raise codec.Rejected("DECISION_EVIDENCE_SILVER_KEY_REQUIRED")
+    instant = datetime.fromisoformat(ts)
+    if instant.tzinfo is not None:
+        raise codec.Rejected("DECISION_EVIDENCE_SILVER_WALL_TS_REQUIRED")
+    available = fields["available"]
+    payload_json = fields["payload_json"]
+    if available is not None and type(available) is not bool:
+        raise codec.Rejected("DECISION_EVIDENCE_SILVER_BOOLEAN_REQUIRED")
+    if payload_json is not None and type(payload_json) is not str:
+        raise codec.Rejected("DECISION_EVIDENCE_SILVER_TEXT_REQUIRED")
+    return (evidence_id, run_id, instant, symbol, plugin, available, payload_json)
 
 
 def read_decision_evidence_silver(
-    silver: Any, *, revision_id: str, expected_recording_fingerprint: str
+    reader: Any, *, revision_id: str, expected_recording_fingerprint: str
 ) -> tuple[bytes, ...]:
     if not codec.pin(expected_recording_fingerprint):
-        raise codec.Rejected("EXACT_EVIDENCE_SILVER_RECORDING_PIN_REQUIRED")
-    common._readonly(silver)
-    fingerprint, _context_bytes, records = _recording(silver, revision_id)
+        raise codec.Rejected("EXACT_DECISION_EVIDENCE_SILVER_RECORDING_PIN_REQUIRED")
+    base.readonly(reader)
+    fingerprint, context = _read_recording(reader, revision_id=revision_id)
     if fingerprint != expected_recording_fingerprint:
-        raise codec.Rejected("EVIDENCE_SILVER_RECORDING_FINGERPRINT_CHANGED")
+        raise codec.Rejected("DECISION_EVIDENCE_SILVER_RECORDING_FINGERPRINT_CHANGED")
+    text_fields = ("evidence_id", "run_id", "symbol", "plugin", "payload_json")
+    guards = []
+    sizes = []
+    overflow = []
+    for name in text_fields:
+        quoted = '"' + name + '"'
+        length = f"octet_length(encode({quoted}))"
+        guards.append(f"CASE WHEN {length}<={MAX_SCALAR} THEN {quoted} END")
+        sizes.append(f"coalesce({length},0)")
+        overflow.append(f"coalesce({length}>{MAX_SCALAR},false)")
+    guards += ['"ts"', '"available"']
+    guards += [
+        "CASE WHEN octet_length(record_bytes)<=? THEN record_bytes END",
+        "recorded_at",
+    ]
+    columns = ",".join(["ordinal", *guards])
+    totals_sql = (
+        "SELECT count(*),coalesce(sum(octet_length(record_bytes)),0),"
+        "coalesce(max(octet_length(record_bytes)),0),"
+        f"coalesce(sum({'+'.join(sizes)}),0),"
+        f"coalesce(bool_or({' OR '.join(overflow)}),false) "
+        f"FROM silver.{OBSERVATIONS} WHERE revision_id=?"
+    )
+    totals = base.metadata(reader, totals_sql, [revision_id], 1)[0]
+    if (
+        totals[0] < 1
+        or totals[0] > codec.MAX_ROWS
+        or totals[1] > MAX_RECORDS
+        or totals[2] > MAX_RECORD
+        or totals[3] > MAX_SCALARS
+        or totals[4]
+    ):
+        raise codec.Rejected("DECISION_EVIDENCE_SILVER_TRANSFER_BOUND")
+    rows = base.metadata(
+        reader,
+        f"SELECT {columns} FROM silver.{OBSERVATIONS} WHERE revision_id=? ORDER BY ordinal LIMIT ?",
+        [MAX_RECORD, revision_id, codec.MAX_ROWS + 1],
+        -1,
+    )
+    if len(rows) != totals[0]:
+        raise codec.Rejected("DECISION_EVIDENCE_SILVER_ROW_BOUND")
+    records = tuple(bytes(row[8]) for row in rows)
+    if [row[0] for row in rows] != list(range(len(rows))):
+        raise codec.Rejected("DECISION_EVIDENCE_SILVER_ORDINAL_COVERAGE_MISMATCH")
+    try:
+        context_document = json.loads(context)
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise codec.Rejected("DECISION_EVIDENCE_SILVER_CONTEXT_RECORD_MISMATCH") from exc
+    expected_hashes = [codec.sha(record) for record in records]
+    pins = context_document.get("pins") if isinstance(context_document, dict) else None
+    if (
+        not isinstance(context_document, dict)
+        or set(context_document) != {"version", "pins", "record_hashes"}
+        or context_document.get("version") != VERSION
+        or not isinstance(pins, dict)
+        or set(pins)
+        != {
+            "source_label",
+            "snapshot_id",
+            "capture_event_id",
+            "envelope_hash",
+            "recording_fingerprint",
+        }
+        or type(pins.get("source_label")) is not str
+        or not all(
+            codec.pin(pins.get(key))
+            for key in ("snapshot_id", "capture_event_id", "envelope_hash", "recording_fingerprint")
+        )
+        or context_document.get("record_hashes") != expected_hashes
+        or codec.canonical(context_document) != context
+    ):
+        raise codec.Rejected("DECISION_EVIDENCE_SILVER_CONTEXT_RECORD_MISMATCH")
+    for row, record in zip(rows, records, strict=True):
+        expected = _materialized_values(record)
+        actual = (row[1], row[2], row[6], row[3], row[4], row[7], row[5])
+        if actual != expected:
+            raise codec.Rejected("DECISION_EVIDENCE_SILVER_MATERIALIZED_FIELD_MISMATCH")
+    base.verify_recording(
+        reader,
+        command=COMMAND,
+        scope_ref="sha256:" + scope_id(pins["source_label"]),
+        config_hash=codec.sha(context),
+        revision_id=revision_id,
+        sets_table=f"silver.{SETS}",
+        observations_table=f"silver.{OBSERVATIONS}",
+        attempts_table=f"silver.{ATTEMPTS}",
+        observation_count=len(records),
+    )
     return records
 
 
 def revalidate_decision_evidence_silver(
-    bronze: Any, silver: Any, *, revision_id: str, expected_recording_fingerprint: str
+    bronze: Any,
+    reader: Any,
+    *,
+    revision_id: str,
+    expected_recording_fingerprint: str,
+    source_label: str,
+    snapshot_id: str,
+    capture_event_id: str,
+    envelope_hash: str,
+    expected_bronze_recording_fingerprint: str,
 ) -> tuple[bytes, ...]:
-    common._separate(bronze, silver)
-    args = dict(
-        revision_id=revision_id, expected_recording_fingerprint=expected_recording_fingerprint
+    base.separate(bronze, reader)
+    first = read_decision_evidence_silver(
+        reader,
+        revision_id=revision_id,
+        expected_recording_fingerprint=expected_recording_fingerprint,
     )
-    first = read_decision_evidence_silver(silver, **args)
-    fingerprint, context, _records = _recording(silver, revision_id)
-    if fingerprint != expected_recording_fingerprint:
-        raise codec.Rejected("EVIDENCE_SILVER_RECORDING_FINGERPRINT_CHANGED")
-    pins, _records = _derive(context)
-    for _ in range(2):
-        if observe_decision_evidence_bronze(bronze, pins=pins) != context:
-            raise codec.Rejected("CURRENT_EVIDENCE_BRONZE_CONTEXT_CHANGED")
-    if read_decision_evidence_silver(silver, **args) != first:
-        raise codec.Rejected("EVIDENCE_SILVER_CHANGED_DURING_REVALIDATION")
-    return first
-
-
-def revalidate_decision_evidence_silver_source(
-    legacy: Any, bronze: Any, silver: Any, *, revision_id: str, expected_recording_fingerprint: str
-) -> tuple[bytes, ...]:
-    for left, right in ((legacy, bronze), (legacy, silver), (bronze, silver)):
-        common._separate(left, right)
-    args = dict(
-        revision_id=revision_id, expected_recording_fingerprint=expected_recording_fingerprint
+    pins = DecisionEvidenceBronzePins(
+        source_label=source_label,
+        snapshot_id=snapshot_id,
+        capture_event_id=capture_event_id,
+        envelope_hash=envelope_hash,
+        recording_fingerprint=expected_bronze_recording_fingerprint,
     )
-    first = revalidate_decision_evidence_silver(bronze, silver, **args)
-    _fingerprint, context, _records = _recording(silver, revision_id)
-    pins, expected = _derive(context)
-    observed = source.revalidate_decision_evidence_source(legacy, bronze, **pins.reader_args())
-    if observed != expected or revalidate_decision_evidence_silver(bronze, silver, **args) != first:
-        raise codec.Rejected("CURRENT_LEGACY_EVIDENCE_OR_SILVER_CHANGED")
+    context = observe_decision_evidence_bronze(bronze, pins=pins)
+    _, recorded_context = _read_recording(reader, revision_id=revision_id)
+    if context != recorded_context:
+        raise codec.Rejected("DECISION_EVIDENCE_SILVER_REVALIDATION_MISMATCH")
     return first

@@ -1,92 +1,97 @@
 """Actual market-events writer -> Bronze -> persisted Silver chain."""
 
 from datetime import UTC, datetime
+from pathlib import Path
+from typing import Any
 
 import duckdb
 import pytest
 
+from nse_quant.data_platform import legacy_market_events as codec
 from nse_quant.data_platform import legacy_market_events_bronze as bronze_api
 from nse_quant.data_platform import legacy_market_events_silver_store as silver
 from nse_quant.data_platform import legacy_silver_common as base
 from nse_quant.data_platform.audit import AuditLedger
 from nse_quant.data_platform.bronze import BronzeEventStore
-from nse_quant.persistence.duckdb_store import DuckDBStore
 
-AT = datetime(2026, 1, 1, 9, 0, tzinfo=UTC)
+AT = datetime(2026, 1, 1, 9, 15, tzinfo=UTC)
 REVISION = "a" * 40
+TABLE = '"main"."market_events"'
 
 
-def seed(path):
-    legacy = DuckDBStore(path=path)
+def _seed(path: Path) -> None:
+    writer = duckdb.connect(str(path))
     try:
-        legacy.conn.executemany(
-            "INSERT INTO market_events VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        columns = ",".join(f'"{n}" {k}' for n, k in codec.SCHEMA)
+        writer.execute(f'CREATE TABLE {TABLE} ({columns},PRIMARY KEY("event_id"))')
+        writer.executemany(
+            f"INSERT INTO {TABLE} VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             [
-                [
-                    "event-1",
-                    "synthetic",
-                    "ECONOMIC",
-                    "CPI release",
-                    "Monthly CPI",
+                (
+                    "ev-1",
+                    "rss",
+                    "EARNINGS",
+                    "Title",
+                    "Desc",
                     "NIFTY",
                     AT,
                     "HIGH",
-                    5.0,
-                    5.5,
-                    "ABOVE",
+                    100.0,
+                    105.0,
+                    "BEAT",
                     '["NIFTY"]',
-                    '{"cpi":5.5}',
+                    "{}",
                     AT,
-                ],
-                [
-                    "event-2",
-                    "synthetic",
-                    "ECONOMIC",
-                    "RBI policy",
-                    "Repo rate",
-                    None,
-                    AT,
+                ),
+                ("ev-2", "rss", "GDP", None, None, None, None, None, None, None, None, None, None, None),
+                (
+                    "ev-3",
+                    "api",
+                    "CPI",
+                    "Title",
+                    "Desc",
+                    "BANKNIFTY",
+                    AT.replace(minute=16),
                     "MEDIUM",
                     None,
                     None,
                     None,
+                    "[]",
                     "null",
-                    None,
-                    AT,
-                ],
-                [
-                    "event-3",
-                    None,
-                    None,
-                    None,
-                    None,
-                    None,
-                    None,
-                    None,
-                    None,
-                    None,
-                    None,
-                    None,
-                    None,
-                    None,
-                ],
+                    AT.replace(minute=16),
+                ),
+                (
+                    "ev-4",
+                    "api",
+                    "RATE",
+                    "Title",
+                    "Desc",
+                    "NIFTY",
+                    AT.replace(minute=17),
+                    "LOW",
+                    1.0,
+                    1.0,
+                    "INLINE",
+                    "null",
+                    "[]",
+                    AT.replace(minute=17),
+                ),
             ],
         )
     finally:
-        legacy.close()
+        writer.close()
 
 
-def bronze(tmp_path):
-    legacy_path, bronze_path = tmp_path / "legacy.duckdb", tmp_path / "bronze.duckdb"
-    seed(legacy_path)
-    with (
-        duckdb.connect(str(legacy_path), read_only=True) as source,
-        duckdb.connect(str(bronze_path)) as target,
-    ):
+def _bronze(tmp_path: Path) -> tuple[Path, silver.MarketEventsBronzePins]:
+    source_path, bronze_path = tmp_path / "legacy.duckdb", tmp_path / "bronze.duckdb"
+    _seed(source_path)
+    source = duckdb.connect(str(source_path), read_only=True)
+    target = duckdb.connect(str(bronze_path))
+    try:
         AuditLedger(target).initialize()
         BronzeEventStore(target).initialize()
         snapshot = bronze_api.capture_market_events(source, source_label="fixture")
-        result = bronze_api.preserve_market_events(
+        receipt = bronze_api.preserve_market_events(
             source,
             target,
             source_label="fixture",
@@ -95,17 +100,20 @@ def bronze(tmp_path):
             actor_id="synthetic",
             code_revision=REVISION,
         )
+    finally:
+        target.close()
+        source.close()
     return bronze_path, silver.MarketEventsBronzePins(
-        source_label=result["source_label"],
-        snapshot_id=result["snapshot_id"],
-        capture_event_id=result["capture_event_id"],
-        envelope_hash=result["envelope_hash"],
-        recording_fingerprint=result["recording_fingerprint"],
+        source_label=receipt["source_label"],
+        snapshot_id=receipt["snapshot_id"],
+        capture_event_id=receipt["capture_event_id"],
+        envelope_hash=receipt["envelope_hash"],
+        recording_fingerprint=receipt["recording_fingerprint"],
     )
 
 
-def chain(tmp_path):
-    bronze_path, pins = bronze(tmp_path)
+def _chain(tmp_path: Path) -> tuple[Path, Path, silver.MarketEventsBronzePins, dict[str, Any]]:
+    bronze_path, pins = _bronze(tmp_path)
     silver_path = tmp_path / "market_events_silver.duckdb"
     with (
         duckdb.connect(str(bronze_path), read_only=True) as bronze_conn,
@@ -124,8 +132,8 @@ def chain(tmp_path):
     return bronze_path, silver_path, pins, receipt
 
 
-def test_market_events_bronze_to_silver_chain(tmp_path):
-    bronze_path, silver_path, pins, receipt = chain(tmp_path)
+def test_market_events_bronze_to_silver_chain(tmp_path: Path) -> None:
+    bronze_path, silver_path, pins, receipt = _chain(tmp_path)
     with (
         duckdb.connect(str(bronze_path), read_only=True) as bronze_conn,
         duckdb.connect(str(silver_path), read_only=True) as reader,
@@ -135,35 +143,116 @@ def test_market_events_bronze_to_silver_chain(tmp_path):
             revision_id=receipt["revision_id"],
             expected_recording_fingerprint=receipt["recording_fingerprint"],
         )
-        assert len(records) == receipt["row_count"] == 3
+        assert len(records) == receipt["row_count"] == 4
         assert records == bronze_api.read_market_events_bronze(bronze_conn, **pins.reader_args())
+        reader_pins = pins.reader_args()
+        reader_pins.pop("expected_recording_fingerprint")
         assert records == silver.revalidate_market_events_silver(
             bronze_conn,
             reader,
             revision_id=receipt["revision_id"],
             expected_recording_fingerprint=receipt["recording_fingerprint"],
-            source_label=pins.source_label,
-            snapshot_id=pins.snapshot_id,
-            capture_event_id=pins.capture_event_id,
-            envelope_hash=pins.envelope_hash,
             expected_bronze_recording_fingerprint=pins.recording_fingerprint,
+            **reader_pins,
         )
         rows = reader.execute(
-            "SELECT event_id,source,event_type,title,description,symbol,event_ts,"
-            "importance,consensus_value,actual_value,surprise_label,"
-            "affected_underlyings,raw_payload,ingested_at "
-            "FROM silver.market_event_observations WHERE revision_id=? ORDER BY ordinal",
+            "SELECT event_id,source,event_type,title,description,symbol,event_ts,importance,"
+            "consensus_value,actual_value,surprise_label,affected_underlyings,raw_payload,"
+            "ingested_at FROM silver.market_event_observations WHERE revision_id=? ORDER BY ordinal",
             [receipt["revision_id"]],
         ).fetchall()
-        assert rows[0][0] == "event-1" and rows[0][6] == AT
-        assert rows[0][8] == 5.0 and rows[0][9] == 5.5
-        assert rows[0][11] == '["NIFTY"]' and rows[0][12] == '{"cpi":5.5}'
-        assert rows[1][5] is None and rows[1][11] == "null" and rows[1][12] is None
-        assert rows[2][1:] == (None,) * 13
+        by_key = {row[0]: row for row in rows}
+        assert by_key["ev-1"][6] == AT and by_key["ev-1"][8] == 100.0
+        assert by_key["ev-2"][3:] == (None,) * 11
+        assert by_key["ev-3"][8] is None and by_key["ev-3"][11] == "[]"
+        assert by_key["ev-4"][11] == "null" and by_key["ev-4"][12] == "[]"
 
 
-def test_market_events_silver_tampering(tmp_path):
-    _b, silver_path, _pins, receipt = chain(tmp_path)
+@pytest.mark.parametrize(
+    "column,value",
+    [
+        ("event_id", "'changed'"),
+        ("source", "'changed'"),
+        ("event_type", "'changed'"),
+        ("title", "'changed'"),
+        ("description", "'changed'"),
+        ("symbol", "'changed'"),
+        ("event_ts", "event_ts + INTERVAL '1 microsecond'"),
+        ("importance", "'changed'"),
+        ("consensus_value", "consensus_value + 0.5"),
+        ("actual_value", "actual_value + 0.5"),
+        ("surprise_label", "'changed'"),
+        ("affected_underlyings", "'changed'"),
+        ("raw_payload", "'changed'"),
+        ("ingested_at", "ingested_at + INTERVAL '1 microsecond'"),
+    ],
+    ids=[
+        "key",
+        "source",
+        "event-type",
+        "title",
+        "description",
+        "symbol",
+        "event-ts",
+        "importance",
+        "consensus-value",
+        "actual-value",
+        "surprise-label",
+        "affected-underlyings",
+        "raw-payload",
+        "ingested-at",
+    ],
+)
+def test_materialized_field_corruption_rejected(tmp_path: Path, column: str, value: str) -> None:
+    _b, silver_path, _pins, receipt = _chain(tmp_path)
+    with duckdb.connect(str(silver_path)) as writer:
+        changed = writer.execute(
+            f"UPDATE silver.market_event_observations SET {column}={value} WHERE ordinal=0 RETURNING 1"
+        ).fetchone()
+        assert changed == (1,)
+    with (
+        duckdb.connect(str(silver_path), read_only=True) as reader,
+        pytest.raises(ValueError, match="MATERIALIZED_FIELD_MISMATCH"),
+    ):
+        silver.read_market_events_silver(
+            reader,
+            revision_id=receipt["revision_id"],
+            expected_recording_fingerprint=receipt["recording_fingerprint"],
+        )
+
+
+def test_missing_row_rejected(tmp_path: Path) -> None:
+    _b, silver_path, _pins, receipt = _chain(tmp_path)
+    with duckdb.connect(str(silver_path)) as writer:
+        writer.execute("DELETE FROM silver.market_event_observations WHERE ordinal=0")
+    with (
+        duckdb.connect(str(silver_path), read_only=True) as reader,
+        pytest.raises(ValueError, match="ORDINAL_COVERAGE_MISMATCH"),
+    ):
+        silver.read_market_events_silver(
+            reader,
+            revision_id=receipt["revision_id"],
+            expected_recording_fingerprint=receipt["recording_fingerprint"],
+        )
+
+
+def test_ordinal_gap_rejected(tmp_path: Path) -> None:
+    _b, silver_path, _pins, receipt = _chain(tmp_path)
+    with duckdb.connect(str(silver_path)) as writer:
+        writer.execute("UPDATE silver.market_event_observations SET ordinal=ordinal+10 WHERE ordinal=1")
+    with (
+        duckdb.connect(str(silver_path), read_only=True) as reader,
+        pytest.raises(ValueError, match="ORDINAL_COVERAGE_MISMATCH"),
+    ):
+        silver.read_market_events_silver(
+            reader,
+            revision_id=receipt["revision_id"],
+            expected_recording_fingerprint=receipt["recording_fingerprint"],
+        )
+
+
+def test_market_events_silver_tampering(tmp_path: Path) -> None:
+    _b, silver_path, _pins, receipt = _chain(tmp_path)
     with duckdb.connect(str(silver_path)) as writer:
         writer.execute("UPDATE silver.market_event_sets SET context='bad'::BLOB")
     with (
@@ -177,8 +266,8 @@ def test_market_events_silver_tampering(tmp_path):
         )
 
 
-def test_market_events_silver_first_write_obligation(tmp_path):
-    bronze_path, silver_path, pins, receipt = chain(tmp_path)
+def test_market_events_silver_first_write_obligation(tmp_path: Path) -> None:
+    bronze_path, silver_path, pins, receipt = _chain(tmp_path)
     with (
         duckdb.connect(str(bronze_path), read_only=True) as bronze_conn,
         duckdb.connect(str(silver_path)) as target,
@@ -195,12 +284,9 @@ def test_market_events_silver_first_write_obligation(tmp_path):
             )
 
 
-def test_market_events_silver_same_file_alias(tmp_path):
-    bronze_path, silver_path, pins, receipt = chain(tmp_path)
-    with (
-        duckdb.connect(str(bronze_path), read_only=True),
-        duckdb.connect(str(silver_path)) as target,
-    ):
+def test_market_events_silver_same_file_alias(tmp_path: Path) -> None:
+    _bronze_path, silver_path, pins, _receipt = _chain(tmp_path)
+    with duckdb.connect(str(silver_path)) as target:
         alias = target.cursor()
         try:
             with pytest.raises(ValueError, match="SEPARATE"):

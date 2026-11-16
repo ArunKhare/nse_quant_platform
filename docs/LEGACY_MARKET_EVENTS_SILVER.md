@@ -1,24 +1,15 @@
-# Legacy market events Silver
+# Legacy market-events Silver
 
-Persisted source-linked market-events Silver over the actual accepted Bronze reader.
-
-## Contract
+Persisted, source-linked Silver over the actual accepted `market_events` Bronze reader.
 
 - Store: `legacy-market-events-silver-recording@1`
 - Command: `normalize.legacy_market_events@1`
-- Contract: `silver.legacy_market_events /1/APPEND_REVISIONS`
-- Each Silver revision is bound to the exact reviewed Bronze recording fingerprint and context hash.
-
-## Retained materialization
-
-All fourteen source fields are materialized with exact nullability: `event_id VARCHAR NOT NULL`; nullable `event_ts`/`ingested_at TIMESTAMPTZ`; nullable `consensus_value`/`actual_value DOUBLE`; nullable `affected_underlyings`/`raw_payload VARCHAR` (declared retained JSON-cast text); nullable text fields.
-
-No invented natural key: only per-revision `event_id` uniqueness plus ordinal. `importance` and `surprise_label` stay opaque nullable legacy labels. `affected_underlyings` and `raw_payload` stay exact nullable JSON-cast text; SQL NULL, JSON null text, and empty text remain distinct.
-
-## Native path
-
-`observe_market_events_bronze` reads Bronze records through the public Bronze reader and derives a bounded context. `persist_market_events_silver` requires two identical Bronze observations, then writes one Silver set, one observation per Bronze record, and one attempt, all inside one transaction with a separate audit job.
-
-The public reader verifies the Silver context hash, recording fingerprint, and per-record coverage. Current Bronze equality remains separate from retained Silver replay.
-
-This Silver does not interpret event importance, surprise labels, or payloads as native event truth, replay event ingestion, or grant decision eligibility.
+- Contract: `silver.legacy_market_event_observations@1` `APPEND_REVISIONS`
+- Source: `main.market_events`, 14 columns, `event_id` only key
+- Materialized: `event_id`, nullable `source`/`event_type`/`title`/`description`/`symbol`/`importance`/`surprise_label`, nullable `event_ts`/`ingested_at` (`TIMESTAMPTZ`), nullable `consensus_value`/`actual_value` (`DOUBLE`), nullable opaque `affected_underlyings`/`raw_payload` (`VARCHAR` from retained JSON-cast text)
+- Per-revision `event_id` uniqueness plus ordinal; no invented natural key
+- Original first-write, audit, orphan, and final-audit obligations; no healing or adoption
+- Retained Silver, current native Bronze, and current legacy SQL remain distinct
+- SQL scalar/record/aggregate byte preflight before transfer
+- Retained event is not event truth, event replay, or admission
+- No payload interpretation or positive decision eligibility
