@@ -479,3 +479,31 @@ Delivered (packaged, pending user QA): persisted source-linked `regime_policies`
 - Retained policy Silver is not policy truth, authorization, or execution replay
 
 All 7 open native gates remain open. Package QA is not platform acceptance.
+
+
+## 2026-11-17 addendum: native strategy input coverage
+
+Delivered (packaged, pending user QA): source-reconciled input-coverage reconciliation for `iron_condor_monitor`.
+
+- Module: `native_strategy_input_coverage.py`
+- Inventory: `native_strategy_requirements.REQUIREMENTS`
+- Statuses: `covered`, `missing`, `unlinked`
+- `authoritative_identity_and_time` is never auto-coverable
+- No healing, backfill, eligibility grant, or execution authority
+- `decision_eligibility_asserted=False` always
+
+All 7 open native gates remain open. Package QA is not platform acceptance.
+
+
+## 2026-11-17 addendum: evidence-linked native strategy input coverage
+
+Delivered (packaged, pending user QA): evidence-linked input-coverage derivation for `iron_condor_monitor`.
+
+- Module: `native_strategy_input_coverage_evidence.py`
+- Evidence pin: `requirement_id`, 64-hex `revision_id`, 64-hex `recording_fingerprint`, positive `row_count`
+- Statuses: `covered` only with a valid pin; otherwise `missing`
+- `authoritative_identity_and_time` is never auto-coverable
+- No healing, backfill, eligibility grant, or execution authority
+- `decision_eligibility_asserted=False` always
+
+All 7 open native gates remain open. Package QA is not platform acceptance.
