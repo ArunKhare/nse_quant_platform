@@ -451,3 +451,31 @@ Delivered (packaged, pending user QA): persisted source-linked `spot_candles` Si
 - No OHLCV interpretation, execution replay, or positive decision eligibility
 
 All 7 open native gates remain open. Package QA is not platform acceptance.
+
+
+## 2026-11-16 addendum: regime-policies Silver
+
+Delivered (packaged, pending user QA): persisted source-linked `regime_policies` Silver over the plural whole-table Bronze reader.
+
+- Store: `legacy-regime-policies-silver-recording@1`
+- Command: `persist.legacy_regime_policies_silver@1`
+- Source reader: `read_regime_policies_bronze` (plural, no layout pin)
+- Retained: exact reviewed record bytes plus context and ordinal coverage
+- Original first-write, audit, orphan, and final-audit obligations; no healing or adoption
+- Retained policy Silver is not policy truth, authorization, or execution replay
+
+All 7 open native gates remain open. Package QA is not platform acceptance.
+
+
+## 2026-11-16 addendum: regime-policies Silver
+
+Delivered (packaged, pending user QA): persisted source-linked `regime_policies` Silver over the plural whole-table Bronze reader.
+
+- Store: `legacy-regime-policies-silver-recording@1`
+- Command: `persist.legacy_regime_policies_silver@1`
+- Source reader: `read_regime_policies_bronze` (plural, no layout pin)
+- Retained: exact reviewed record bytes plus context and ordinal coverage
+- Original first-write, audit, orphan, and final-audit obligations; no healing or adoption
+- Retained policy Silver is not policy truth, authorization, or execution replay
+
+All 7 open native gates remain open. Package QA is not platform acceptance.
