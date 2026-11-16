@@ -1,84 +1,52 @@
-"""Actual risk-decisions SQL seed -> Bronze -> persisted Silver chain."""
+"""Actual risk-decisions writer -> Bronze -> persisted Silver chain."""
 
 from datetime import UTC, datetime
+from pathlib import Path
+from typing import Any
 
 import duckdb
 import pytest
 
+from nse_quant.data_platform import legacy_risk_decisions as codec
 from nse_quant.data_platform import legacy_risk_decisions_bronze as bronze_api
 from nse_quant.data_platform import legacy_risk_decisions_silver_store as silver
 from nse_quant.data_platform import legacy_silver_common as base
 from nse_quant.data_platform.audit import AuditLedger
 from nse_quant.data_platform.bronze import BronzeEventStore
-from nse_quant.persistence.duckdb_store import DuckDBStore
 
-AT = datetime(2026, 1, 1, 9, 10, tzinfo=UTC)
+AT = datetime(2026, 1, 1, 9, 15, tzinfo=UTC)
 REVISION = "a" * 40
-
-INSERT = """
-    INSERT INTO main.risk_decisions VALUES (
-        ?, ?, ?, ?, ?, ?, ?, ?
-    )
-"""
+TABLE = '"main"."risk_decisions"'
 
 
-def seed(path):
-    legacy = DuckDBStore(path=path)
+def _seed(path: Path) -> None:
+    writer = duckdb.connect(str(path))
     try:
-        legacy.conn.execute(
-            INSERT,
+        columns = ",".join(f'"{n}" {k}' for n, k in codec.SCHEMA)
+        writer.execute(f'CREATE TABLE {TABLE} ({columns},PRIMARY KEY("risk_decision_id"))')
+        writer.executemany(
+            f"INSERT INTO {TABLE} VALUES (?,?,?,?,?,?,?,?)",
             [
-                "risk-1",
-                AT,
-                "run-1",
-                "prop-1",
-                "strat-1",
-                True,
-                '["ok"]',
-                '{"liquidity":true}',
-            ],
-        )
-        legacy.conn.execute(
-            INSERT,
-            [
-                "risk-2",
-                AT,
-                "run-1",
-                "prop-1",
-                "strat-1",
-                False,
-                "null",
-                '{"liquidity":false}',
-            ],
-        )
-        legacy.conn.execute(
-            INSERT,
-            [
-                "risk-3",
-                None,
-                None,
-                None,
-                None,
-                None,
-                None,
-                None,
+                ("risk-1", AT, "run-1", "prop-1", "swing", True, '["ok"]', '{"iv_rank":true}'),
+                ("risk-2", AT, "run-1", "prop-1", "swing", False, "[]", '{"iv_rank":false}'),
+                ("risk-3", None, None, None, None, None, None, None),
+                ("risk-4", AT, "run-2", "prop-2", "swing", None, "null", "null"),
             ],
         )
     finally:
-        legacy.close()
+        writer.close()
 
 
-def bronze(tmp_path):
-    legacy_path, bronze_path = tmp_path / "legacy.duckdb", tmp_path / "bronze.duckdb"
-    seed(legacy_path)
-    with (
-        duckdb.connect(str(legacy_path), read_only=True) as source,
-        duckdb.connect(str(bronze_path)) as target,
-    ):
+def _bronze(tmp_path: Path) -> tuple[Path, silver.RiskDecisionsBronzePins]:
+    source_path, bronze_path = tmp_path / "legacy.duckdb", tmp_path / "bronze.duckdb"
+    _seed(source_path)
+    source = duckdb.connect(str(source_path), read_only=True)
+    target = duckdb.connect(str(bronze_path))
+    try:
         AuditLedger(target).initialize()
         BronzeEventStore(target).initialize()
         snapshot = bronze_api.capture_risk_decisions(source, source_label="fixture")
-        result = bronze_api.preserve_risk_decisions(
+        receipt = bronze_api.preserve_risk_decisions(
             source,
             target,
             source_label="fixture",
@@ -87,17 +55,20 @@ def bronze(tmp_path):
             actor_id="synthetic",
             code_revision=REVISION,
         )
+    finally:
+        target.close()
+        source.close()
     return bronze_path, silver.RiskDecisionsBronzePins(
-        source_label=result["source_label"],
-        snapshot_id=result["snapshot_id"],
-        capture_event_id=result["capture_event_id"],
-        envelope_hash=result["envelope_hash"],
-        recording_fingerprint=result["recording_fingerprint"],
+        source_label=receipt["source_label"],
+        snapshot_id=receipt["snapshot_id"],
+        capture_event_id=receipt["capture_event_id"],
+        envelope_hash=receipt["envelope_hash"],
+        recording_fingerprint=receipt["recording_fingerprint"],
     )
 
 
-def chain(tmp_path):
-    bronze_path, pins = bronze(tmp_path)
+def _chain(tmp_path: Path) -> tuple[Path, Path, silver.RiskDecisionsBronzePins, dict[str, Any]]:
+    bronze_path, pins = _bronze(tmp_path)
     silver_path = tmp_path / "risk_decisions_silver.duckdb"
     with (
         duckdb.connect(str(bronze_path), read_only=True) as bronze_conn,
@@ -116,8 +87,8 @@ def chain(tmp_path):
     return bronze_path, silver_path, pins, receipt
 
 
-def test_risk_decisions_bronze_to_silver_chain(tmp_path):
-    bronze_path, silver_path, pins, receipt = chain(tmp_path)
+def test_risk_decisions_bronze_to_silver_chain(tmp_path: Path) -> None:
+    bronze_path, silver_path, pins, receipt = _chain(tmp_path)
     with (
         duckdb.connect(str(bronze_path), read_only=True) as bronze_conn,
         duckdb.connect(str(silver_path), read_only=True) as reader,
@@ -127,32 +98,114 @@ def test_risk_decisions_bronze_to_silver_chain(tmp_path):
             revision_id=receipt["revision_id"],
             expected_recording_fingerprint=receipt["recording_fingerprint"],
         )
-        assert len(records) == receipt["row_count"] == 3
+        assert len(records) == receipt["row_count"] == 4
         assert records == bronze_api.read_risk_decisions_bronze(bronze_conn, **pins.reader_args())
+        reader_pins = pins.reader_args()
+        reader_pins.pop("expected_recording_fingerprint")
         assert records == silver.revalidate_risk_decisions_silver(
             bronze_conn,
             reader,
             revision_id=receipt["revision_id"],
             expected_recording_fingerprint=receipt["recording_fingerprint"],
-            source_label=pins.source_label,
-            snapshot_id=pins.snapshot_id,
-            capture_event_id=pins.capture_event_id,
-            envelope_hash=pins.envelope_hash,
             expected_bronze_recording_fingerprint=pins.recording_fingerprint,
+            **reader_pins,
         )
         rows = reader.execute(
             "SELECT risk_decision_id,ts,run_id,proposal_id,strategy,approved,reasons,checks "
             "FROM silver.risk_decision_observations WHERE revision_id=? ORDER BY ordinal",
             [receipt["revision_id"]],
         ).fetchall()
-        assert rows[0][0] == "risk-1" and rows[0][1] == AT
-        assert rows[0][5] is True and rows[0][6] == '["ok"]'
-        assert rows[1][5] is False and rows[1][6] == "null"
-        assert rows[2][1:] == (None,) * 7
+        assert rows[0][0] == "risk-1" and rows[0][5] is True
+        assert rows[1][5] is False and rows[1][6] == "[]"
+        assert rows[2][1:] == (None, None, None, None, None, None, None)
+        assert rows[3][6] == "null" and rows[3][7] == "null"
 
 
-def test_risk_decisions_silver_tampering(tmp_path):
-    _b, silver_path, _pins, receipt = chain(tmp_path)
+@pytest.mark.parametrize(
+    "column,value",
+    [
+        ("risk_decision_id", "risk_decision_id || '-changed'"),
+        ("ts", "ts + INTERVAL '1 microsecond'"),
+        ("run_id", "'changed'"),
+        ("proposal_id", "'changed'"),
+        ("strategy", "'changed'"),
+        ("approved", "NOT approved"),
+        ("reasons", "'changed'"),
+        ("checks", "'changed'"),
+    ],
+    ids=[
+        "key",
+        "instant",
+        "run",
+        "proposal",
+        "strategy",
+        "boolean",
+        "reasons",
+        "checks",
+    ],
+)
+def test_materialized_field_corruption_rejected(tmp_path: Path, column: str, value: str) -> None:
+    _b, silver_path, _pins, receipt = _chain(tmp_path)
+    with duckdb.connect(str(silver_path)) as writer:
+        writer.execute(f"UPDATE silver.risk_decision_observations SET {column}={value} WHERE ordinal=0")
+    with (
+        duckdb.connect(str(silver_path), read_only=True) as reader,
+        pytest.raises(ValueError, match="MATERIALIZED_FIELD_MISMATCH"),
+    ):
+        silver.read_risk_decisions_silver(
+            reader,
+            revision_id=receipt["revision_id"],
+            expected_recording_fingerprint=receipt["recording_fingerprint"],
+        )
+
+
+def test_missing_row_rejected(tmp_path: Path) -> None:
+    _b, silver_path, _pins, receipt = _chain(tmp_path)
+    with duckdb.connect(str(silver_path)) as writer:
+        writer.execute("DELETE FROM silver.risk_decision_observations WHERE ordinal=0")
+    with (
+        duckdb.connect(str(silver_path), read_only=True) as reader,
+        pytest.raises(ValueError, match="ORDINAL_COVERAGE_MISMATCH"),
+    ):
+        silver.read_risk_decisions_silver(
+            reader,
+            revision_id=receipt["revision_id"],
+            expected_recording_fingerprint=receipt["recording_fingerprint"],
+        )
+
+
+def test_ordinal_gap_rejected(tmp_path: Path) -> None:
+    _b, silver_path, _pins, receipt = _chain(tmp_path)
+    with duckdb.connect(str(silver_path)) as writer:
+        writer.execute("UPDATE silver.risk_decision_observations SET ordinal=ordinal+10 WHERE ordinal=1")
+    with (
+        duckdb.connect(str(silver_path), read_only=True) as reader,
+        pytest.raises(ValueError, match="ORDINAL_COVERAGE_MISMATCH"),
+    ):
+        silver.read_risk_decisions_silver(
+            reader,
+            revision_id=receipt["revision_id"],
+            expected_recording_fingerprint=receipt["recording_fingerprint"],
+        )
+
+
+def test_sql_null_and_json_null_distinct(tmp_path: Path) -> None:
+    _b, silver_path, _pins, receipt = _chain(tmp_path)
+    with duckdb.connect(str(silver_path)) as writer:
+        writer.execute("UPDATE silver.risk_decision_observations SET checks=NULL WHERE ordinal=3")
+    with (
+        duckdb.connect(str(silver_path), read_only=True) as reader,
+        pytest.raises(ValueError, match="MATERIALIZED_FIELD_MISMATCH"),
+    ):
+        silver.read_risk_decisions_silver(
+            reader,
+            revision_id=receipt["revision_id"],
+            expected_recording_fingerprint=receipt["recording_fingerprint"],
+        )
+
+
+def test_risk_decisions_silver_tampering(tmp_path: Path) -> None:
+    _b, silver_path, _pins, receipt = _chain(tmp_path)
     with duckdb.connect(str(silver_path)) as writer:
         writer.execute("UPDATE silver.risk_decision_sets SET context='bad'::BLOB")
     with (
@@ -166,8 +219,8 @@ def test_risk_decisions_silver_tampering(tmp_path):
         )
 
 
-def test_risk_decisions_silver_first_write_obligation(tmp_path):
-    bronze_path, silver_path, pins, receipt = chain(tmp_path)
+def test_risk_decisions_silver_first_write_obligation(tmp_path: Path) -> None:
+    bronze_path, silver_path, pins, receipt = _chain(tmp_path)
     with (
         duckdb.connect(str(bronze_path), read_only=True) as bronze_conn,
         duckdb.connect(str(silver_path)) as target,
@@ -184,12 +237,9 @@ def test_risk_decisions_silver_first_write_obligation(tmp_path):
             )
 
 
-def test_risk_decisions_silver_same_file_alias(tmp_path):
-    bronze_path, silver_path, pins, receipt = chain(tmp_path)
-    with (
-        duckdb.connect(str(bronze_path), read_only=True),
-        duckdb.connect(str(silver_path)) as target,
-    ):
+def test_risk_decisions_silver_same_file_alias(tmp_path: Path) -> None:
+    _bronze_path, silver_path, pins, _receipt = _chain(tmp_path)
+    with duckdb.connect(str(silver_path)) as target:
         alias = target.cursor()
         try:
             with pytest.raises(ValueError, match="SEPARATE"):

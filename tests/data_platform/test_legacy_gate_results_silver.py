@@ -141,11 +141,99 @@ def test_gate_results_bronze_to_silver_chain(tmp_path):
         )
 
 
+@pytest.mark.parametrize(
+    "column,value",
+    [
+        ("gate_result_id", "gate_result_id || '-changed'"),
+        ("ts", "ts + INTERVAL '1 microsecond'"),
+        ("run_id", "'changed'"),
+        ("proposal_id", "'changed'"),
+        ("strategy", "'changed'"),
+        ("gate", "'changed'"),
+        ("passed", "NOT passed"),
+        ("reason", "'changed'"),
+        ("details", "'changed'"),
+    ],
+    ids=[
+        "key",
+        "instant",
+        "run",
+        "proposal",
+        "strategy",
+        "gate",
+        "boolean",
+        "reason",
+        "details",
+    ],
+)
+def test_materialized_field_corruption_rejected(tmp_path, column, value):
+    _b, silver_path, _pins, receipt = chain(tmp_path)
+    with duckdb.connect(str(silver_path)) as writer:
+        writer.execute(f"UPDATE silver.gate_result_observations SET {column}={value} WHERE ordinal=0")
+    with (
+        duckdb.connect(str(silver_path), read_only=True) as reader,
+        pytest.raises(ValueError, match="MATERIALIZED_FIELD_MISMATCH"),
+    ):
+        silver.read_gate_results_silver(
+            reader,
+            revision_id=receipt["revision_id"],
+            expected_recording_fingerprint=receipt["recording_fingerprint"],
+        )
+
+
+def test_missing_row_rejected(tmp_path):
+    _b, silver_path, _pins, receipt = chain(tmp_path)
+    with duckdb.connect(str(silver_path)) as writer:
+        writer.execute("DELETE FROM silver.gate_result_observations WHERE ordinal=0")
+    with (
+        duckdb.connect(str(silver_path), read_only=True) as reader,
+        pytest.raises(ValueError, match="ORDINAL_COVERAGE_MISMATCH"),
+    ):
+        silver.read_gate_results_silver(
+            reader,
+            revision_id=receipt["revision_id"],
+            expected_recording_fingerprint=receipt["recording_fingerprint"],
+        )
+
+
+def test_ordinal_gap_rejected(tmp_path):
+    _b, silver_path, _pins, receipt = chain(tmp_path)
+    with duckdb.connect(str(silver_path)) as writer:
+        writer.execute("UPDATE silver.gate_result_observations SET ordinal=ordinal+10 WHERE ordinal=1")
+    with (
+        duckdb.connect(str(silver_path), read_only=True) as reader,
+        pytest.raises(ValueError, match="ORDINAL_COVERAGE_MISMATCH"),
+    ):
+        silver.read_gate_results_silver(
+            reader,
+            revision_id=receipt["revision_id"],
+            expected_recording_fingerprint=receipt["recording_fingerprint"],
+        )
+
+
+def test_sql_null_and_json_null_distinct(tmp_path):
+    _b, silver_path, _pins, receipt = chain(tmp_path)
+    with duckdb.connect(str(silver_path)) as writer:
+        writer.execute("UPDATE silver.gate_result_observations SET details=NULL WHERE ordinal=2")
+    with (
+        duckdb.connect(str(silver_path), read_only=True) as reader,
+        pytest.raises(ValueError, match="MATERIALIZED_FIELD_MISMATCH"),
+    ):
+        silver.read_gate_results_silver(
+            reader,
+            revision_id=receipt["revision_id"],
+            expected_recording_fingerprint=receipt["recording_fingerprint"],
+        )
+
+
 def test_gate_results_silver_tampering(tmp_path):
     _b, silver_path, _pins, receipt = chain(tmp_path)
     with duckdb.connect(str(silver_path)) as writer:
         writer.execute("UPDATE silver.gate_result_sets SET context='bad'::BLOB")
-    with duckdb.connect(str(silver_path), read_only=True) as reader, pytest.raises(ValueError):
+    with (
+        duckdb.connect(str(silver_path), read_only=True) as reader,
+        pytest.raises(ValueError),
+    ):
         silver.read_gate_results_silver(
             reader,
             revision_id=receipt["revision_id"],

@@ -1,24 +1,16 @@
-# Legacy risk decisions Silver
+# Legacy risk-decisions Silver
 
-Persisted source-linked risk-decisions Silver over the actual accepted Bronze reader.
-
-## Contract
+Persisted, source-linked Silver over the actual accepted `risk_decisions` Bronze reader.
 
 - Store: `legacy-risk-decisions-silver-recording@1`
 - Command: `normalize.legacy_risk_decisions@1`
-- Contract: `silver.legacy_risk_decisions /1/APPEND_REVISIONS`
-- Each Silver revision is bound to the exact reviewed Bronze recording fingerprint and context hash.
-
-## Retained materialization
-
-All eight source fields are materialized with exact nullability: `risk_decision_id VARCHAR NOT NULL`; nullable `ts TIMESTAMPTZ`; nullable `approved BOOLEAN`; nullable `run_id`, `proposal_id`, `strategy`, `reasons`, and `checks VARCHAR` (declared retained JSON-cast text).
-
-No invented natural key: only per-revision `risk_decision_id` uniqueness plus ordinal. `approved` retains exact True/False/None; retained True is a legacy claim, not native risk approval. `reasons` and `checks` stay exact nullable JSON-cast text; SQL NULL, JSON null text, and empty text remain distinct.
-
-## Native path
-
-`observe_risk_decisions_bronze` reads Bronze records through the public Bronze reader and derives a bounded context. `persist_risk_decisions_silver` requires two identical Bronze observations, then writes one Silver set, one observation per Bronze record, and one attempt, all inside one transaction with a separate audit job.
-
-The public reader verifies the Silver context hash, recording fingerprint, and per-record coverage. Current Bronze equality remains separate from retained Silver replay.
-
-This Silver does not interpret reasons or checks, treat approved=True as native risk approval, replay risk execution, or grant decision eligibility.
+- Contract: `silver.legacy_risk_decisions_observations@1` `APPEND_REVISIONS`
+- Source: `main.risk_decisions`, 8 columns, `risk_decision_id` only key
+- Materialized: `risk_decision_id`, nullable `ts` (`TIMESTAMPTZ`), `run_id`, `proposal_id`, `strategy`, nullable `approved` (`BOOLEAN`), opaque `reasons`/`checks` (`VARCHAR` from retained JSON-cast text)
+- SQL `NULL` stays distinct from JSON `null` text; `False`/`None`/`True` stay distinct
+- Per-revision `risk_decision_id` uniqueness plus ordinal; no invented natural key
+- Original first-write, audit, orphan, and final-audit obligations; no healing or adoption
+- Retained Silver, current native Bronze, and current legacy SQL remain distinct
+- SQL scalar/record/aggregate byte preflight before transfer
+- `approved=True` is a retained legacy claim, never native risk approval, safety truth, or execution permission
+- No payload interpretation, admission, original risk replay, or positive decision eligibility

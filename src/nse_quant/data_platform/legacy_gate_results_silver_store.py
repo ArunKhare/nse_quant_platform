@@ -116,21 +116,13 @@ def persist_gate_results_silver(
     actor_id: str,
     code_revision: str,
 ) -> dict[str, Any]:
-    if (
-        not base.pin(expected_context_sha256)
-        or not base.actor(actor_id)
-        or not base.revision(code_revision)
-    ):
+    if not base.pin(expected_context_sha256) or not base.actor(actor_id) or not base.revision(code_revision):
         raise Rejected("REVIEWED_GATE_RESULTS_SILVER_REQUEST_REQUIRED")
     base.separate(bronze, target)
     base.readonly(bronze)
-    revision_id = base.sha(
-        base.canonical([VERSION, pins.scope_id, pins.capture_event_id, expected_context_sha256])
-    )
+    revision_id = base.sha(base.canonical([VERSION, pins.scope_id, pins.capture_event_id, expected_context_sha256]))
     for table, field in ((f"silver.{SETS}", "revision_id"), (f"silver.{ATTEMPTS}", "revision_id")):
-        if target.execute(
-            f"SELECT 1 FROM {table} WHERE {field}=? LIMIT 1", [revision_id]
-        ).fetchone():
+        if target.execute(f"SELECT 1 FROM {table} WHERE {field}=? LIMIT 1", [revision_id]).fetchone():
             raise Rejected("GATE_RESULTS_SILVER_FIRST_WRITE_ORIGINAL_OBLIGATION")
     ledger = AuditLedger(target)
     job = ledger.plan_job(
@@ -157,13 +149,10 @@ def persist_gate_results_silver(
             total_record += len(record)
             if total_record > MAX_RECORDS:
                 raise Rejected("GATE_RESULTS_SILVER_AGGREGATE_BOUND")
-            document = __import__("json").loads(record)
+            document = json.loads(record)
             fields = document["stored_fields"]
             gate_result_id = fields["gate_result_id"]
-            if (
-                type(gate_result_id) is not str
-                or not 0 < len(gate_result_id.encode()) <= MAX_SCALAR
-            ):
+            if type(gate_result_id) is not str or not 0 < len(gate_result_id.encode()) <= MAX_SCALAR:
                 raise Rejected("GATE_RESULTS_SILVER_KEY_REQUIRED")
             total_scalar += len(gate_result_id.encode())
             scalars: list[datetime | bool | str | None] = []
@@ -251,6 +240,39 @@ def _read_recording(target: Any, *, revision_id: str) -> tuple[str, bytes]:
     return sha(base.canonical([VERSION, revision_id, context.hex()])), context
 
 
+def _materialized_values(record: bytes) -> tuple[object, ...]:
+    document = json.loads(record)
+    fields = document["stored_fields"]
+    gate_result_id = fields["gate_result_id"]
+    if type(gate_result_id) is not str or not 0 < len(gate_result_id.encode()) <= MAX_SCALAR:
+        raise Rejected("GATE_RESULTS_SILVER_KEY_REQUIRED")
+    values: list[object] = [gate_result_id]
+    for name in ("ts", "run_id", "proposal_id", "strategy", "gate", "passed", "reason", "details"):
+        value = fields[name]
+        if value is None:
+            values.append(None)
+            continue
+        if name == "ts":
+            if type(value) is not str:
+                raise Rejected("GATE_RESULTS_SILVER_TS_TEXT_REQUIRED")
+            instant = datetime.fromisoformat(value)
+            if instant.tzinfo is None or instant.utcoffset() is None:
+                raise Rejected("GATE_RESULTS_SILVER_AWARE_TS_REQUIRED")
+            values.append(instant)
+            continue
+        if name == "passed":
+            if type(value) is not bool:
+                raise Rejected("GATE_RESULTS_SILVER_STRICT_BOOLEAN_REQUIRED")
+            values.append(value)
+            continue
+        if type(value) is not str:
+            raise Rejected("GATE_RESULTS_SILVER_TEXT_REQUIRED")
+        if len(value.encode()) > MAX_SCALAR:
+            raise Rejected("GATE_RESULTS_SILVER_SCALAR_BOUND")
+        values.append(value)
+    return tuple(values)
+
+
 def read_gate_results_silver(
     reader: Any, *, revision_id: str, expected_recording_fingerprint: str
 ) -> tuple[bytes, ...]:
@@ -260,16 +282,50 @@ def read_gate_results_silver(
     fingerprint, context = _read_recording(reader, revision_id=revision_id)
     if fingerprint != expected_recording_fingerprint:
         raise Rejected("GATE_RESULTS_SILVER_RECORDING_FINGERPRINT_CHANGED")
+    text_fields = ("gate_result_id", "run_id", "proposal_id", "strategy", "gate", "reason", "details")
+    guards = []
+    sizes = []
+    overflow = []
+    for name in text_fields:
+        quoted = '"' + name + '"'
+        length = f"octet_length(encode({quoted}))"
+        guards.append(f"CASE WHEN {length}<={MAX_SCALAR} THEN {quoted} END")
+        sizes.append(f"coalesce({length},0)")
+        overflow.append(f"coalesce({length}>{MAX_SCALAR},false)")
+    guards += ['"ts"', '"passed"']
+    guards += [
+        "CASE WHEN octet_length(record_bytes)<=? THEN record_bytes END",
+        "recorded_at",
+    ]
+    columns = ",".join(["ordinal", *guards])
+    totals_sql = (
+        "SELECT count(*),coalesce(sum(octet_length(record_bytes)),0),"
+        "coalesce(max(octet_length(record_bytes)),0),"
+        f"coalesce(sum({'+'.join(sizes)}),0),"
+        f"coalesce(bool_or({' OR '.join(overflow)}),false) "
+        f"FROM silver.{OBSERVATIONS} WHERE revision_id=?"
+    )
+    totals = base.metadata(reader, totals_sql, [revision_id], 1)[0]
+    if (
+        totals[0] < 1
+        or totals[0] > 1000
+        or totals[1] > MAX_RECORDS
+        or totals[2] > MAX_RECORD
+        or totals[3] > MAX_SCALARS
+        or totals[4]
+    ):
+        raise Rejected("GATE_RESULTS_SILVER_TRANSFER_BOUND")
     rows = base.metadata(
         reader,
-        f"SELECT ordinal,CASE WHEN octet_length(record_bytes)<=? THEN record_bytes END,"
-        f"recorded_at FROM silver.{OBSERVATIONS} WHERE revision_id=? ORDER BY ordinal",
-        [MAX_RECORD, revision_id],
+        f"SELECT {columns} FROM silver.{OBSERVATIONS} WHERE revision_id=? ORDER BY ordinal LIMIT ?",
+        [MAX_RECORD, revision_id, 1001],
         -1,
     )
-    records = tuple(bytes(row[1]) for row in rows)
-    if not 1 <= len(records) <= 1000:
+    if len(rows) != totals[0]:
         raise Rejected("GATE_RESULTS_SILVER_ROW_BOUND")
+    records = tuple(bytes(row[10]) for row in rows)
+    if [row[0] for row in rows] != list(range(len(rows))):
+        raise Rejected("GATE_RESULTS_SILVER_ORDINAL_COVERAGE_MISMATCH")
     try:
         context_document = json.loads(context)
     except (UnicodeDecodeError, json.JSONDecodeError) as exc:
@@ -298,6 +354,11 @@ def read_gate_results_silver(
         or base.canonical(context_document) != context
     ):
         raise Rejected("GATE_RESULTS_SILVER_CONTEXT_RECORD_MISMATCH")
+    for row, record in zip(rows, records, strict=True):
+        expected = _materialized_values(record)
+        actual = (row[1], row[8], row[2], row[3], row[4], row[5], row[9], row[6], row[7])
+        if actual != expected:
+            raise Rejected("GATE_RESULTS_SILVER_MATERIALIZED_FIELD_MISMATCH")
     base.verify_recording(
         reader,
         command=COMMAND,

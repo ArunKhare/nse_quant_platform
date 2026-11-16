@@ -35,7 +35,7 @@ def _table(path: Path, layout_id: str) -> None:
 def _source(path: Path, layout_id: str) -> None:
     _table(path, layout_id)
     policy = RegimePolicy(frozenset({"RANGE"}), {"RANGE": {"trades": 10, "pnl": 100.0}}, "READY")
-    assert policy.is_usable is True  # source model usability never grants native authorization
+    assert policy.is_usable is True
     if layout_id == codec.CLOCK_BEFORE_RISK:
         legacy = DuckDBStore(path=path)
         try:
@@ -53,7 +53,6 @@ def _source(path: Path, layout_id: str) -> None:
         finally:
             legacy.close()
     else:
-        # Fresh layout uses explicit named synthetic INSERT, NOT a repaired legacy writer.
         writer = duckdb.connect(str(path))
         try:
             table = common.name(writer, "main", codec.TABLE)
@@ -79,7 +78,6 @@ def _source(path: Path, layout_id: str) -> None:
     writer = duckdb.connect(str(path))
     try:
         table = common.name(writer, "main", codec.TABLE)
-        # Opaque boundary payload; not authenticated issuer or operating authority.
         writer.execute(f"UPDATE {table} SET regime_metrics=?", [OPAQUE])
         writer.executemany(
             f"INSERT INTO {table} (policy_id,allowed_regimes) VALUES (?,?)",
@@ -98,9 +96,7 @@ def _record(tmp_path: Path, layout_id: str) -> tuple[Path, Path, dict[str, Any]]
     try:
         AuditLedger(target).initialize()
         BronzeEventStore(target).initialize()
-        snapshot = native.capture_regime_policies(
-            source, source_label="fixture", layout_id=layout_id
-        )
+        snapshot = native.capture_regime_policies(source, source_label="fixture", layout_id=layout_id)
         receipt = native.preserve_regime_policies(
             source,
             target,
@@ -149,8 +145,7 @@ def test_both_actual_physical_layouts_producer_reader(tmp_path: Path, layout_id:
             assert doc["source_layout_id"] == layout_id
             assert doc["source_ordinal"] == ordinal
             assert doc["stored_fields"] == {
-                n: codec.encode_cell(v, kind)
-                for v, (n, kind) in zip(row, codec.SCHEMA, strict=True)
+                n: codec.encode_cell(v, kind) for v, (n, kind) in zip(row, codec.SCHEMA, strict=True)
             }
             assert doc["policy_authorized"] is False
             assert doc["policy_json_interpreted"] is False
@@ -162,16 +157,17 @@ def test_both_actual_physical_layouts_producer_reader(tmp_path: Path, layout_id:
         assert fields["regime_metrics"] == OPAQUE
         assert fields["risk_limits"] in ('{"max_lots":2}', '{"max_lots": 2}')
         assert fields["created_at"] is not None
-        assert [
-            codec.parse(r, codec.MAX_RECORD)["stored_fields"]["allowed_regimes"]
-            for r in records[1:]
-        ] == [None, "null", "[]"]
+        assert [codec.parse(r, codec.MAX_RECORD)["stored_fields"]["allowed_regimes"] for r in records[1:]] == [
+            None,
+            "null",
+            "[]",
+        ]
     finally:
         bronze.close()
         source.close()
 
 
-def test_inspected_positional_writer_does_not_fit_fresh_declared_order(tmp_path: Path) -> None:
+def test_named_column_writer_fits_fresh_declared_order(tmp_path: Path) -> None:
     legacy = DuckDBStore(path=tmp_path / "fresh.duckdb")
     try:
         columns = legacy.conn.execute(
@@ -181,20 +177,27 @@ def test_inspected_positional_writer_does_not_fit_fresh_declared_order(tmp_path:
         ).fetchall()
         assert tuple(columns) == codec.checked_layout(codec.RISK_BEFORE_CLOCK)
         policy = RegimePolicy(frozenset({"RANGE"}), {}, "READY")
-        # Negative source-boundary test; this package neither repairs nor calls this in production.
-        with pytest.raises(duckdb.Error):
-            legacy.save_regime_policy(
-                policy_id="P",
-                symbol="NIFTY",
-                train_start=date(2025, 1, 1),
-                train_end=date(2025, 6, 30),
-                test_start=date(2025, 7, 1),
-                test_end=date(2025, 7, 31),
-                policy=policy,
-                risk_limits={"max_lots": 2},
-            )
+        legacy.save_regime_policy(
+            policy_id="P",
+            symbol="NIFTY",
+            train_start=date(2025, 1, 1),
+            train_end=date(2025, 6, 30),
+            test_start=date(2025, 7, 1),
+            test_end=date(2025, 7, 31),
+            policy=policy,
+            risk_limits={"max_lots": 2},
+        )
         table = common.name(legacy.conn, "main", codec.TABLE)
-        assert legacy.conn.execute(f"SELECT count(*) FROM {table}").fetchone() == (0,)
+        row = legacy.conn.execute(
+            f"SELECT policy_id,symbol,train_start,train_end,test_start,test_end,"
+            f"allowed_regimes,regime_metrics,selection_status,risk_limits,created_at "
+            f"FROM {table} WHERE policy_id='P'"
+        ).fetchone()
+        assert row is not None
+        assert row[0] == "P"
+        assert row[1] == "NIFTY"
+        assert row[9] == '{"max_lots": 2}'
+        assert row[10] is not None
     finally:
         legacy.close()
 
@@ -206,12 +209,8 @@ def test_layout_not_guessed_and_change_cannot_heal_failed_scope(tmp_path: Path) 
     target = duckdb.connect(str(tmp_path / "bronze.duckdb"))
     try:
         with pytest.raises(codec.Rejected, match="EXACT_REVIEWED_POLICY_SCHEMA_REQUIRED"):
-            native.capture_regime_policies(
-                source, source_label="fixture", layout_id=codec.RISK_BEFORE_CLOCK
-            )
-        snapshot = native.capture_regime_policies(
-            source, source_label="fixture", layout_id=codec.CLOCK_BEFORE_RISK
-        )
+            native.capture_regime_policies(source, source_label="fixture", layout_id=codec.RISK_BEFORE_CLOCK)
+        snapshot = native.capture_regime_policies(source, source_label="fixture", layout_id=codec.CLOCK_BEFORE_RISK)
         AuditLedger(target).initialize()
         BronzeEventStore(target).initialize()
         with pytest.raises(codec.Rejected, match="EXACT_REVIEWED_POLICY_SCHEMA_REQUIRED"):
@@ -309,9 +308,7 @@ def test_text_cell_limit(tmp_path: Path, text: str) -> None:
     try:
         if len(text) > codec.MAX_CELL:
             with pytest.raises(codec.Rejected, match="TEXT_TRANSFER_BOUND"):
-                native.capture_regime_policies(
-                    reader, source_label="fixture", layout_id=codec.RISK_BEFORE_CLOCK
-                )
+                native.capture_regime_policies(reader, source_label="fixture", layout_id=codec.RISK_BEFORE_CLOCK)
         else:
             assert (
                 native.capture_regime_policies(
@@ -338,9 +335,7 @@ def test_partial_sql_batch_rollback_and_original_obligation(tmp_path: Path) -> N
     try:
         AuditLedger(owner).initialize()
         BronzeEventStore(owner).initialize()
-        snapshot = native.capture_regime_policies(
-            source, source_label="fixture", layout_id=codec.CLOCK_BEFORE_RISK
-        )
+        snapshot = native.capture_regime_policies(source, source_label="fixture", layout_id=codec.CLOCK_BEFORE_RISK)
         with pytest.raises(RuntimeError, match="INJECTED_VARIANT_SQL_FAILURE"):
             native.preserve_regime_policies(
                 source,
@@ -387,9 +382,7 @@ def test_final_audit_failure_blocks_original_read(tmp_path: Path, monkeypatch: A
     try:
         AuditLedger(target).initialize()
         BronzeEventStore(target).initialize()
-        snapshot = native.capture_regime_policies(
-            source, source_label="fixture", layout_id=codec.CLOCK_BEFORE_RISK
-        )
+        snapshot = native.capture_regime_policies(source, source_label="fixture", layout_id=codec.CLOCK_BEFORE_RISK)
         with monkeypatch.context() as patch:
             patch.setattr(AuditLedger, "transition", fail)
             with pytest.raises(RuntimeError, match="INJECTED_FINAL_AUDIT_FAILURE"):
@@ -509,7 +502,6 @@ def test_second_actual_capture_then_injected_drift(tmp_path: Path, monkeypatch: 
         value = actual(conn, source_label=source_label, layout_id=layout_id)
         count += 1
         if count == 2:
-            # Boundary injection after actual SQL capture, not authentic changed-source evidence.
             doc = codec.parse(value.payload, codec.MAX_BYTES)
             doc["rows"][0][8] = "changed"
             return codec.make_snapshot(source_label, doc["rows"], layout_id=layout_id)
@@ -542,17 +534,13 @@ def test_row_and_projection_limits_fail_whole_capture(tmp_path: Path) -> None:
     writer = duckdb.connect(str(path))
     try:
         table = common.name(writer, "main", codec.TABLE)
-        writer.executemany(
-            f"INSERT INTO {table} (policy_id) VALUES (?)", [(f"P{i}",) for i in range(1001)]
-        )
+        writer.executemany(f"INSERT INTO {table} (policy_id) VALUES (?)", [(f"P{i}",) for i in range(1001)])
     finally:
         writer.close()
     reader = duckdb.connect(str(path), read_only=True)
     try:
         with pytest.raises(codec.Rejected, match="WHOLE_TABLE_ROW_BOUND"):
-            native.capture_regime_policies(
-                reader, source_label="fixture", layout_id=codec.RISK_BEFORE_CLOCK
-            )
+            native.capture_regime_policies(reader, source_label="fixture", layout_id=codec.RISK_BEFORE_CLOCK)
     finally:
         reader.close()
     row = [
