@@ -227,3 +227,35 @@ Delivered (packaged, pending user QA): persisted source-linked `orders` Silver o
 - No payload interpretation, execution replay, or positive decision eligibility
 
 All 7 open native gates remain open. Package QA is not platform acceptance.
+
+
+## 2026-11-16 addendum: positions Silver
+
+Delivered (packaged, pending user QA): persisted source-linked `positions` Silver over the actual accepted Bronze reader.
+
+- Store: `legacy-positions-silver-recording@1`
+- Command: `normalize.legacy_positions@1`
+- Contract: `silver.legacy_positions_observations@1` `APPEND_REVISIONS`
+- Materialized: all 22 retained fields with exact nullability; `position_id` only key; per-revision uniqueness plus ordinal
+- `expiry` remains a retained calendar DATE; `opened_at`/`closed_at` remain retained instants; prices/PnL remain retained finite binary64 values
+- Original first-write, audit, orphan, and final-audit obligations; no healing or adoption
+- Retained Silver, current native Bronze, and current legacy SQL remain distinct
+- No mark interpretation, PnL interpretation, execution replay, or positive decision eligibility
+
+All 7 open native gates remain open. Package QA is not platform acceptance.
+
+
+## 2026-11-16 addendum: positions Silver
+
+Delivered (packaged, pending user QA): persisted source-linked `positions` Silver over the actual accepted Bronze reader.
+
+- Store: `legacy-positions-silver-recording@1`
+- Command: `normalize.legacy_positions@1`
+- Contract: `silver.legacy_positions_observations@1` `APPEND_REVISIONS`
+- Materialized: all 22 retained fields with exact nullability; `position_id` only key; per-revision uniqueness plus ordinal
+- `expiry` remains a retained calendar DATE; `opened_at`/`closed_at` remain retained instants; prices/PnL remain retained finite binary64 values
+- Original first-write, audit, orphan, and final-audit obligations; no healing or adoption
+- Retained Silver, current native Bronze, and current legacy SQL remain distinct
+- No mark interpretation, PnL interpretation, execution replay, or positive decision eligibility
+
+All 7 open native gates remain open. Package QA is not platform acceptance.

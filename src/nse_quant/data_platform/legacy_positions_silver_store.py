@@ -8,20 +8,21 @@ from datetime import UTC, date, datetime
 from typing import Any
 
 from nse_quant.data_platform import legacy_positions as codec
+from nse_quant.data_platform import legacy_positions_bronze as bronze_api
 from nse_quant.data_platform import legacy_silver_common as base
 from nse_quant.data_platform.audit import AuditLedger
-from nse_quant.data_platform.legacy_positions_bronze import read_positions_bronze
 
 VERSION = "legacy-positions-silver-recording@1"
 COMMAND = "normalize.legacy_positions@1"
+TABLE = codec.TABLE
 OBSERVATIONS = "position_observations"
 SETS = "position_sets"
 ATTEMPTS = "position_attempts"
 MAX_CONTEXT = 2200000
-MAX_RECORD = 512 * 1024
-MAX_RECORDS = 4 * 1024 * 1024
-MAX_SCALAR = 64 * 1024
-MAX_SCALARS = 1024 * 1024
+MAX_RECORD = codec.MAX_RECORD
+MAX_RECORDS = codec.MAX_RECORDS
+MAX_SCALAR = codec.MAX_CELL
+MAX_SCALARS = 1048576
 DEFINITION = (VERSION, COMMAND, "derived only from reviewed positions Bronze recording")
 
 
@@ -35,7 +36,7 @@ class PositionsBronzePins:
 
     @property
     def scope_id(self) -> str:
-        return base.sha(base.canonical([VERSION, self.source_label]))
+        return codec.sha(codec.canonical([VERSION, self.source_label]))
 
     def reader_args(self) -> dict[str, str]:
         return dict(
@@ -48,7 +49,7 @@ class PositionsBronzePins:
 
 
 def scope_id(source_label: str) -> str:
-    return base.sha(base.canonical([VERSION, source_label]))
+    return codec.sha(codec.canonical([VERSION, source_label]))
 
 
 def initialize_positions_silver(target: Any) -> None:
@@ -95,13 +96,13 @@ def initialize_positions_silver(target: Any) -> None:
 
 
 def observe_positions_bronze(bronze: Any, *, pins: PositionsBronzePins) -> bytes:
-    if not base.pin(pins.recording_fingerprint):
+    if not codec.pin(pins.recording_fingerprint):
         raise codec.Rejected("EXACT_POSITIONS_SILVER_BRONZE_PIN_REQUIRED")
     base.readonly(bronze)
-    records = read_positions_bronze(bronze, **pins.reader_args())
+    records = bronze_api.read_positions_bronze(bronze, **pins.reader_args())
     if not 1 <= len(records) <= codec.MAX_ROWS:
         raise codec.Rejected("POSITIONS_SILVER_ROW_BOUND")
-    context = base.canonical(
+    context = codec.canonical(
         dict(
             version=VERSION,
             pins={
@@ -128,21 +129,13 @@ def persist_positions_silver(
     actor_id: str,
     code_revision: str,
 ) -> dict[str, Any]:
-    if (
-        not base.pin(expected_context_sha256)
-        or not base.actor(actor_id)
-        or not base.revision(code_revision)
-    ):
+    if not codec.pin(expected_context_sha256) or not base.actor(actor_id) or not base.revision(code_revision):
         raise codec.Rejected("REVIEWED_POSITIONS_SILVER_REQUEST_REQUIRED")
     base.separate(bronze, target)
     base.readonly(bronze)
-    revision_id = base.sha(
-        base.canonical([VERSION, pins.scope_id, pins.capture_event_id, expected_context_sha256])
-    )
+    revision_id = codec.sha(codec.canonical([VERSION, pins.scope_id, pins.capture_event_id, expected_context_sha256]))
     for table, field in ((f"silver.{SETS}", "revision_id"), (f"silver.{ATTEMPTS}", "revision_id")):
-        if target.execute(
-            f"SELECT 1 FROM {table} WHERE {field}=? LIMIT 1", [revision_id]
-        ).fetchone():
+        if target.execute(f"SELECT 1 FROM {table} WHERE {field}=? LIMIT 1", [revision_id]).fetchone():
             raise codec.Rejected("POSITIONS_SILVER_FIRST_WRITE_ORIGINAL_OBLIGATION")
     ledger = AuditLedger(target)
     job = ledger.plan_job(
@@ -159,7 +152,7 @@ def persist_positions_silver(
         second = observe_positions_bronze(bronze, pins=pins)
         if second != first:
             raise codec.Rejected("POSITIONS_BRONZE_CONTEXT_DRIFT")
-        records = read_positions_bronze(bronze, **pins.reader_args())
+        records = bronze_api.read_positions_bronze(bronze, **pins.reader_args())
         materialized = []
         total_scalar = 0
         total_record = 0
@@ -175,7 +168,7 @@ def persist_positions_silver(
             if type(position_id) is not str or not 0 < len(position_id.encode()) <= MAX_SCALAR:
                 raise codec.Rejected("POSITIONS_SILVER_KEY_REQUIRED")
             total_scalar += len(position_id.encode())
-            scalars: list[Any] = []
+            scalars: list[date | datetime | float | int | bool | str | None] = []
             for name in (
                 "strategy_position_id",
                 "proposal_id",
@@ -204,8 +197,8 @@ def persist_positions_silver(
                     scalars.append(None)
                     continue
                 if name == "expiry":
-                    if type(value) is not str:
-                        raise codec.Rejected("POSITIONS_SILVER_DATE_TEXT_REQUIRED")
+                    if type(value) is not str or len(value) != 10:
+                        raise codec.Rejected("POSITIONS_SILVER_EXPIRY_TEXT_REQUIRED")
                     scalars.append(date.fromisoformat(value))
                     continue
                 if name in ("opened_at", "closed_at"):
@@ -224,7 +217,7 @@ def persist_positions_silver(
                     "unrealized_pnl",
                 ):
                     if type(value) is not str:
-                        raise codec.Rejected("POSITIONS_SILVER_DOUBLE_TEXT_REQUIRED")
+                        raise codec.Rejected("POSITIONS_SILVER_PRICE_TEXT_REQUIRED")
                     scalars.append(float.fromhex(value))
                     continue
                 if name in ("instrument_token", "lots", "quantity"):
@@ -234,7 +227,7 @@ def persist_positions_silver(
                     continue
                 if name == "mark_stale":
                     if type(value) is not bool:
-                        raise codec.Rejected("POSITIONS_SILVER_STRICT_BOOLEAN_REQUIRED")
+                        raise codec.Rejected("POSITIONS_SILVER_BOOLEAN_REQUIRED")
                     scalars.append(value)
                     continue
                 if type(value) is not str:
@@ -255,8 +248,7 @@ def persist_positions_silver(
             )
             for row in materialized:
                 target.execute(
-                    f"INSERT INTO silver.{OBSERVATIONS} \
-                    VALUES ( ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                    f"INSERT INTO silver.{OBSERVATIONS} VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                     [revision_id, *row, base.clock(datetime.now(UTC))],
                 )
             target.execute(
@@ -278,42 +270,174 @@ def persist_positions_silver(
 
 
 def _read_recording(target: Any, *, revision_id: str) -> tuple[str, bytes]:
-    if not base.pin(revision_id):
+    if not codec.pin(revision_id):
         raise codec.Rejected("EXACT_POSITIONS_SILVER_REVISION_PIN_REQUIRED")
     rows = base.metadata(
         target,
-        f"SELECT CASE WHEN octet_length(context)<=? THEN context END,"
+        f"SELECT CASE WHEN octet_length(context)<=? THEN to_hex(context) END,"
         f"CASE WHEN length(context_sha256)<=64 THEN context_sha256 END,recorded_at "
         f"FROM silver.{SETS} WHERE revision_id=?",
         [MAX_CONTEXT, revision_id],
         1,
     )
-    context = bytes(rows[0][0])
+    context = bytes.fromhex(rows[0][0])
     if rows[0][1] != codec.sha(context):
         raise codec.Rejected("POSITIONS_SILVER_CONTEXT_HASH_MISMATCH")
     base.clock(rows[0][2])
-    return codec.sha(base.canonical([VERSION, revision_id, context.hex()])), context
+    return codec.sha(codec.canonical([VERSION, revision_id, context.hex()])), context
 
 
-def read_positions_silver(
-    reader: Any, *, revision_id: str, expected_recording_fingerprint: str
-) -> tuple[bytes, ...]:
-    if not base.pin(expected_recording_fingerprint):
+def _materialized_values(record: bytes) -> tuple[object, ...]:
+    document = json.loads(record)
+    fields = document["stored_fields"]
+    position_id = fields["position_id"]
+    if type(position_id) is not str or not 0 < len(position_id.encode()) <= MAX_SCALAR:
+        raise codec.Rejected("POSITIONS_SILVER_KEY_REQUIRED")
+    values: list[object] = [position_id]
+    for name in (
+        "strategy_position_id",
+        "proposal_id",
+        "strategy",
+        "underlying",
+        "expiry",
+        "tradingsymbol",
+        "instrument_token",
+        "option_type",
+        "strike",
+        "side",
+        "lots",
+        "quantity",
+        "opened_at",
+        "entry_price",
+        "current_price",
+        "realized_pnl",
+        "unrealized_pnl",
+        "status",
+        "closed_at",
+        "exit_reason",
+        "mark_stale",
+    ):
+        value = fields[name]
+        if value is None:
+            values.append(None)
+            continue
+        if name == "expiry":
+            if type(value) is not str or len(value) != 10:
+                raise codec.Rejected("POSITIONS_SILVER_EXPIRY_TEXT_REQUIRED")
+            values.append(date.fromisoformat(value))
+            continue
+        if name in ("opened_at", "closed_at"):
+            if type(value) is not str:
+                raise codec.Rejected("POSITIONS_SILVER_TS_TEXT_REQUIRED")
+            instant = datetime.fromisoformat(value)
+            if instant.tzinfo is None or instant.utcoffset() is None:
+                raise codec.Rejected("POSITIONS_SILVER_AWARE_TS_REQUIRED")
+            values.append(instant)
+            continue
+        if name in (
+            "strike",
+            "entry_price",
+            "current_price",
+            "realized_pnl",
+            "unrealized_pnl",
+        ):
+            if type(value) is not str:
+                raise codec.Rejected("POSITIONS_SILVER_PRICE_TEXT_REQUIRED")
+            values.append(float.fromhex(value))
+            continue
+        if name in ("instrument_token", "lots", "quantity"):
+            if type(value) is not int or isinstance(value, bool):
+                raise codec.Rejected("POSITIONS_SILVER_INTEGER_REQUIRED")
+            values.append(value)
+            continue
+        if name == "mark_stale":
+            if type(value) is not bool:
+                raise codec.Rejected("POSITIONS_SILVER_BOOLEAN_REQUIRED")
+            values.append(value)
+            continue
+        if type(value) is not str:
+            raise codec.Rejected("POSITIONS_SILVER_TEXT_REQUIRED")
+        if len(value.encode()) > MAX_SCALAR:
+            raise codec.Rejected("POSITIONS_SILVER_SCALAR_BOUND")
+        values.append(value)
+    return tuple(values)
+
+
+def read_positions_silver(reader: Any, *, revision_id: str, expected_recording_fingerprint: str) -> tuple[bytes, ...]:
+    if not codec.pin(expected_recording_fingerprint):
         raise codec.Rejected("EXACT_POSITIONS_SILVER_RECORDING_PIN_REQUIRED")
     base.readonly(reader)
     fingerprint, context = _read_recording(reader, revision_id=revision_id)
     if fingerprint != expected_recording_fingerprint:
         raise codec.Rejected("POSITIONS_SILVER_RECORDING_FINGERPRINT_CHANGED")
+    text_fields = (
+        "position_id",
+        "strategy_position_id",
+        "proposal_id",
+        "strategy",
+        "underlying",
+        "tradingsymbol",
+        "option_type",
+        "side",
+        "status",
+        "exit_reason",
+    )
+    guards = []
+    sizes = []
+    overflow = []
+    for name in text_fields:
+        quoted = '"' + name + '"'
+        length = f"octet_length(encode({quoted}))"
+        guards.append(f"CASE WHEN {length}<={MAX_SCALAR} THEN {quoted} END")
+        sizes.append(f"coalesce({length},0)")
+        overflow.append(f"coalesce({length}>{MAX_SCALAR},false)")
+    guards += [
+        '"expiry"',
+        '"instrument_token"',
+        '"lots"',
+        '"quantity"',
+        '"opened_at"',
+        '"strike"',
+        '"entry_price"',
+        '"current_price"',
+        '"realized_pnl"',
+        '"unrealized_pnl"',
+        '"closed_at"',
+        '"mark_stale"',
+    ]
+    guards += [
+        "CASE WHEN octet_length(record_bytes)<=? THEN record_bytes END",
+        "recorded_at",
+    ]
+    columns = ",".join(["ordinal", *guards])
+    totals_sql = (
+        "SELECT count(*),coalesce(sum(octet_length(record_bytes)),0),"
+        "coalesce(max(octet_length(record_bytes)),0),"
+        f"coalesce(sum({'+'.join(sizes)}),0),"
+        f"coalesce(bool_or({' OR '.join(overflow)}),false) "
+        f"FROM silver.{OBSERVATIONS} WHERE revision_id=?"
+    )
+    totals = base.metadata(reader, totals_sql, [revision_id], 1)[0]
+    if (
+        totals[0] < 1
+        or totals[0] > codec.MAX_ROWS
+        or totals[1] > MAX_RECORDS
+        or totals[2] > MAX_RECORD
+        or totals[3] > MAX_SCALARS
+        or totals[4]
+    ):
+        raise codec.Rejected("POSITIONS_SILVER_TRANSFER_BOUND")
     rows = base.metadata(
         reader,
-        f"SELECT ordinal,CASE WHEN octet_length(record_bytes)<=? THEN record_bytes END,"
-        f"recorded_at FROM silver.{OBSERVATIONS} WHERE revision_id=? ORDER BY ordinal",
-        [MAX_RECORD, revision_id],
+        f"SELECT {columns} FROM silver.{OBSERVATIONS} WHERE revision_id=? ORDER BY ordinal LIMIT ?",
+        [MAX_RECORD, revision_id, codec.MAX_ROWS + 1],
         -1,
     )
-    records = tuple(bytes(row[1]) for row in rows)
-    if not 1 <= len(records) <= codec.MAX_ROWS:
+    if len(rows) != totals[0]:
         raise codec.Rejected("POSITIONS_SILVER_ROW_BOUND")
+    records = tuple(bytes(row[23]) for row in rows)
+    if [row[0] for row in rows] != list(range(len(rows))):
+        raise codec.Rejected("POSITIONS_SILVER_ORDINAL_COVERAGE_MISMATCH")
     try:
         context_document = json.loads(context)
     except (UnicodeDecodeError, json.JSONDecodeError) as exc:
@@ -335,13 +459,41 @@ def read_positions_silver(
         }
         or type(pins.get("source_label")) is not str
         or not all(
-            base.pin(pins.get(key))
+            codec.pin(pins.get(key))
             for key in ("snapshot_id", "capture_event_id", "envelope_hash", "recording_fingerprint")
         )
         or context_document.get("record_hashes") != expected_hashes
-        or base.canonical(context_document) != context
+        or codec.canonical(context_document) != context
     ):
         raise codec.Rejected("POSITIONS_SILVER_CONTEXT_RECORD_MISMATCH")
+    for row, record in zip(rows, records, strict=True):
+        expected = _materialized_values(record)
+        actual = (
+            row[1],
+            row[2],
+            row[3],
+            row[4],
+            row[5],
+            row[11],
+            row[6],
+            row[12],
+            row[7],
+            row[16],
+            row[8],
+            row[13],
+            row[14],
+            row[15],
+            row[17],
+            row[18],
+            row[19],
+            row[20],
+            row[9],
+            row[21],
+            row[10],
+            row[22],
+        )
+        if actual != expected:
+            raise codec.Rejected("POSITIONS_SILVER_MATERIALIZED_FIELD_MISMATCH")
     base.verify_recording(
         reader,
         command=COMMAND,
