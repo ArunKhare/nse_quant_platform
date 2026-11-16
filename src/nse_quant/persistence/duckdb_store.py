@@ -1030,9 +1030,10 @@ class DuckDBStore:
     ) -> None:
         self.conn.execute(
             """
-            INSERT OR REPLACE INTO regime_policies VALUES (
-                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
-            )
+            INSERT OR REPLACE INTO regime_policies (
+                policy_id, symbol, train_start, train_end, test_start, test_end,
+                allowed_regimes, regime_metrics, selection_status, risk_limits, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             [
                 policy_id,
@@ -1044,8 +1045,8 @@ class DuckDBStore:
                 json.dumps(sorted(policy.allowed_regimes)),
                 json.dumps(policy.regime_metrics, default=str),
                 policy.selection_status,
-                datetime.now(UTC),
                 json.dumps(risk_limits or {}, default=str),
+                datetime.now(UTC),
             ],
         )
 
