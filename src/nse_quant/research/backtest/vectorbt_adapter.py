@@ -88,7 +88,21 @@ def run_vectorbt_from_trades(
     # Build a simple price series spanning entry to exit for each trade (synthetic, research-only)
     all_ts = sorted({t["entry_ts"] for t in trades} | {t["exit_ts"] for t in trades})
     price_index = pd.DatetimeIndex(all_ts)
-    prices = pd.Series(1.0, index=price_index)  # placeholder; real usage would map actual prices
+    prices = pd.Series(1.0, index=price_index)
+
+    entry_timestamps = {t["entry_ts"] for t in trades}
+    exit_timestamps = {t["exit_ts"] for t in trades}
+
+    entries = pd.Series(
+        [timestamp in entry_timestamps for timestamp in price_index],
+        index=price_index,
+        dtype=bool,
+    )
+    exits = pd.Series(
+        [timestamp in exit_timestamps for timestamp in price_index],
+        index=price_index,
+        dtype=bool,
+    )
     portfolio = vbt.Portfolio.from_signals(
         prices,
         entries,
