@@ -507,3 +507,33 @@ Delivered (packaged, pending user QA): evidence-linked input-coverage derivation
 - `decision_eligibility_asserted=False` always
 
 All 7 open native gates remain open. Package QA is not platform acceptance.
+
+
+## 2026-11-17 addendum: Silver-backed native strategy input coverage
+
+Delivered (packaged, pending user QA): Silver-backed input-coverage derivation for `iron_condor_monitor`.
+
+- Module: `native_strategy_input_coverage_silver.py`
+- Mapped requirements: `iv_rank_and_history`, `iv_rv_spread`, `expected_move`, `effective_proposal_configuration`, `market_session`
+- Unmapped requirements remain explicitly `missing`; never invented or healed
+- Evidence pins come from actual Silver recording metadata (revision id, fingerprint, row count)
+- No eligibility, execution authority, or backfill
+- `decision_eligibility_asserted=False` always
+
+All 7 open native gates remain open. Package QA is not platform acceptance.
+
+
+## 2026-11-17 addendum: native option-chain snapshot
+
+Delivered (packaged, pending user QA): native option-chain snapshot Bronze and Silver, plus Silver-backed coverage mapping for `chain_time_expiry_spot`, `option_chain_and_contract_terms`, and `candidate_liquidity`.
+
+- Codec: `native-option-chain-snapshot@1`
+- Bronze: `native-option-chain-snapshot-bronze-recording@1`
+- Silver: `native-option-chain-snapshot-silver-recording@1`
+- Retained: exact reviewed snapshot artifact and per-quote records
+- Original first-write, audit, orphan, and final-audit obligations; no healing or adoption
+- Retained snapshot is not market truth, option pricing truth, or execution replay
+- `authoritative_identity_and_time` remains explicitly unmapped and never auto-coverable
+- No positive decision eligibility
+
+All 7 open native gates remain open. Package QA is not platform acceptance.
