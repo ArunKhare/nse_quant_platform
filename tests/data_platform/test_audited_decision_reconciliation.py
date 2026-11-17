@@ -1,90 +1,114 @@
-"""Tests for audited decision reconciliation."""
+"""Tests for audited decision-run coverage reconciliation."""
 
 from __future__ import annotations
 
+import pytest
+
 from nse_quant.data_platform.audited_decision_reconciliation import (
-    EXPECTED_STAGES,
-    NOT_RUN_STAGES,
-    reconcile_audited_decision,
+    reconcile_audited_decision_run,
+)
+from nse_quant.data_platform.native_strategy_input_coverage import Rejected
+from nse_quant.data_platform.native_strategy_requirements import (
+    DEFINITION_SHA256,
+    STAGES,
+    STRATEGY,
+    VERSION,
 )
 
 
-def _valid_decision_result():
-    trace = []
-    for index, stage in enumerate(EXPECTED_STAGES):
-        if stage in NOT_RUN_STAGES:
-            trace.append(dict(stage=stage, status="NOT_RUN"))
-        else:
-            trace.append(dict(stage=stage, status="PASSED" if index < 3 else "BLOCKED"))
-    return dict(
-        stage_trace=trace,
-        strategy_evaluated=False,
-        portfolio_risk_evaluated=False,
-        execution_attempted=False,
-        order_emitted=False,
-        decision_eligibility_asserted=False,
-        complete_strategy_replay_asserted=False,
+def _coverage(*, covered: list[str] | None = None) -> dict[str, object]:
+    covered = covered or []
+    return {
+        "version": VERSION,
+        "strategy": STRATEGY,
+        "definition_sha256": DEFINITION_SHA256,
+        "stages": STAGES,
+        "covered": covered,
+        "unlinked": [],
+        "missing": [
+            requirement_id
+            for requirement_id, _source, _need in __import__(
+                "nse_quant.data_platform.native_strategy_requirements",
+                fromlist=["REQUIREMENTS"],
+            ).REQUIREMENTS
+            if requirement_id not in covered
+        ],
+        "evidence_refs": {
+            requirement_id: (
+                f"silver://{requirement_id}?revision_id={'a' * 64}&recording_fingerprint={'b' * 64}&row_count=1"
+            )
+            for requirement_id in covered
+        },
+        "revision_id": "a" * 64,
+        "recording_fingerprint": "b" * 64,
+        "complete": False,
+    }
+
+
+def test_reconciles_strategy_only_run() -> None:
+    result = reconcile_audited_decision_run(
+        coverage_report=_coverage(covered=["market_session"]),
+        run_id="run-1",
+        stages=("strategy", "portfolio_risk"),
+        stage_revisions={"strategy": "c" * 64},
+        stage_recording_fingerprints={"strategy": "d" * 64},
     )
+    assert result["run_id"] == "run-1"
+    assert result["coverage"]["covered"] == ["market_session"]
+    assert result["stages"][0]["replayed"] is True
+    assert result["stages"][1] == {
+        "stage": "portfolio_risk",
+        "replayed": False,
+        "reason": "STAGE_NOT_EXECUTED",
+        "decision_eligibility_asserted": False,
+    }
+    assert result["complete"] is False
+    assert result["decision_eligibility_asserted"] is False
 
 
-def test_valid_decision_reconciled():
-    result = reconcile_audited_decision(decision_result=_valid_decision_result())
-    assert result["reconciled"] is True
-    assert result["reason"] == "AUDITED_DECISION_RECONCILED"
-    assert result["violations"] == []
+def test_identity_requirement_remains_uncovered() -> None:
+    result = reconcile_audited_decision_run(
+        coverage_report=_coverage(),
+        run_id="run-1",
+        stages=("strategy",),
+        stage_revisions={},
+        stage_recording_fingerprints={},
+    )
+    assert "authoritative_identity_and_time" in result["coverage"]["missing"]
+    assert result["complete"] is False
+    assert result["decision_eligibility_asserted"] is False
 
 
-def test_not_run_stage_marked_passed():
-    candidate = _valid_decision_result()
-    for item in candidate["stage_trace"]:
-        if item["stage"] == "strategy":
-            item["status"] = "PASSED"
-    result = reconcile_audited_decision(decision_result=candidate)
-    assert result["reconciled"] is False
-    assert result["reason"] == "AUDITED_DECISION_VIOLATIONS"
-    assert "NOT_RUN_STAGE_MARKED_PASSED:strategy" in result["violations"]
+def test_unknown_stage_rejected() -> None:
+    with pytest.raises(Rejected, match="UNSUPPORTED_STAGE"):
+        reconcile_audited_decision_run(
+            coverage_report=_coverage(),
+            run_id="run-1",
+            stages=("execution",),
+            stage_revisions={},
+            stage_recording_fingerprints={},
+        )
 
 
-def test_non_not_run_stage_marked_not_run():
-    candidate = _valid_decision_result()
-    for item in candidate["stage_trace"]:
-        if item["stage"] == "kill_switch":
-            item["status"] = "NOT_RUN"
-    result = reconcile_audited_decision(decision_result=candidate)
-    assert result["reconciled"] is False
-    assert result["reason"] == "AUDITED_DECISION_VIOLATIONS"
-    assert "NON_NOT_RUN_STAGE_MARKED_NOT_RUN:kill_switch" in result["violations"]
+def test_duplicate_stage_rejected() -> None:
+    with pytest.raises(Rejected, match="DUPLICATE_REQUESTED_DECISION_STAGE"):
+        reconcile_audited_decision_run(
+            coverage_report=_coverage(),
+            run_id="run-1",
+            stages=("strategy", "strategy"),
+            stage_revisions={},
+            stage_recording_fingerprints={},
+        )
 
 
-def test_flag_not_false():
-    candidate = _valid_decision_result()
-    candidate["strategy_evaluated"] = True
-    result = reconcile_audited_decision(decision_result=candidate)
-    assert result["reconciled"] is False
-    assert result["reason"] == "AUDITED_DECISION_VIOLATIONS"
-    assert "FLAG_NOT_FALSE:strategy_evaluated" in result["violations"]
-
-
-def test_decision_eligibility_asserted_not_false():
-    candidate = _valid_decision_result()
-    candidate["decision_eligibility_asserted"] = True
-    result = reconcile_audited_decision(decision_result=candidate)
-    assert result["reconciled"] is False
-    assert result["reason"] == "AUDITED_DECISION_VIOLATIONS"
-    assert "DECISION_ELIGIBILITY_ASSERTED_NOT_FALSE" in result["violations"]
-
-
-def test_stage_trace_not_list():
-    candidate = _valid_decision_result()
-    candidate["stage_trace"] = "not_a_list"
-    result = reconcile_audited_decision(decision_result=candidate)
-    assert result["reconciled"] is False
-    assert result["reason"] == "AUDITED_DECISION_VIOLATIONS"
-    assert "STAGE_TRACE_NOT_LIST" in result["violations"]
-
-
-def test_non_dict_refused():
-    result = reconcile_audited_decision(decision_result="not_a_dict")
-    assert result["reconciled"] is False
-    assert result["reason"] == "DECISION_RESULT_OBJECT_REQUIRED"
-    assert "DECISION_RESULT_OBJECT_REQUIRED" in result["violations"]
+def test_invalid_coverage_identity_rejected() -> None:
+    report = _coverage()
+    report["revision_id"] = "not-a-pin"
+    with pytest.raises(Rejected, match="EXACT_COVERAGE_REVISION_PIN_REQUIRED"):
+        reconcile_audited_decision_run(
+            coverage_report=report,
+            run_id="run-1",
+            stages=("strategy",),
+            stage_revisions={},
+            stage_recording_fingerprints={},
+        )
