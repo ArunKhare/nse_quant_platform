@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, timedelta
 
 from nse_quant.research.corporate_actions_calendar import (
     CalendarSettings,
@@ -19,7 +19,7 @@ from nse_quant.research.corporate_actions_calendar import (
 def _earnings(day_offset: int, symbol: str = "RELIANCE"):
     return EarningsEvent(
         symbol=symbol,
-        earnings_date=date(2026, 1, 15 + day_offset),
+        earnings_date=date(2026, 1, 15) + timedelta(days=day_offset),
         quarter="Q3FY26",
         consensus_eps=25.0,
     )
@@ -29,8 +29,8 @@ def _action(day_offset: int, symbol: str = "RELIANCE", action_type: str = "DIVID
     return CorporateAction(
         symbol=symbol,
         action_type=action_type,
-        ex_date=date(2026, 2, 1 + day_offset),
-        record_date=date(2026, 2, 2 + day_offset),
+        ex_date=date(2026, 2, 1) + timedelta(days=day_offset),
+        record_date=date(2026, 2, 2) + timedelta(days=day_offset),
         details="synthetic",
     )
 
