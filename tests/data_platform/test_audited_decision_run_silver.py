@@ -11,6 +11,7 @@ import pytest
 
 from nse_quant.data_platform.audited_decision_run_silver import (
     AuditedDecisionRunRequest,
+    audited_decision_run_context,
     initialize_audited_decision_run_silver,
     record_audited_decision_run,
     replay_audited_decision_run,
@@ -31,12 +32,14 @@ def _sha(value: object) -> str:
 
 
 def _request(stage: str = "strategy") -> AuditedDecisionRunRequest:
+    inputs = {"symbol": "RELIANCE"} if stage == "strategy" else {"portfolio": "default"}
+    outcome = {"approved": False}
     return AuditedDecisionRunRequest(
         run_id="run-1",
         stage=stage,
-        decision_fingerprint=_sha(["strategy", {"symbol": "RELIANCE"}, {"approved": False}]),
-        inputs={"symbol": "RELIANCE"},
-        outcome={"approved": False},
+        decision_fingerprint=_sha([stage, inputs, outcome]),
+        inputs=inputs,
+        outcome=outcome,
         evidence_refs={
             "market_session": (
                 "silver://market_session?revision_id="
@@ -52,19 +55,7 @@ def _request(stage: str = "strategy") -> AuditedDecisionRunRequest:
 
 
 def _context(request: AuditedDecisionRunRequest) -> str:
-    return _sha(
-        {
-            "version": "native-audited-decision-run-silver-recording@1",
-            "run_id": request.run_id,
-            "stage": request.stage,
-            "decision_fingerprint": request.decision_fingerprint,
-            "inputs": request.inputs,
-            "outcome": request.outcome,
-            "evidence_refs": request.evidence_refs,
-            "coverage_revision_id": request.coverage_revision_id,
-            "coverage_recording_fingerprint": request.coverage_recording_fingerprint,
-        }
-    )
+    return audited_decision_run_context(request)
 
 
 @pytest.fixture()

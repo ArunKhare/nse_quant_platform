@@ -21,7 +21,7 @@ from nse_quant.data_platform.contracts import DatasetContract, Layer, WritePolic
 from nse_quant.data_platform.native_strategy_input_coverage import Rejected
 from nse_quant.data_platform.native_strategy_requirements import STRATEGY
 
-VERSION = "native-audited-decision-run-silver-recording@1"
+VERSION = "native-audited-decision-run-silver-recording@2"
 COMMAND = "record.native_audited_decision_run@1"
 MAX_CONTEXT_BYTES = 1_048_576
 MAX_RECORD_BYTES = 262_144
@@ -130,7 +130,8 @@ def _json_text(value: dict[str, Any], label: str) -> str:
 
 
 def _context(request: AuditedDecisionRunRequest) -> bytes:
-    raw = _canonical(
+    """Return the exact canonical context bytes for a decision-run request."""
+    return _canonical(
         {
             "version": VERSION,
             "run_id": request.run_id,
@@ -143,9 +144,13 @@ def _context(request: AuditedDecisionRunRequest) -> bytes:
             "coverage_recording_fingerprint": request.coverage_recording_fingerprint,
         }
     )
-    if not 0 < len(raw) <= MAX_CONTEXT_BYTES:
-        raise Rejected("AUDITED_DECISION_RUN_CONTEXT_BYTE_BOUND")
-    return raw
+
+
+def audited_decision_run_context(
+    request: AuditedDecisionRunRequest,
+) -> str:
+    """Return the exact expected context hash for a decision-run request."""
+    return _sha(_context(request))
 
 
 def _table(target: Any, name: str) -> str:
@@ -175,7 +180,12 @@ def initialize_audited_decision_run_silver(target: Any) -> None:
 
     AuditLedger(target).initialize()
 
-    versions, sets, observations, attempts = (_table(target, n) for n in DOMAIN)
+    (
+        versions,
+        sets,
+        observations,
+        attempts,
+    ) = (_table(target, n) for n in DOMAIN)
     target.execute("BEGIN TRANSACTION")
     try:
         target.execute("CREATE SCHEMA silver")
@@ -185,6 +195,7 @@ def initialize_audited_decision_run_silver(target: Any) -> None:
             f"CREATE TABLE {sets} ("
             "revision_id VARCHAR PRIMARY KEY,"
             "run_id VARCHAR NOT NULL,"
+            "stage VARCHAR NOT NULL,"
             "strategy VARCHAR NOT NULL,"
             "coverage_revision_id VARCHAR NOT NULL,"
             "coverage_recording_fingerprint VARCHAR NOT NULL,"
@@ -210,7 +221,11 @@ def initialize_audited_decision_run_silver(target: Any) -> None:
             "UNIQUE(revision_id,run_id,stage))"
         )
         target.execute(
-            f"CREATE TABLE {attempts} (job_id VARCHAR PRIMARY KEY,run_id VARCHAR NOT NULL,revision_id VARCHAR NOT NULL)"
+            f"CREATE TABLE {attempts} ("
+            "job_id VARCHAR PRIMARY KEY,"
+            "run_id VARCHAR NOT NULL,"
+            "stage VARCHAR NOT NULL,"
+            "revision_id VARCHAR NOT NULL)"
         )
         target.execute("COMMIT")
     except BaseException:
@@ -287,15 +302,20 @@ def record_audited_decision_run(
     sets = _table(target, DOMAIN[1])
     observations = _table(target, DOMAIN[2])
     attempts = _table(target, DOMAIN[3])
+    scope_id = _sha(_canonical([request.run_id, request.stage]))
     jobs = "medallion_audit.jobs"
 
-    for table, field, value in (
-        (sets, "run_id", request.run_id),
-        (attempts, "run_id", request.run_id),
-        (jobs, "scope_ref", "sha256:" + request.run_id),
-        (observations, "run_id", request.run_id),
+    for table, fields, value in (
+        (sets, ("run_id", "stage"), (request.run_id, request.stage)),
+        (attempts, ("run_id", "stage"), (request.run_id, request.stage)),
+        (jobs, ("scope_ref",), ("sha256:" + scope_id,)),
+        (observations, ("run_id", "stage"), (request.run_id, request.stage)),
     ):
-        if target.execute(f'SELECT 1 FROM {table} WHERE "{field}"=? LIMIT 1', [value]).fetchone():
+        predicate = " AND ".join(f'"{field}"=?' for field in fields)
+        if target.execute(
+            f"SELECT 1 FROM {table} WHERE {predicate} LIMIT 1",
+            list(value),
+        ).fetchone():
             raise Rejected("AUDITED_DECISION_RUN_FIRST_WRITE_OR_ORPHAN_OBLIGATION")
 
     context = _context(request)
@@ -326,17 +346,18 @@ def record_audited_decision_run(
         command_name=COMMAND,
         actor_id=actor_id,
         code_revision=code_revision,
-        scope_ref="sha256:" + request.run_id,
+        scope_ref="sha256:" + scope_id,
         config_hash=config,
     )
     with ledger.execution(job):
         target.execute("BEGIN TRANSACTION")
         try:
             target.execute(
-                f"INSERT INTO {sets} VALUES (?,?,?,?,?,?,?,?,?)",
+                f"INSERT INTO {sets} VALUES (?,?,?,?,?,?,?,?,?,?)",
                 [
                     revision,
                     request.run_id,
+                    request.stage,
                     STRATEGY,
                     request.coverage_revision_id,
                     request.coverage_recording_fingerprint,
@@ -363,8 +384,8 @@ def record_audited_decision_run(
                 ],
             )
             target.execute(
-                f"INSERT INTO {attempts} VALUES (?,?,?)",
-                [job, request.run_id, revision],
+                f"INSERT INTO {attempts} VALUES (?,?,?,?)",
+                [job, request.run_id, request.stage, revision],
             )
             target.execute("COMMIT")
         except BaseException:
@@ -432,9 +453,17 @@ def replay_audited_decision_run(
     sets = _table(target, DOMAIN[1])
     observations = _table(target, DOMAIN[2])
     row = target.execute(
-        f"SELECT revision_id,stage_count FROM {sets} WHERE run_id=? LIMIT 2",
-        [run_id],
+        f"SELECT revision_id,stage_count FROM {sets} WHERE run_id=? AND stage=? LIMIT 2",
+        [run_id, stage],
     ).fetchall()
+    if not row:
+        return {
+            "run_id": run_id,
+            "stage": stage,
+            "replayed": False,
+            "reason": "STAGE_NOT_EXECUTED",
+            "decision_eligibility_asserted": False,
+        }
     if len(row) != 1:
         raise Rejected("AUDITED_DECISION_RUN_EXACT_SET_REQUIRED")
     revision_id, stage_count = row[0]
