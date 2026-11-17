@@ -34,11 +34,16 @@
   with boundary and evidence-link context, persists, and replays a native
   decision run.
 
+- Reconciliation evidence-completeness validation
+  (`native_iron_condor_reconciliation_evidence_completeness.py`): validates
+  authoritative identity/time evidence, coverage evidence-link context, and
+  exact replay coverage for every recorded stage.
+
 - End-to-end Gate 6 acceptance tests
   (`test_native_iron_condor_gate6_acceptance.py`): exercise native decision-run
   recording, evidence-link validation, authoritative identity/time validation,
-  reconciliation persistence, exact replay, duplicate rejection, and
-  `POINT_IN_TIME_DECISION` rejection.
+  reconciliation persistence, evidence-completeness validation, exact replay,
+  duplicate rejection, and `POINT_IN_TIME_DECISION` rejection.
 
 ## Unchanged
 

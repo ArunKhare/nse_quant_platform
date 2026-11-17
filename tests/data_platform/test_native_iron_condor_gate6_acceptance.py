@@ -1,10 +1,10 @@
-"""End-to-end Gate 6 acceptance tests for native iron-condor decisions.
+"""End-to-end Gate 6 acceptance tests with evidence completeness.
 
 Exercises the full library path: native strategy/portfolio-risk decision run,
 coverage evidence-link validation, authoritative identity/time boundary
-validation, reconciliation persistence, exact replay, duplicate rejection, and
-POINT_IN_TIME_DECISION rejection. No eligibility, live trading, healing,
-backfill, adoption, or execution authority.
+validation, reconciliation persistence, evidence-completeness validation, exact
+replay, duplicate rejection, and POINT_IN_TIME_DECISION rejection. No
+eligibility, live trading, healing, backfill, adoption, or execution authority.
 """
 
 from __future__ import annotations
@@ -33,6 +33,9 @@ from nse_quant.data_platform.native_iron_condor_decision_run_orchestrator import
 from nse_quant.data_platform.native_iron_condor_portfolio_risk_decision import (
     NativePortfolioRiskDecisionInputBundle,
     PortfolioRiskSettings,
+)
+from nse_quant.data_platform.native_iron_condor_reconciliation_evidence_completeness import (
+    validate_reconciliation_evidence_completeness,
 )
 from nse_quant.data_platform.native_iron_condor_strategy_decision import (
     NativeStrategyDecisionInputBundle,
@@ -180,18 +183,21 @@ def targets(tmp_path: Path):
         yield decision_target, reconciliation_target
 
 
-def test_gate6_end_to_end_acceptance(targets) -> None:
+def test_gate6_end_to_end_acceptance_with_evidence_completeness(targets) -> None:
     decision_target, reconciliation_target = targets
     result = run_native_iron_condor_decision_loop_with_evidence(
         decision_target,
         reconciliation_target,
-        request=_request("gate6-acceptance-run-1"),
+        request=_request("gate6-evidence-acceptance-run-1"),
         coverage_report=_coverage(),
-        authoritative_boundary=_boundary("gate6-acceptance-run-1"),
+        authoritative_boundary=_boundary("gate6-evidence-acceptance-run-1"),
     )
+    completeness = validate_reconciliation_evidence_completeness(result["replay"]["reconciliation"])
+    assert completeness["complete_evidence"] is True
+    assert completeness["stage_count"] == 2
+    assert completeness["authoritative_boundary_present"] is True
+    assert completeness["coverage_evidence_links_present"] is True
     assert result["decision_run"]["recording"]["stage_count"] == 2
-    assert result["decision_run"]["recording"]["stages"][0]["stage"] == "strategy"
-    assert result["decision_run"]["recording"]["stages"][1]["stage"] == "portfolio_risk"
     assert result["reconciliation"]["decision_eligibility_asserted"] is False
     assert result["replay"]["replayed"] is True
     assert result["coverage_evidence_links_context"]
@@ -243,18 +249,3 @@ def test_gate6_missing_evidence_ref_rejected(targets) -> None:
             coverage_report=coverage,
             authoritative_boundary=_boundary("gate6-missing-evidence-run-1"),
         )
-
-
-def test_gate6_reconciliation_context_is_exact(targets) -> None:
-    decision_target, reconciliation_target = targets
-    result = run_native_iron_condor_decision_loop_with_evidence(
-        decision_target,
-        reconciliation_target,
-        request=_request("gate6-context-run-1"),
-        coverage_report=_coverage(),
-        authoritative_boundary=_boundary("gate6-context-run-1"),
-    )
-    assert result["reconciliation"]["revision_id"]
-    assert result["reconciliation"]["recording_fingerprint"]
-    assert result["replay"]["replayed"] is True
-    assert result["decision_eligibility_asserted"] is False

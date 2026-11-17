@@ -1,25 +1,8 @@
-## Status
+# Current native-platform status
 
-- Core NIFTY paper decision loop is implemented and user-QA-confirmed.
-- Research depth (warehouse, IV/RV research, replay backtests, QuantStats,
-  experiments) is implemented.
-- Controlled execution (Kite order placement, reconciliation, margin, partial
-  fills, rule-based exits) remains roadmap work.
-- All additive research modules are observational only and do not grant decision
-  eligibility or execution authority.
-- Live trading, production publication, and decision-loop cutover remain held.
-
-Native Gate 6 increments now include persisted audited decision-run coverage
-reconciliation Silver, an end-to-end native iron-condor decision-run pipeline,
-authoritative identity/time validation, coverage evidence-link validation,
-decision-loop integration, and end-to-end acceptance tests.
-
-These increments remain observational. They do not close any native status gate,
-grant decision eligibility, authorize live trading, or authorize healing,
-backfill, adoption, or execution. `POINT_IN_TIME_DECISION` remains rejected.
-
-See `docs/CURRENT_NATIVE_STATUS.md` for the authoritative current status,
-remaining gates, and operational holds.
+Status reconciliation: 2026-11-15. This document separates source inspection,
+user-confirmed repository QA and supplied Git history. It is not an independent
+inspection of the local Windows repository or an authority to release held work.
 
 ## Evidence basis
 
@@ -575,5 +558,34 @@ end-to-end Gate 6 acceptance tests.
   non-auto-coverable.
 - No healing, backfill, adoption, eligibility grant, or execution authority.
 - `POINT_IN_TIME_DECISION` remains rejected.
+
+## 2026-11-17 addendum: Gate 6 evidence-completeness acceptance
+
+Delivered (packaged, pending user QA): end-to-end Gate 6 acceptance tests now
+validate that a persisted reconciliation is evidence-complete before exact
+replay.
+
+- Native strategy and portfolio-risk stages run and record successfully.
+- Coverage evidence links validate and integrate.
+- Authoritative identity/time boundary validates and integrates.
+- Reconciliation persists immutably and replays exactly.
+- Reconciliation is evidence-complete: boundary context, evidence-link context,
+  and replay coverage for both stages.
+- Duplicate decision-run/reconciliation obligation is rejected.
+- `POINT_IN_TIME_DECISION` is rejected.
+- Missing coverage evidence ref is rejected.
+- `decision_eligibility_asserted` remains `False` throughout.
+
+All 7 open native gates remain open. Package QA is not platform acceptance.
+## Gate 6 addendum
+
+See `docs/CURRENT_NATIVE_STATUS_GATE6.md` for the persisted reconciliation,
+end-to-end decision-run pipeline, authoritative identity/time boundary,
+decision-loop integration and CLIs, bounded reconciliation query, and coverage
+evidence-link validation increments.
+
+These additions remain observational. They do not close any native status gate,
+grant decision eligibility, authorize live trading, or authorize healing,
+backfill, adoption, or execution. `POINT_IN_TIME_DECISION` remains rejected.
 
 All 7 open native gates remain open. Package QA is not platform acceptance.

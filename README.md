@@ -18,16 +18,16 @@ Gold -> published bundles -> native decisions and exact replay.
 
 Native Gate 6 increments now include persisted audited decision-run coverage
 reconciliation Silver, an end-to-end native iron-condor decision-run pipeline,
-authoritative identity/time validation, decision-loop integration and CLIs,
-bounded reconciliation queries, and coverage evidence-link validation.
+authoritative identity/time validation, coverage evidence-link validation,
+decision-loop integration, evidence-completeness validation, and end-to-end
+acceptance tests.
 
 These increments remain observational. They do not close any native status gate,
 grant decision eligibility, authorize live trading, or authorize healing,
 backfill, adoption, or execution. `POINT_IN_TIME_DECISION` remains rejected.
 
 See `docs/CURRENT_NATIVE_STATUS.md` for the authoritative current status,
-remaining gates, and operational holds. See
-`docs/CURRENT_NATIVE_STATUS_GATE6.md` for the Gate 6 addendum.
+remaining gates, and operational holds.
 
 ## Architecture
 
@@ -98,4 +98,5 @@ A new strategy must never bypass these controls.
 - `docs/FUTURE_IMPLEMENTATION.md` — future configuration designs.
 - Per-module docs in `docs/` for each research evaluator and data-platform family.
 - `docs/CURRENT_NATIVE_STATUS_GATE6.md` — Gate 6 reconciliation, decision-loop,
-  identity/time, query, and evidence-link addendum.
+  identity/time, evidence-link, evidence-completeness, and acceptance-test
+  addendum.
