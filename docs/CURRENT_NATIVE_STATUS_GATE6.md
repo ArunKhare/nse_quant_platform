@@ -45,6 +45,21 @@
   reconciliation persistence, evidence-completeness validation, exact replay,
   duplicate rejection, and `POINT_IN_TIME_DECISION` rejection.
 
+## Later native-platform increments
+
+The following later native-platform increments are implemented and
+user-QA-confirmed. They remain observational and do not close any native status
+gate, grant decision eligibility, authorize live trading, or authorize healing,
+backfill, adoption, or execution.
+
+- Availability and economic-validity evidence validation.
+- Gold decision publication candidate validation.
+- Eligible admission contract evaluation.
+- Lifecycle-recovery observations.
+- Operational acceptance harness.
+- Controlled execution gateway with paper-only default behavior.
+- Multi-underlying expansion validation for NIFTY and BANKNIFTY.
+
 ## Unchanged
 
 - All seven native status gates remain open.

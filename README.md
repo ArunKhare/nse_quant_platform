@@ -22,6 +22,16 @@ authoritative identity/time validation, coverage evidence-link validation,
 decision-loop integration, evidence-completeness validation, and end-to-end
 acceptance tests.
 
+Recent native-platform increments also include:
+
+- Availability and economic-validity evidence validation.
+- Gold decision publication candidate validation.
+- Eligible admission contract evaluation.
+- Lifecycle-recovery observations.
+- Operational acceptance harness.
+- Controlled execution gateway with paper-only default behavior.
+- Multi-underlying expansion validation for NIFTY and BANKNIFTY.
+
 These increments remain observational. They do not close any native status gate,
 grant decision eligibility, authorize live trading, or authorize healing,
 backfill, adoption, or execution. `POINT_IN_TIME_DECISION` remains rejected.
@@ -89,7 +99,6 @@ git diff --check
 
 A new strategy must never bypass these controls.
 
-
 ## Documentation
 
 - `docs/CURRENT_NATIVE_STATUS.md` — authoritative current status, gates, holds.
@@ -99,4 +108,8 @@ A new strategy must never bypass these controls.
 - Per-module docs in `docs/` for each research evaluator and data-platform family.
 - `docs/CURRENT_NATIVE_STATUS_GATE6.md` — Gate 6 reconciliation, decision-loop,
   identity/time, evidence-link, evidence-completeness, and acceptance-test
+  addendum.
+- `docs/CURRENT_NATIVE_STATUS_2026-11-17_ADDENDUM.md` — 2026-11-17 native
+  decision-run, Gold publication, admission, lifecycle recovery, operational
+  acceptance, controlled execution gateway, and multi-underlying expansion
   addendum.

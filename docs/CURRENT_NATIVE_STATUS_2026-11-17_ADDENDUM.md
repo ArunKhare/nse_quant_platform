@@ -74,3 +74,25 @@ All seven native gates remain open. Package QA is not platform acceptance.
 Data loading/migration, live acquisition, user-data migration or backfill,
 real identity/key/policy/authority registration, production publication,
 trading, and decision-loop cutover remain unauthorized.
+
+### Later native-platform increments
+
+The following later native-platform increments are implemented and
+user-QA-confirmed. They remain observational and do not close any native status
+gate, grant decision eligibility, authorize live trading, or authorize healing,
+backfill, adoption, or execution.
+
+- Availability and economic-validity evidence validation.
+- Gold decision publication candidate validation.
+- Eligible admission contract evaluation.
+- Lifecycle-recovery observations.
+- Operational acceptance harness.
+- Controlled execution gateway with paper-only default behavior.
+- Multi-underlying expansion validation for NIFTY and BANKNIFTY.
+
+`POINT_IN_TIME_DECISION` remains rejected before recording, replay, publication,
+admission, or execution. The controlled execution gateway remains paper-only by
+default; live placement requires explicit configuration, an admitted Gold
+decision candidate, and explicit user authorization. Multi-underlying expansion
+validation supports NIFTY and BANKNIFTY canonical underlying support and
+derivative binding only.
