@@ -1,8 +1,25 @@
-# Current native-platform status
+## Status
 
-Status reconciliation: 2026-11-15. This document separates source inspection,
-user-confirmed repository QA and supplied Git history. It is not an independent
-inspection of the local Windows repository or an authority to release held work.
+- Core NIFTY paper decision loop is implemented and user-QA-confirmed.
+- Research depth (warehouse, IV/RV research, replay backtests, QuantStats,
+  experiments) is implemented.
+- Controlled execution (Kite order placement, reconciliation, margin, partial
+  fills, rule-based exits) remains roadmap work.
+- All additive research modules are observational only and do not grant decision
+  eligibility or execution authority.
+- Live trading, production publication, and decision-loop cutover remain held.
+
+Native Gate 6 increments now include persisted audited decision-run coverage
+reconciliation Silver, an end-to-end native iron-condor decision-run pipeline,
+authoritative identity/time validation, coverage evidence-link validation,
+decision-loop integration, and end-to-end acceptance tests.
+
+These increments remain observational. They do not close any native status gate,
+grant decision eligibility, authorize live trading, or authorize healing,
+backfill, adoption, or execution. `POINT_IN_TIME_DECISION` remains rejected.
+
+See `docs/CURRENT_NATIVE_STATUS.md` for the authoritative current status,
+remaining gates, and operational holds.
 
 ## Evidence basis
 
@@ -540,9 +557,9 @@ Delivered (packaged, pending user QA): native option-chain snapshot Bronze and S
 
 Delivered (packaged, pending user QA): persisted audited decision-run coverage
 reconciliation Silver, end-to-end native iron-condor decision-run pipeline,
-authoritative identity/time boundary validation, reconciliation boundary and
-evidence-link integration, decision-loop integration and CLIs, bounded
-reconciliation query, and coverage evidence-link validation.
+authoritative identity/time boundary validation, coverage evidence-link
+validation and integration, decision-loop integration with evidence links, and
+end-to-end Gate 6 acceptance tests.
 
 - Reconciliation Silver records an immutable reconciliation and supports exact
   replay only.
@@ -552,11 +569,11 @@ reconciliation query, and coverage evidence-link validation.
   reconciliations.
 - Coverage evidence links are validated and embedded in supported
   reconciliations.
-- Decision-loop integration and CLIs remain observational.
+- End-to-end acceptance tests exercise the full library path, duplicate
+  rejection, and `POINT_IN_TIME_DECISION` rejection.
 - `authoritative_identity_and_time` remains explicitly missing and
   non-auto-coverable.
 - No healing, backfill, adoption, eligibility grant, or execution authority.
 - `POINT_IN_TIME_DECISION` remains rejected.
 
 All 7 open native gates remain open. Package QA is not platform acceptance.
-

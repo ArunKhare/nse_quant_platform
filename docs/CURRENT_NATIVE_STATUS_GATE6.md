@@ -3,51 +3,42 @@
 ## Added
 
 - Persisted audited decision-run coverage reconciliation Silver
-  (`src/nse_quant/data_platform/audited_decision_reconciliation_silver.py`):
-  immutable reconciliation of an audited native decision run and current
-  Silver-backed coverage; exact replay only.
+  (`audited_decision_reconciliation_silver.py`): immutable reconciliation of an
+  audited native decision run and current Silver-backed coverage; exact replay
+  only.
 
 - End-to-end native iron-condor decision-run pipeline
-  (`src/nse_quant/data_platform/native_iron_condor_decision_run_pipeline.py`):
-  runs and records both native stages, reconciles against current coverage,
-  persists the reconciliation, and exactly replays it.
+  (`native_iron_condor_decision_run_pipeline.py`): runs and records both native
+  stages, reconciles against current coverage, persists the reconciliation, and
+  exactly replays it.
 
 - Authoritative identity and time boundary
-  (`src/nse_quant/data_platform/native_authoritative_identity_time_boundary.py`):
-  validates canonical underlying identity, derivative binding, and authorized
-  revocation evidence.
+  (`native_authoritative_identity_time_boundary.py`): validates canonical
+  underlying identity, derivative binding, and authorized revocation evidence.
 
 - Reconciliation boundary integration
-  (`src/nse_quant/data_platform/native_iron_condor_decision_reconciliation_boundary.py`):
-  embeds and revalidates authoritative identity/time evidence in a persisted
-  reconciliation.
-
-- Native decision-loop integration
-  (`src/nse_quant/data_platform/native_iron_condor_decision_loop_integration.py`):
-  single read-only entry point that runs, reconciles with boundary evidence,
-  persists, and replays a native decision run.
-
-- Native decision-loop CLI
-  (`src/nse_quant/data_platform/native_iron_condor_decision_loop_cli.py`):
-  JSON-driven command-line entry point for the decision-loop integration.
-
-- Native decision-loop status/query CLI
-  (`src/nse_quant/data_platform/native_iron_condor_decision_loop_status_cli.py`):
-  read-only inspection and exact replay of a persisted reconciliation.
-
-- Bounded reconciliation query CLI
-  (`src/nse_quant/data_platform/native_iron_condor_decision_reconciliation_query.py`):
-  bounded read-only summaries of persisted reconciliations.
+  (`native_iron_condor_decision_reconciliation_boundary.py`): embeds and
+  revalidates authoritative identity/time evidence in a persisted reconciliation.
 
 - Coverage evidence-link validation
-  (`src/nse_quant/data_platform/native_strategy_coverage_evidence_links.py`):
-  validates that every covered native requirement has a well-formed Silver
-  evidence link with exact revision and recording-fingerprint pins.
+  (`native_strategy_coverage_evidence_links.py`): validates that every covered
+  native requirement has a well-formed Silver evidence link with exact revision
+  and recording-fingerprint pins.
 
 - Reconciliation evidence-link integration
-  (`src/nse_quant/data_platform/native_iron_condor_decision_reconciliation_evidence_links.py`):
-  embeds and revalidates coverage evidence-link context in a persisted
-  reconciliation.
+  (`native_iron_condor_decision_reconciliation_evidence_links.py`): embeds and
+  revalidates coverage evidence-link context in a persisted reconciliation.
+
+- Decision-loop integration with evidence links
+  (`native_iron_condor_decision_loop_evidence_integration.py`): runs, reconciles
+  with boundary and evidence-link context, persists, and replays a native
+  decision run.
+
+- End-to-end Gate 6 acceptance tests
+  (`test_native_iron_condor_gate6_acceptance.py`): exercise native decision-run
+  recording, evidence-link validation, authoritative identity/time validation,
+  reconciliation persistence, exact replay, duplicate rejection, and
+  `POINT_IN_TIME_DECISION` rejection.
 
 ## Unchanged
 
