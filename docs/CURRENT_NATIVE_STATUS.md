@@ -536,4 +536,27 @@ Delivered (packaged, pending user QA): native option-chain snapshot Bronze and S
 - `authoritative_identity_and_time` remains explicitly unmapped and never auto-coverable
 - No positive decision eligibility
 
+## 2026-11-17 addendum: Gate 6 native decision reconciliation and loop
+
+Delivered (packaged, pending user QA): persisted audited decision-run coverage
+reconciliation Silver, end-to-end native iron-condor decision-run pipeline,
+authoritative identity/time boundary validation, reconciliation boundary and
+evidence-link integration, decision-loop integration and CLIs, bounded
+reconciliation query, and coverage evidence-link validation.
+
+- Reconciliation Silver records an immutable reconciliation and supports exact
+  replay only.
+- The decision-run pipeline runs and records both native stages, reconciles
+  against current coverage, persists the reconciliation, and replays it.
+- Authoritative identity/time evidence is validated and embedded in supported
+  reconciliations.
+- Coverage evidence links are validated and embedded in supported
+  reconciliations.
+- Decision-loop integration and CLIs remain observational.
+- `authoritative_identity_and_time` remains explicitly missing and
+  non-auto-coverable.
+- No healing, backfill, adoption, eligibility grant, or execution authority.
+- `POINT_IN_TIME_DECISION` remains rejected.
+
 All 7 open native gates remain open. Package QA is not platform acceptance.
+

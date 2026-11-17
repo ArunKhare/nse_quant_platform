@@ -16,8 +16,18 @@ Gold -> published bundles -> native decisions and exact replay.
   eligibility or execution authority.
 - Live trading, production publication, and decision-loop cutover remain held.
 
+Native Gate 6 increments now include persisted audited decision-run coverage
+reconciliation Silver, an end-to-end native iron-condor decision-run pipeline,
+authoritative identity/time validation, decision-loop integration and CLIs,
+bounded reconciliation queries, and coverage evidence-link validation.
+
+These increments remain observational. They do not close any native status gate,
+grant decision eligibility, authorize live trading, or authorize healing,
+backfill, adoption, or execution. `POINT_IN_TIME_DECISION` remains rejected.
+
 See `docs/CURRENT_NATIVE_STATUS.md` for the authoritative current status,
-remaining gates, and operational holds.
+remaining gates, and operational holds. See
+`docs/CURRENT_NATIVE_STATUS_GATE6.md` for the Gate 6 addendum.
 
 ## Architecture
 
@@ -79,6 +89,7 @@ git diff --check
 
 A new strategy must never bypass these controls.
 
+
 ## Documentation
 
 - `docs/CURRENT_NATIVE_STATUS.md` — authoritative current status, gates, holds.
@@ -86,3 +97,5 @@ A new strategy must never bypass these controls.
 - `docs/TRADING_UNIVERSE_ROADMAP.md` — instrument-family expansion plan.
 - `docs/FUTURE_IMPLEMENTATION.md` — future configuration designs.
 - Per-module docs in `docs/` for each research evaluator and data-platform family.
+- `docs/CURRENT_NATIVE_STATUS_GATE6.md` — Gate 6 reconciliation, decision-loop,
+  identity/time, query, and evidence-link addendum.
