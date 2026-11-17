@@ -23,6 +23,10 @@ from nse_quant.data_platform.native_iron_condor_decision_run_orchestrator import
     NativeDecisionRunRequest,
     run_native_iron_condor_decision,
 )
+from nse_quant.data_platform.native_strategy_coverage_evidence_links import (
+    coverage_evidence_links_context,
+    validate_coverage_evidence_links,
+)
 from nse_quant.data_platform.native_strategy_input_coverage import Rejected
 from nse_quant.data_platform.native_strategy_requirements import (
     STRATEGY,
@@ -77,6 +81,8 @@ def run_native_iron_condor_decision_loop(
         "complete": False,
         "decision_eligibility_asserted": False,
     }
+    validate_coverage_evidence_links(coverage_report)
+    reconciliation["coverage_evidence_links_context"] = coverage_evidence_links_context(coverage_report)
     extended = build_reconciliation_with_authoritative_boundary(
         reconciliation,
         authoritative_boundary,

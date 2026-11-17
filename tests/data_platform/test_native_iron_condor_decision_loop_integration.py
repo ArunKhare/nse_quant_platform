@@ -67,6 +67,8 @@ def _coverage() -> dict[str, object]:
         "revision_id": "a" * 64,
         "recording_fingerprint": "b" * 64,
         "complete": False,
+        "point_in_time_decision": False,
+        "decision_eligibility_asserted": False,
     }
 
 
