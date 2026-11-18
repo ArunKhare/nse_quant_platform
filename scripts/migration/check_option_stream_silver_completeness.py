@@ -1,5 +1,6 @@
 """Read-only completeness check for the dedicated Medallion Silver database.
 
+
 Validates:
 - Silver schema and revision records.
 - Observation/revision count reconciliation.
@@ -9,6 +10,7 @@ Validates:
 - Duplicate revision IDs.
 - Missing Bronze pins.
 - Quarantine accounting.
+
 
 Safety:
 - Opens Silver read-only.
@@ -60,19 +62,21 @@ def check_silver(
         print(f"FAIL missing_silver_tables: {missing_tables}")
         return 2
 
+    if underlying:
+        raise SystemExit(
+            "UNDERLYING_FILTER_NOT_SUPPORTED: bronze_source_label is a content-hash label, "
+            "not an underlying identifier. Run without --underlying or expose an explicit "
+            "Silver underlying column/filter."
+        )
+
     revision_filter = ""
     params: list[object] = []
-    if underlying:
-        revision_filter += " AND r.bronze_source_label LIKE ?"
-        params.append(f"%{underlying}%")
     if start_date:
         revision_filter += " AND CAST(r.recorded_at AT TIME ZONE 'Asia/Kolkata' AS DATE) >= ?"
         params.append(start_date.isoformat())
     if end_date:
         revision_filter += " AND CAST(r.recorded_at AT TIME ZONE 'Asia/Kolkata' AS DATE) <= ?"
         params.append(end_date.isoformat())
-    print({"params": params})
-    print({"revision_filter": revision_filter})
 
     revisions = count(
         silver_conn,
