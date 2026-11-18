@@ -86,3 +86,10 @@ Remaining:
 - Multi-leg strategy library.
 
 - [Future Implementation Configuration](docs/FUTURE_IMPLEMENTATION.md)
+
+
+- `docs\PLATFORM_DISCUSSION_DECISION_RECORD.md` - detailed, source-grounded record of
+  our architecture and implementation discussion, including the legacy loop,
+  Medallion path, P0–P5 status, configuration design, analytics/research overlap,
+  dashboard scope, safety boundaries, and operational holds.
+  

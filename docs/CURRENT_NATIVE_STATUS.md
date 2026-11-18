@@ -97,7 +97,8 @@ adoption, or execution.
 - Native P1 Gold/admission chain complete.
 - Native P2 lifecycle/recovery complete.
 - Native P3 operational acceptance complete.
-
+- Native P4 controlled execution complete.
+- Native P5 expansion complete.
 
 `authoritative_identity_and_time` remains explicitly unmapped and is never
 auto-coverable. `POINT_IN_TIME_DECISION` remains rejected before recording,
@@ -149,3 +150,6 @@ cover them. Do not auto-stage, clean, discard or delete runtime logs.
   the regime-policy timestamp repair.
 - Supplied Git history: retained above, not independently verified locally.
 - Historical assistant sandbox checks: keep original attribution and scope.
+
+
+`docs\PLATFORM_DISCUSSION_DECISION_RECORD.md`

@@ -238,3 +238,45 @@ llm_enrichment:
     max_headline_length: 512
     min_confidence: 0
     allowed_symbols: []
+medallion:
+  enabled: true
+  root_path: data/medallion
+  bronze:
+    enabled: true
+    root_path: data/medallion/bronze
+    max_payload_bytes: 262144
+    require_original_first_write: true
+  silver:
+    enabled: true
+    root_path: data/medallion/silver
+    max_revision_bytes: 262144
+    require_source_link: true
+  gold:
+    enabled: true
+    root_path: data/medallion/gold
+    require_versioned_build: true
+    require_published_bundle: true
+  publication:
+    enabled: true
+    require_complete_evidence: true
+  admission:
+    enabled: true
+    require_explicit_acceptance: true
+    reject_point_in_time_decision: true
+  governance:
+    enabled: true
+    retention_days: 365
+    require_final_audit: true
+    require_exact_replay: true
+  execution:
+    mode: paper
+    live_enabled: false
+    require_explicit_user_authorization: true
+    kill_switch_enforced: true
+  expansion:
+    enabled: true
+    underlyings: [NIFTY, BANKNIFTY]
+    stock_options_enabled: false
+    stocks_enabled: false
+    spreads_enabled: false
+    multi_leg_strategies_enabled: false

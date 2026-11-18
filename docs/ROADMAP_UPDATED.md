@@ -28,3 +28,8 @@ Remaining:
 - Stocks.
 - Directional defined-risk debit/credit spreads.
 - Multi-leg strategy library.
+
+- `docs\PLATFORM_DISCUSSION_DECISION_RECORD.md` - detailed, source-grounded record of
+  our architecture and implementation discussion, including the legacy loop,
+  Medallion path, P0–P5 status, configuration design, analytics/research overlap,
+  dashboard scope, safety boundaries, and operational holds.

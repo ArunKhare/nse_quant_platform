@@ -128,3 +128,7 @@ A new strategy must never bypass these controls.
   decision-run, Gold publication, admission, lifecycle recovery, operational
   acceptance, controlled execution gateway, and multi-underlying expansion
   addendum.
+- `docs\PLATFORM_DISCUSSION_DECISION_RECORD.md` - detailed, source-grounded record of
+  our architecture and implementation discussion, including the legacy loop,
+  Medallion path, P0–P5 status, configuration design, analytics/research overlap,
+  dashboard scope, safety boundaries, and operational holds.
