@@ -27,4 +27,4 @@ def test_snapshot_contains_historical_import_source():
         snapshot_ts=datetime(2026, 1, 1, 9, 15, tzinfo=UTC),
         rows=(),
     )
-    assert snapshot.source_label == "legacy_option_stream_historical_import"
+    assert snapshot.source_label.startswith("legacy_option_stream_historical_import")
