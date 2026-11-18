@@ -86,7 +86,14 @@ adoption, or execution.
 - Native authoritative evidence final-audit integration.
 - Native authoritative evidence chain end-to-end validation.
 - Native authoritative evidence platform acceptance verification.
-
+- Native authoritative evidence release readiness verification.
+- Native authoritative evidence production cutover readiness.
+- Native authoritative evidence operational cutover authorization.
+- Native authoritative evidence production cutover execution authorization.
+- Native authoritative evidence production cutover execution readiness.
+- Native authoritative evidence production cutover execution completion.
+- Native P1 evidence-chain operational hardening.
+- Native P1 evidence-chain operational hardening complete.
 `authoritative_identity_and_time` remains explicitly unmapped and is never
 auto-coverable. `POINT_IN_TIME_DECISION` remains rejected before recording,
 replay, publication, admission, or execution.
