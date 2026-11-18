@@ -236,7 +236,8 @@ def build_option_chain_features(
     ).fetchall()
     built = 0
     ledger = AuditLedger(target)
-    for revision in revisions:
+    print(f"Gold build started: silver_revisions={len(revisions)}", flush=True)
+    for revision_index, revision in enumerate(revisions, start=1):
         (
             revision_id,
             snapshot_id,
@@ -346,4 +347,13 @@ def build_option_chain_features(
                 target.execute("ROLLBACK")
                 raise
         built += 1
+        if revision_index % 250 == 0 or revision_index == len(revisions):
+            print(
+                f"Gold build progress: processed={revision_index} built={built}",
+                flush=True,
+            )
+    print(
+        f"Gold build complete: processed={len(revisions)} built={built}",
+        flush=True,
+    )
     return {"built": built, "total_silver_revisions": len(revisions), "feature_set": VERSION}

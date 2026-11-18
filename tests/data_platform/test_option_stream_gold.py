@@ -54,7 +54,7 @@ def _insert_revision(silver, revision_id):
              underlying,expiry,strike,option_type,tradingsymbol,instrument_token,lot_size,
              spot,ltp,bid,ask,volume,oi,iv,delta,gamma,vega,theta,quote_status,payload_json,
              quality_status,quality_reason,recorded_at)
-            VALUES (?,?,?,?,?,?,?,?,?,NULL,?,?,NULL,NULL,NULL,100.0,1.0,1.0,1.0,0,?,?,NULL,NULL,NULL,NULL, \
+            VALUES (?,?,?,?,?,?,?,?,?,NULL,?,?,NULL,NULL,NULL,100.0,1.0,1.0,1.0,0,?,?,NULL,NULL,NULL,NULL,\
             'missing','{}','VALID',NULL,now())
             """,
             [revision_id, ordinal, "s", "c", "e", "f", "l", "2026-01-01", "NIFTY", strike, kind, oi, iv],

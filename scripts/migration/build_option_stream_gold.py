@@ -45,7 +45,10 @@ def main() -> int:
     if not args.silver_db.is_file():
         parser.error("Silver database does not exist")
     if not args.gold_db.is_file() and not args.initialize:
-        parser.error("--initialize required for a new Gold database")
+        parser.error(
+            "--initialize required for a new Gold database; "
+            "run the plan command with --initialize first, then rerun with --execute --initialize"
+        )
     silver = duckdb.connect(str(args.silver_db), read_only=True)
     target = duckdb.connect(str(args.gold_db))
     try:
