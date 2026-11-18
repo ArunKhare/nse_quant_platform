@@ -94,6 +94,11 @@ adoption, or execution.
 - Native authoritative evidence production cutover execution completion.
 - Native P1 evidence-chain operational hardening.
 - Native P1 evidence-chain operational hardening complete.
+- Native P1 Gold/admission chain complete.
+- Native P2 lifecycle/recovery complete.
+
+
+
 `authoritative_identity_and_time` remains explicitly unmapped and is never
 auto-coverable. `POINT_IN_TIME_DECISION` remains rejected before recording,
 replay, publication, admission, or execution.
