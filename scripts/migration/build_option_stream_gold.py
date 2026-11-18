@@ -11,6 +11,7 @@ import duckdb
 from nse_quant.data_platform.option_stream_gold import (
     build_option_chain_features,
     initialize_option_chain_gold,
+    register_option_chain_gold_contract,
 )
 
 
@@ -23,8 +24,21 @@ def main() -> int:
     parser.add_argument("--start-date", default=None)
     parser.add_argument("--end-date", default=None)
     parser.add_argument("--initialize", action="store_true")
+    parser.add_argument("--register-contract", action="store_true")
     parser.add_argument("--execute", action="store_true")
     args = parser.parse_args()
+    if args.register_contract and not args.execute:
+        print(
+            json.dumps(
+                {
+                    "status": "PLANNED",
+                    "gold_db": str(args.gold_db),
+                    "register_contract": True,
+                },
+                sort_keys=True,
+            )
+        )
+        return 0
     if not args.execute:
         print(
             json.dumps(
@@ -40,7 +54,7 @@ def main() -> int:
             )
         )
         return 0
-    if not args.actor.strip() or not args.code_revision.strip():
+    if not args.register_contract and (not args.actor.strip() or not args.code_revision.strip()):
         parser.error("--actor and --code-revision are required with --execute")
     if not args.silver_db.is_file():
         parser.error("Silver database does not exist")
@@ -54,6 +68,10 @@ def main() -> int:
     try:
         if args.initialize:
             initialize_option_chain_gold(target)
+        if args.register_contract:
+            receipt = register_option_chain_gold_contract(target)
+            print(json.dumps({"status": "COMMITTED", **receipt}, sort_keys=True))
+            return 0
         receipt = build_option_chain_features(
             silver,
             target,

@@ -16,6 +16,7 @@ from typing import Any
 import duckdb
 
 from nse_quant.data_platform.audit import AuditLedger
+from nse_quant.data_platform.contracts import DatasetContract, Layer, WritePolicy
 
 VERSION = "option_chain_features@1"
 COMMAND = "build.option_chain_features@1"
@@ -56,6 +57,29 @@ REQUIRED_REVISION_COLUMNS = {
     "quarantined_count",
     "recorded_at",
 }
+
+
+GOLD_CONTRACT = DatasetContract(
+    "gold.option_chain_features",
+    "1",
+    Layer.GOLD,
+    WritePolicy.VERSIONED_BUILDS,
+    ("build_id",),
+    (
+        "build_id",
+        "event_ts",
+        "published_at",
+        "feature_version",
+        "silver_revision_id",
+        "silver_context_sha256",
+        "bronze_snapshot_id",
+        "bronze_capture_event_id",
+        "bronze_envelope_hash",
+        "bronze_recording_fingerprint",
+        "bronze_source_label",
+    ),
+    "option_chain_features",
+)
 
 
 def _json_default(value: object) -> str:
@@ -357,3 +381,15 @@ def build_option_chain_features(
         flush=True,
     )
     return {"built": built, "total_silver_revisions": len(revisions), "feature_set": VERSION}
+
+
+def register_option_chain_gold_contract(target: duckdb.DuckDBPyConnection) -> dict[str, Any]:
+    """Register the missing Gold dataset contract without rebuilding feature data."""
+    AuditLedger(target).initialize()
+    registered = AuditLedger(target).register_contract(GOLD_CONTRACT)
+    return {
+        "contract": GOLD_CONTRACT.name,
+        "contract_version": GOLD_CONTRACT.version,
+        "registered": registered,
+        "feature_set": VERSION,
+    }
