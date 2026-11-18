@@ -96,7 +96,7 @@ adoption, or execution.
 - Native P1 evidence-chain operational hardening complete.
 - Native P1 Gold/admission chain complete.
 - Native P2 lifecycle/recovery complete.
-
+- Native P3 operational acceptance complete.
 
 
 `authoritative_identity_and_time` remains explicitly unmapped and is never
