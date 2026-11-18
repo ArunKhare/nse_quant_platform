@@ -31,6 +31,21 @@ Recent native-platform increments also include:
 - Operational acceptance harness.
 - Controlled execution gateway with paper-only default behavior.
 - Multi-underlying expansion validation for NIFTY and BANKNIFTY.
+- Native authority-evidence completeness-report audit-trail policy and replay.
+- Native authority-evidence completeness-report audit-trail final audit and replay.
+- Native authority-evidence completeness-report audit-trail enforcement and replay.
+- Native authority-evidence completeness-report audit-trail persistence and replay.
+- Native authority-evidence completeness-report audit-trail retention and expiry governance.
+- Native authority-evidence completeness-report audit-trail archival and closure governance.
+- Native authority-evidence completeness-report audit-trail query and export governance.
+- Native authority-evidence completeness-report audit-trail import, round-trip, acceptance, and reconciliation governance.
+- Native authority-evidence completeness-report audit-trail end-to-end lifecycle acceptance.
+
+Authority-evidence audit-trail import, round-trip, acceptance, and
+reconciliation governance imports exported audit trails exactly, performs
+non-destructive round-trip replay, and governs acceptance and reconciliation.
+It preserves the complete fingerprint chain and lifecycle without healing,
+deletion, eligibility grants, or execution authority.
 
 These increments remain observational. They do not close any native status gate,
 grant decision eligibility, authorize live trading, or authorize healing,

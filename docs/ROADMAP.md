@@ -52,12 +52,22 @@ Completed:
 - Stock-option execution quality (research-only evaluator).
 - Stock-option paper strategy launch readiness (research-only evaluator).
 - Cash-stock swing strategy promoted to `src/nse_quant/strategy/cash_stock_swing.py` (proposal-producing, paper-mode ready).
+- Native authority-evidence completeness-report audit-trail policy and replay.
+- Native authority-evidence completeness-report audit-trail final audit and replay.
+- Native authority-evidence completeness-report audit-trail enforcement and replay.
+- Native authority-evidence completeness-report audit-trail persistence and replay.
+- Native authority-evidence completeness-report audit-trail retention and expiry governance.
+- Native authority-evidence completeness-report audit-trail archival and closure governance.
+- Native authority-evidence completeness-report audit-trail query and export governance.
+- Native authority-evidence completeness-report audit-trail import, round-trip, acceptance, and reconciliation governance.
+- Native authority-evidence completeness-report audit-trail end-to-end lifecycle acceptance.
+- Native authoritative availability and economic-validity evidence.
 
 Remaining:
 
-- Backtests with vectorbt.
-- Walk-forward experiment validation.
-- Multi-complete-trading-day reliability evidence.
+- Retention and expiry governance for persisted audit trails.
+- Independent governance/namespace authority and real lifecycle evidence.
+- Complete required native strategy/analytics inputs and operational acceptance.
 
 ## Milestone 3 — Controlled execution
 

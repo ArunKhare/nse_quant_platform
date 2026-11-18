@@ -68,6 +68,24 @@ adoption, or execution.
 - Operational acceptance harness.
 - Controlled execution gateway with paper-only default behavior.
 - Multi-underlying expansion validation for NIFTY and BANKNIFTY.
+- Native authority-evidence completeness-report audit-trail policy and replay.
+- Native authority-evidence completeness-report audit-trail final audit and replay.
+- Native authority-evidence completeness-report audit-trail enforcement and replay.
+- Native authority-evidence completeness-report audit-trail persistence and replay.
+- Native authority-evidence completeness-report audit-trail retention and expiry governance.
+- Native authority-evidence completeness-report audit-trail archival and closure governance.
+- Native authority-evidence completeness-report audit-trail query and export governance.
+- Native authority-evidence completeness-report audit-trail import, round-trip, acceptance, and reconciliation governance.
+- Native authoritative identity, derivative binding, and authorized revocation evidence.
+- Native authoritative availability and economic-validity evidence.
+- Native authoritative evidence acceptance and reconciliation.
+- Native authoritative evidence decision-loop linkage.
+- Native authoritative evidence real accepted-authority integration.
+- Native authoritative evidence completeness-report integration.
+- Native authoritative evidence completeness-report audit-trail integration.
+- Native authoritative evidence final-audit integration.
+- Native authoritative evidence chain end-to-end validation.
+- Native authoritative evidence platform acceptance verification.
 
 `authoritative_identity_and_time` remains explicitly unmapped and is never
 auto-coverable. `POINT_IN_TIME_DECISION` remains rejected before recording,
