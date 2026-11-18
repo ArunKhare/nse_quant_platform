@@ -1,78 +1,94 @@
-"""Black-Scholes analytics."""
+"""Black-Scholes analytics using canonical calculation primitives."""
 
 from __future__ import annotations
 
-import math
 from datetime import date, datetime, time
 
-from scipy.optimize import brentq
-from scipy.stats import norm
-
-from ..core.constants import IV_SOLVER_HIGH, IV_SOLVER_LOW
+from nse_quant.core.calculations import (
+    black_scholes_price_and_greeks,
+    time_to_expiry_years,
+)
+from nse_quant.core.calculations import (
+    implied_volatility as canonical_implied_volatility,
+)
 
 
 def bs_price_greeks(
-    spot: float, strike: float, ttm: float, rate: float, iv: float, option_type: str
+    spot: float,
+    strike: float,
+    ttm: float,
+    rate: float,
+    iv: float,
+    option_type: str,
 ):
-    if min(spot, strike, ttm, iv) <= 0:
-        raise ValueError("Invalid BS inputs")
-    st = math.sqrt(ttm)
-    d1 = (math.log(spot / strike) + (rate + 0.5 * iv * iv) * ttm) / (iv * st)
-    d2 = d1 - iv * st
-    disc = math.exp(-rate * ttm)
-    pdf = norm.pdf(d1)
-    if option_type == "CE":
-        price = spot * norm.cdf(d1) - strike * disc * norm.cdf(d2)
-        delta = norm.cdf(d1)
-        theta = (-spot * pdf * iv / (2 * st) - rate * strike * disc * norm.cdf(d2)) / 365.25
-    else:
-        price = strike * disc * norm.cdf(-d2) - spot * norm.cdf(-d1)
-        delta = norm.cdf(d1) - 1
-        theta = (-spot * pdf * iv / (2 * st) + rate * strike * disc * norm.cdf(-d2)) / 365.25
-    return price, delta, pdf / (spot * iv * st), spot * st * pdf / 100, theta
+    """Compatibility wrapper around the canonical Black-Scholes primitive."""
+    return black_scholes_price_and_greeks(
+        spot=spot,
+        strike=strike,
+        time_to_expiry_years=ttm,
+        risk_free_rate=rate,
+        implied_volatility=iv,
+        option_type=option_type,
+    )
 
 
 def implied_volatility(
-    price: float, spot: float, strike: float, ttm: float, rate: float, option_type: str
+    price: float,
+    spot: float,
+    strike: float,
+    ttm: float,
+    rate: float,
+    option_type: str,
 ) -> float | None:
-    if min(price, spot, strike, ttm) <= 0:
-        return None
-    disc = math.exp(-rate * ttm)
-    lower = max(0, spot - strike * disc) if option_type == "CE" else max(0, strike * disc - spot)
-    upper = spot if option_type == "CE" else strike * disc
-    if not lower < price < upper:
-        return None
-    try:
-        return float(
-            brentq(
-                lambda v: bs_price_greeks(spot, strike, ttm, rate, v, option_type)[0] - price,
-                IV_SOLVER_LOW,
-                IV_SOLVER_HIGH,
-                xtol=1e-10,
-            )
-        )
-    except (ValueError, OverflowError, ZeroDivisionError):
-        return None
-
-
-def enrich_quote(quote, spot: float, expiry: date | datetime, now: datetime, rate: float):
-    expiry_datetime = (
-        expiry
-        if isinstance(expiry, datetime)
-        else datetime.combine(expiry, time.max, tzinfo=now.tzinfo)
+    """Compatibility wrapper around the canonical implied-volatility primitive."""
+    return canonical_implied_volatility(
+        option_price=price,
+        spot=spot,
+        strike=strike,
+        time_to_expiry_years=ttm,
+        risk_free_rate=rate,
+        option_type=option_type,
     )
-    ttm = max((expiry_datetime - now).total_seconds() / (365.25 * 86400), 0)
+
+
+def enrich_quote(
+    quote,
+    spot: float,
+    expiry: date | datetime,
+    now: datetime,
+    rate: float,
+):
+    expiry_datetime = expiry if isinstance(expiry, datetime) else datetime.combine(expiry, time.max, tzinfo=now.tzinfo)
+
+    ttm = time_to_expiry_years(
+        as_of=now,
+        expiry=expiry_datetime,
+    )
+
     price = quote.mid or quote.ltp
+
     iv = (
         implied_volatility(
-            price, spot, quote.instrument.strike, ttm, rate, quote.instrument.option_type.value
+            price=price,
+            spot=spot,
+            strike=quote.instrument.strike,
+            ttm=ttm,
+            rate=rate,
+            option_type=quote.instrument.option_type.value,
         )
         if price
         else None
     )
+
     if iv:
         _, quote.delta, quote.gamma, quote.vega, quote.theta = bs_price_greeks(
-            spot, quote.instrument.strike, ttm, rate, iv, quote.instrument.option_type.value
+            spot=spot,
+            strike=quote.instrument.strike,
+            ttm=ttm,
+            rate=rate,
+            iv=iv,
+            option_type=quote.instrument.option_type.value,
         )
+
     quote.iv = iv
     return quote

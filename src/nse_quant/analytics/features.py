@@ -1,18 +1,37 @@
-"""Feature calculations using centralized settings."""
+"""Feature calculations using centralized settings and canonical primitives."""
 
 from __future__ import annotations
 
-import math
 from collections.abc import Iterable
 from datetime import datetime
 
 import numpy as np
 import pandas as pd
 
-from ..core.constants import TRADING_DAYS_PER_YEAR
-from ..core.models import ChainSnapshot, IVAnalytics, MarketFeatures, MarketRegime, OptionType
-from ..core.settings import settings
-from .option_analytics import enrich_quote
+from nse_quant.analytics.option_analytics import enrich_quote
+from nse_quant.core.calculations import (
+    atm_iv as canonical_atm_iv,
+)
+from nse_quant.core.calculations import (
+    classify_market_regime,
+)
+from nse_quant.core.calculations import (
+    iv_percentile as canonical_iv_percentile,
+)
+from nse_quant.core.calculations import (
+    iv_rank as canonical_iv_rank,
+)
+from nse_quant.core.calculations import (
+    realized_volatility as canonical_realized_volatility,
+)
+from nse_quant.core.models import (
+    ChainSnapshot,
+    IVAnalytics,
+    MarketFeatures,
+    MarketRegime,
+    OptionType,
+)
+from nse_quant.core.settings import settings
 
 FEATURE_HISTORY_REQUIREMENTS: dict[str, int] = {
     "realized_vol": 21,
@@ -28,41 +47,52 @@ def required_spot_history_closes() -> int:
     return max(FEATURE_HISTORY_REQUIREMENTS.values())
 
 
-def realized_volatility(returns: Iterable[float], window: int | None = None) -> float | None:
-    window = window or settings.analytics.rv_window
-    s = pd.Series(list(returns), dtype=float).dropna()
-    if len(s) < window + 1:
-        return None
-    return float(
-        s.tail(window + 1).pct_change().dropna().std(ddof=1) * math.sqrt(TRADING_DAYS_PER_YEAR)
+def realized_volatility(
+    returns: Iterable[float],
+    window: int | None = None,
+) -> float | None:
+    """Compatibility wrapper; settings supply the default window."""
+    return canonical_realized_volatility(
+        closes=returns,
+        window=window or settings.analytics.rv_window,
     )
 
 
-def iv_rank(current: float, history: Iterable[float]) -> float | None:
-    """Return IV rank in the inclusive range 0-100, or None if unavailable."""
-    if not np.isfinite(current) or current <= 0:
-        return None
-
-    values = np.asarray(list(history), dtype=float)
-    values = values[np.isfinite(values) & (values > 0)]
-
-    if values.size == 0:
-        return None
-
-    lo = float(values.min())
-    hi = float(values.max())
-
-    if hi <= lo:
-        return 50.0
-
-    raw_rank = ((current - lo) / (hi - lo)) * 100.0
-    return float(max(0.0, min(100.0, raw_rank)))
+def iv_rank(
+    current: float,
+    history: Iterable[float],
+) -> float | None:
+    """Compatibility wrapper around the canonical IV-rank primitive."""
+    return canonical_iv_rank(
+        current_iv=current,
+        history=history,
+    )
 
 
-def iv_percentile(current: float, history: Iterable[float]) -> float | None:
-    v = np.asarray(list(history), float)
-    v = v[np.isfinite(v) & (v > 0)]
-    return float((v < current).mean() * 100) if v.size else None
+def iv_percentile(
+    current: float,
+    history: Iterable[float],
+) -> float | None:
+    """Compatibility wrapper around the canonical IV-percentile primitive."""
+    return canonical_iv_percentile(
+        current_iv=current,
+        history=history,
+    )
+
+
+def classify_regime(
+    spot: float,
+    fast: float | None,
+    slow: float | None,
+    rv: float | None,
+) -> MarketRegime:
+    """Compatibility wrapper around the canonical market-regime primitive."""
+    return classify_market_regime(
+        spot=spot,
+        fast_sma=fast,
+        slow_sma=slow,
+        realized_volatility=rv,
+    )
 
 
 def positioning(snapshot: ChainSnapshot):
@@ -96,24 +126,6 @@ def liquidity_score(snapshot: ChainSnapshot) -> float:
     return float(np.mean(scores)) if scores else 0
 
 
-def classify_regime(
-    spot: float,
-    fast: float | None,
-    slow: float | None,
-    rv: float | None,
-) -> MarketRegime:
-    if rv is not None and rv > 0.35:
-        return MarketRegime.VOLATILE
-
-    if fast is None or slow is None:
-        return MarketRegime.UNKNOWN
-    if fast > slow * 1.002:
-        return MarketRegime.TREND_UP
-    if fast < slow * 0.998:
-        return MarketRegime.TREND_DOWN
-    return MarketRegime.RANGE
-
-
 def build_features(
     snapshot: ChainSnapshot,
     iv_history: Iterable[float] = (),
@@ -125,8 +137,11 @@ def build_features(
     enriched = [enrich_quote(q, snapshot.spot, snapshot.expiry, now, rate) for q in snapshot.quotes]
     atm = snapshot.atm_strike()
     atm_q = [q for q in enriched if q.instrument.strike == atm]
-    ivs = [q.iv for q in atm_q if q.iv is not None]
-    atm_iv = float(np.mean(ivs)) if ivs else None
+    iv_by_strike = {q.instrument.strike: q.iv for q in atm_q}
+    atm_iv = canonical_atm_iv(
+        iv_by_strike=iv_by_strike,
+        spot=snapshot.spot,
+    )
     call_oi, put_oi, pcr, max_pain = positioning(snapshot)
     rv = realized_volatility(close_history)
     if rv is not None and rv <= 0:
@@ -188,7 +203,7 @@ def build_iv_analytics(
     lo = float(values.min())
     hi = float(values.max())
 
-    rank = 50.0 if hi <= lo else max(0.0, min(100.0, (current_iv - lo) / (hi - lo) * 100.0))
+    rank = canonical_iv_rank(current_iv=current_iv, history=values)
 
     return IVAnalytics(
         current_iv=current_iv,
@@ -196,5 +211,5 @@ def build_iv_analytics(
         iv_max=hi,
         valid_history_count=int(values.size),
         iv_rank=rank,
-        iv_percentile=iv_percentile(current_iv, values),
+        iv_percentile=canonical_iv_percentile(current_iv=current_iv, history=values),
     )

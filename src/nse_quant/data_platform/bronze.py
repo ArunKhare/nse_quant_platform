@@ -10,6 +10,14 @@ from threading import Lock
 
 import duckdb
 
+from nse_quant.core.settings import get_settings
+
+
+def configured_bronze_max_payload_bytes() -> int:
+    """Return the configured Bronze payload limit; safety floor remains enforced."""
+    configured = get_settings().medallion.bronze.max_payload_bytes
+    return max(configured, 1)
+
 
 def sha256(payload: bytes) -> str:
     return hashlib.sha256(payload).hexdigest()
@@ -133,9 +141,7 @@ class BronzeEventStore:
         if forbidden:
             raise ValueError("Use a dedicated Bronze DB, not the legacy source database")
         if require_initialized:
-            versions = self.conn.execute(
-                f"SELECT version FROM {self.object_name('schema_versions')}"
-            ).fetchall()
+            versions = self.conn.execute(f"SELECT version FROM {self.object_name('schema_versions')}").fetchall()
             if versions != [(1,)]:
                 raise ValueError("Unsupported Bronze schema version")
 
@@ -159,17 +165,12 @@ class BronzeEventStore:
             try:
                 self.conn.execute(f"CREATE SCHEMA IF NOT EXISTS {schema}")
                 self.conn.execute(
-                    f"CREATE TABLE IF NOT EXISTS {names['schema_versions']} "
-                    "(version INTEGER PRIMARY KEY)"
+                    f"CREATE TABLE IF NOT EXISTS {names['schema_versions']} (version INTEGER PRIMARY KEY)"
                 )
-                versions = self.conn.execute(
-                    f"SELECT version FROM {names['schema_versions']}"
-                ).fetchall()
+                versions = self.conn.execute(f"SELECT version FROM {names['schema_versions']}").fetchall()
                 if versions and versions != [(1,)]:
                     raise ValueError("Unsupported Bronze schema version")
-                self.conn.execute(
-                    f"CREATE SEQUENCE IF NOT EXISTS {names['ingest_sequence']} START 1"
-                )
+                self.conn.execute(f"CREATE SEQUENCE IF NOT EXISTS {names['ingest_sequence']} START 1")
                 self.conn.execute(
                     f"""
                     CREATE TABLE IF NOT EXISTS {names["event_variants"]} (
@@ -230,8 +231,11 @@ class BronzeEventStore:
         input_artifact: bytes,
         job_id: str,
         max_events: int = 10_000,
-        max_payload_bytes: int = 1_048_576,
+        max_payload_bytes: int | None = None,
     ) -> BronzeReceipt:
+        if max_payload_bytes is None:
+            max_payload_bytes = configured_bronze_max_payload_bytes()
+
         if not isinstance(events, tuple) or not events or len(events) > max_events:
             raise ValueError("Use a nonempty bounded immutable event batch")
         if not batch_key.strip() or not job_id.strip():
@@ -257,8 +261,7 @@ class BronzeEventStore:
             self.conn.execute("BEGIN TRANSACTION")
             try:
                 previous = self.conn.execute(
-                    f"SELECT batch_fingerprint, last_sequence FROM {batches_table} "
-                    "WHERE batch_key = ?",
+                    f"SELECT batch_fingerprint, last_sequence FROM {batches_table} WHERE batch_key = ?",
                     [batch_key],
                 ).fetchone()
                 if previous is not None:
@@ -322,9 +325,7 @@ class BronzeEventStore:
                         ],
                     )
                     inserted += 1
-                sequence = self.conn.execute(
-                    f"SELECT max(ingest_sequence) FROM {variants_table}"
-                ).fetchone()
+                sequence = self.conn.execute(f"SELECT max(ingest_sequence) FROM {variants_table}").fetchone()
                 last = sequence[0] if sequence is not None else None
                 self.conn.execute(
                     f"INSERT INTO {batches_table} VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",

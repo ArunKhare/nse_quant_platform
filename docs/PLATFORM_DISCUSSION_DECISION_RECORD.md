@@ -336,78 +336,6 @@ medallion:
 
 This proposal is documentation/configuration design, not yet a wired runtime integration.
 
-## 8. Analytics and research overlap
-
-### 8.1 Three layers
-
-| Layer | Folder | Purpose |
-|---|---|---|
-| Live decision loop | `src/nse_quant/analytics` | Live IV, RV, regime, features, greeks, decision analytics |
-| Research/backtesting | `src/nse_quant/research` | IV surface, IV regimes, backtests, research reports |
-| Medallion/native governance | `src/nse_quant/data_platform` | Evidence, Bronze/Silver/Gold, publication, admission, governance, replay |
-
-### 8.2 Overlap
-
-There is real overlap between `analytics` and `research` in:
-
-- IV calculations.
-- Black-Scholes and option analytics.
-- Regime classification.
-- Feature-like calculations.
-- Time-to-expiry conventions.
-- Risk-free-rate assumptions.
-
-For example:
-
-- `analytics/option_analytics.py` uses SciPy-based Black-Scholes and IV solving.
-- `research/iv_surface.py` has its own Black-Scholes delta helper and hard-coded risk-free rate.
-- `analytics/features.py` computes live IV rank and regime.
-- `research/iv_regimes.py` classifies daily IV regimes from research data.
-
-### 8.3 Risk
-
-Parallel implementations can drift:
-
-- Different IV definitions.
-- Different regime definitions.
-- Different Black-Scholes implementations.
-- Different feature windows.
-- Different time-to-expiry conventions.
-- Different risk-free-rate assumptions.
-- Divergent results between live loop, research, and Medallion evidence.
-
-### 8.4 Recommended target
-
-Keep three responsibilities, but remove calculation duplication:
-
-```text
-core
-  -> shared calculation primitives
-
-analytics
-  -> live decision-loop features
-
-research
-  -> research and backtesting
-
-data_platform
-  -> Medallion evidence, governance, replay
-```
-
-Create one canonical calculation-primitives module for:
-
-- Black-Scholes price.
-- Black-Scholes greeks.
-- Implied volatility.
-- Time-to-expiry.
-- Risk-free rate.
-- IV rank.
-- IV percentile.
-- ATM IV.
-- Realized volatility.
-- Regime classification.
-
-Then `analytics`, `research`, and `data_platform` should consume the same primitives rather than maintaining separate implementations.
 
 ## 9. Dashboard scope
 
@@ -551,3 +479,79 @@ The recommended next architecture step is:
 5. Add a read-only native-governance dashboard section.
 
 This preserves safety, removes drift, and prepares the platform for operational acceptance without authorizing production cutover.
+--------------------------------------------------------------------------------------------------------------------------------
+
+*_COMPLETED_ Sections*
+
+**## 8. Analytics and research overlap
+
+### 8.1 Three layers
+
+| Layer | Folder | Purpose |
+|---|---|---|
+| Live decision loop | `src/nse_quant/analytics` | Live IV, RV, regime, features, greeks, decision analytics |
+| Research/backtesting | `src/nse_quant/research` | IV surface, IV regimes, backtests, research reports |
+| Medallion/native governance | `src/nse_quant/data_platform` | Evidence, Bronze/Silver/Gold, publication, admission, governance, replay |
+
+### 8.2 Overlap
+
+There is real overlap between `analytics` and `research` in:
+
+- IV calculations.
+- Black-Scholes and option analytics.
+- Regime classification.
+- Feature-like calculations.
+- Time-to-expiry conventions.
+- Risk-free-rate assumptions.
+
+For example:
+
+- `analytics/option_analytics.py` uses SciPy-based Black-Scholes and IV solving.
+- `research/iv_surface.py` has its own Black-Scholes delta helper and hard-coded risk-free rate.
+- `analytics/features.py` computes live IV rank and regime.
+- `research/iv_regimes.py` classifies daily IV regimes from research data.
+
+### 8.3 Risk
+
+Parallel implementations can drift:
+
+- Different IV definitions.
+- Different regime definitions.
+- Different Black-Scholes implementations.
+- Different feature windows.
+- Different time-to-expiry conventions.
+- Different risk-free-rate assumptions.
+- Divergent results between live loop, research, and Medallion evidence.
+
+### 8.4 Recommended target
+
+Keep three responsibilities, but remove calculation duplication:
+
+```text
+core
+  -> shared calculation primitives
+
+analytics
+  -> live decision-loop features
+
+research
+  -> research and backtesting
+
+data_platform
+  -> Medallion evidence, governance, replay
+```
+
+Create one canonical calculation-primitives module for:
+
+- Black-Scholes price.
+- Black-Scholes greeks.
+- Implied volatility.
+- Time-to-expiry.
+- Risk-free rate.
+- IV rank.
+- IV percentile.
+- ATM IV.
+- Realized volatility.
+- Regime classification.
+
+Then `analytics`, `research`, and `data_platform` should consume the same primitives rather than maintaining separate implementations.**

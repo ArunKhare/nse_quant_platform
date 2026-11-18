@@ -1,13 +1,16 @@
-"""IV surface and term-structure research utilities."""
+"""IV surface and term-structure research utilities using canonical primitives."""
 
 from __future__ import annotations
 
 from itertools import pairwise
 from pathlib import Path
 
-import numpy as np
 import pandas as pd
-from scipy.stats import norm
+
+from nse_quant.core.calculations import (
+    black_scholes_price_and_greeks,
+    time_to_expiry_years,
+)
 
 REQUIRED_COLUMNS = {
     "ts",
@@ -32,7 +35,6 @@ def build_iv_surface_report(
         return pd.DataFrame()
 
     missing = REQUIRED_COLUMNS.difference(frame.columns)
-
     if missing:
         raise ValueError(f"Missing required columns: {sorted(missing)}")
 
@@ -42,10 +44,7 @@ def build_iv_surface_report(
     frame["trade_date"] = frame["ts"].dt.date
 
     frame = frame[
-        (frame["underlying"] == underlying)
-        & frame["iv"].notna()
-        & frame["delta"].notna()
-        & (frame["ltp"] > 0)
+        (frame["underlying"] == underlying) & frame["iv"].notna() & frame["delta"].notna() & (frame["ltp"] > 0)
     ]
 
     if frame.empty:
@@ -55,16 +54,13 @@ def build_iv_surface_report(
 
     for ts, snapshot in frame.groupby("ts"):
         expiries = sorted(snapshot["expiry"].unique())
-
         if len(expiries) < 2:
             continue
 
         for near_expiry, next_expiry in pairwise(expiries):
             near = snapshot[snapshot["expiry"] == near_expiry]
             next_expiry_frame = snapshot[snapshot["expiry"] == next_expiry]
-
             spot = float(near["spot"].iloc[0])
-
             near_atm = _atm_iv(near, spot)
             next_atm = _atm_iv(next_expiry_frame, spot)
 
@@ -79,7 +75,7 @@ def build_iv_surface_report(
                     "spot": spot,
                     "near_expiry": near_expiry,
                     "next_expiry": next_expiry,
-                    "tenor_pair": (f"{near_expiry}_to_{next_expiry}"),
+                    "tenor_pair": f"{near_expiry}_to_{next_expiry}",
                     "atm_iv_near": near_atm,
                     "atm_iv_next": next_atm,
                     "term_structure": next_atm - near_atm,
@@ -88,6 +84,7 @@ def build_iv_surface_report(
                     "butterfly_25d": _butterfly(near),
                 }
             )
+
     if not reports:
         return pd.DataFrame(
             columns=[
@@ -106,12 +103,11 @@ def build_iv_surface_report(
                 "butterfly_25d",
             ]
         )
+
     return pd.DataFrame(reports).sort_values("ts")
 
 
-def build_daily_iv_summary(
-    snapshot_report: pd.DataFrame,
-) -> pd.DataFrame:
+def build_daily_iv_summary(snapshot_report: pd.DataFrame) -> pd.DataFrame:
     """Aggregate snapshot-level IV metrics into daily medians."""
     if snapshot_report.empty:
         return pd.DataFrame()
@@ -129,91 +125,56 @@ def build_daily_iv_summary(
     )
 
 
-def _atm_iv(
-    snapshot: pd.DataFrame,
-    spot: float,
-) -> float | None:
+def _atm_iv(snapshot: pd.DataFrame, spot: float) -> float | None:
     valid = snapshot[snapshot["iv"].notna() & (snapshot["ltp"] > 0)]
-
     if valid.empty:
         return None
-
     atm_strike = valid.iloc[(valid["strike"] - spot).abs().argmin()]["strike"]
-
     atm_rows = valid[valid["strike"] == atm_strike]
-
     return float(atm_rows["iv"].mean())
 
 
-def _skew(
-    snapshot: pd.DataFrame,
-    spot: float,
-) -> float | None:
+def _skew(snapshot: pd.DataFrame, spot: float) -> float | None:
     puts = snapshot[snapshot["option_type"] == "PE"]
     calls = snapshot[snapshot["option_type"] == "CE"]
-
     if puts.empty or calls.empty:
         return None
-
     otm_puts = puts[puts["strike"] < spot]
     otm_calls = calls[calls["strike"] > spot]
-
     if otm_puts.empty or otm_calls.empty:
         return None
-
     put_iv = otm_puts.iloc[(otm_puts["strike"] - spot).abs().argmin()]["iv"]
-
     call_iv = otm_calls.iloc[(otm_calls["strike"] - spot).abs().argmin()]["iv"]
-
     if pd.isna(put_iv) or pd.isna(call_iv):
         return None
-
     return float(put_iv - call_iv)
 
 
-def _risk_reversal(
-    snapshot: pd.DataFrame,
-) -> float | None:
+def _risk_reversal(snapshot: pd.DataFrame) -> float | None:
     calls = snapshot[(snapshot["option_type"] == "CE") & snapshot["delta"].notna()]
-
     puts = snapshot[(snapshot["option_type"] == "PE") & snapshot["delta"].notna()]
-
     if calls.empty or puts.empty:
         return None
-
     calls = calls.copy()
     puts = puts.copy()
-
     calls["abs_delta"] = calls["delta"].abs()
     puts["abs_delta"] = puts["delta"].abs()
-
     call_25 = calls.iloc[(calls["abs_delta"] - 0.25).abs().argmin()]
-
     put_25 = puts.iloc[(puts["abs_delta"] - 0.25).abs().argmin()]
-
     if pd.isna(call_25["iv"]) or pd.isna(put_25["iv"]):
         return None
-
     return float(call_25["iv"] - put_25["iv"])
 
 
-def _butterfly(
-    snapshot: pd.DataFrame,
-) -> float | None:
+def _butterfly(snapshot: pd.DataFrame) -> float | None:
     calls = snapshot[(snapshot["option_type"] == "CE") & snapshot["delta"].notna()].copy()
-
     if calls.empty:
         return None
-
     calls["abs_delta"] = calls["delta"].abs()
-
     call_25 = calls.iloc[(calls["abs_delta"] - 0.25).abs().argmin()]
-
     atm = calls.iloc[(calls["abs_delta"] - 0.50).abs().argmin()]
-
     if pd.isna(call_25["iv"]) or pd.isna(atm["iv"]):
         return None
-
     return float(2.0 * atm["iv"] - call_25["iv"] - call_25["iv"])
 
 
@@ -226,13 +187,10 @@ def save_reports(
 ) -> tuple[Path, Path]:
     output_path = Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
-
     snapshot_path = output_path / f"iv_surface_snapshots_{underlying}.csv"
     daily_path = output_path / f"iv_surface_daily_{underlying}.csv"
-
     snapshot_report.to_csv(snapshot_path, index=False)
     daily_report.to_csv(daily_path, index=False)
-
     return snapshot_path, daily_path
 
 
@@ -240,9 +198,9 @@ def build_single_expiry_iv_report(
     frame: pd.DataFrame,
     *,
     underlying: str,
+    risk_free_rate: float,
 ) -> pd.DataFrame:
     """Build ATM IV, skew, risk reversal, and butterfly metrics."""
-
     if frame.empty:
         return pd.DataFrame()
 
@@ -257,9 +215,7 @@ def build_single_expiry_iv_report(
         "iv",
         "delta",
     }
-
     missing = required.difference(frame.columns)
-
     if missing:
         raise ValueError(f"Missing required columns: {sorted(missing)}")
 
@@ -267,46 +223,40 @@ def build_single_expiry_iv_report(
     frame["ts"] = pd.to_datetime(frame["ts"], utc=True)
     frame["expiry"] = pd.to_datetime(frame["expiry"]).dt.date
 
-    frame = frame[
-        (frame["underlying"] == underlying) & frame["iv"].notna() & (frame["ltp"] > 0)
-    ].copy()
+    frame = frame[(frame["underlying"] == underlying) & frame["iv"].notna() & (frame["ltp"] > 0)].copy()
 
-    frame["time_to_expiry"] = frame.apply(
-        lambda row: _time_to_expiry_years(
-            row["ts"],
-            row["expiry"],
-        ),
-        axis=1,
-    )
+    def calculate_row(row: pd.Series) -> pd.Series:
+        expiry_datetime = pd.Timestamp(row["expiry"]).tz_localize("Asia/Kolkata") + pd.Timedelta(hours=15, minutes=30)
+        observation_time = pd.Timestamp(row["ts"]).tz_convert("Asia/Kolkata")
 
-    frame["delta"] = frame.apply(
-        lambda row: (
-            row["delta"]
-            if pd.notna(row["delta"])
-            else black_scholes_delta(
-                spot=row["spot"],
-                strike=row["strike"],
-                iv=row["iv"],
-                time_to_expiry=row["time_to_expiry"],
-                option_type=row["option_type"],
+        time_to_expiry = time_to_expiry_years(
+            as_of=observation_time.to_pydatetime(),
+            expiry=expiry_datetime.to_pydatetime(),
+        )
+
+        delta = row["delta"]
+        if pd.isna(delta):
+            _, calculated_delta, _, _, _ = black_scholes_price_and_greeks(
+                spot=float(row["spot"]),
+                strike=float(row["strike"]),
+                time_to_expiry_years=time_to_expiry,
+                risk_free_rate=risk_free_rate,
+                implied_volatility=float(row["iv"]),
+                option_type=str(row["option_type"]),
             )
-        ),
-        axis=1,
-    )
+            delta = calculated_delta
 
+        return pd.Series({"time_to_expiry": time_to_expiry, "delta": delta})
+
+    calculated = frame.apply(calculate_row, axis=1)
+    frame["time_to_expiry"] = calculated["time_to_expiry"]
+    frame["delta"] = calculated["delta"]
     frame = frame[frame["delta"].notna()]
 
     reports: list[dict[str, object]] = []
-
     for ts, snapshot in frame.groupby("ts"):
         spot = float(snapshot["spot"].iloc[0])
         expiry = snapshot["expiry"].iloc[0]
-
-        atm_iv = _atm_iv(snapshot, spot)
-        skew = _skew(snapshot, spot)
-        risk_reversal = _risk_reversal(snapshot)
-        butterfly = _butterfly(snapshot)
-
         reports.append(
             {
                 "ts": ts,
@@ -314,59 +264,11 @@ def build_single_expiry_iv_report(
                 "underlying": underlying,
                 "expiry": expiry,
                 "spot": spot,
-                "atm_iv": atm_iv,
-                "put_call_skew": skew,
-                "risk_reversal_25d": risk_reversal,
-                "butterfly_25d": butterfly,
+                "atm_iv": _atm_iv(snapshot, spot),
+                "put_call_skew": _skew(snapshot, spot),
+                "risk_reversal_25d": _risk_reversal(snapshot),
+                "butterfly_25d": _butterfly(snapshot),
             }
         )
 
     return pd.DataFrame(reports).sort_values("ts")
-
-
-RISK_FREE_RATE = 0.065
-
-
-def _time_to_expiry_years(
-    ts: pd.Timestamp,
-    expiry: object,
-) -> float:
-    expiry_ts = pd.Timestamp(expiry)
-
-    expiry_time = expiry_ts + pd.Timedelta(hours=15, minutes=30)
-
-    expiry_time = expiry_time.tz_localize("Asia/Kolkata")
-
-    observation_time = pd.Timestamp(ts).tz_convert("Asia/Kolkata")
-
-    seconds = (expiry_time - observation_time).total_seconds()
-
-    return max(
-        seconds / (365.0 * 24.0 * 60.0 * 60.0),
-        1e-8,
-    )
-
-
-def black_scholes_delta(
-    *,
-    spot: float,
-    strike: float,
-    iv: float,
-    time_to_expiry: float,
-    option_type: str,
-    risk_free_rate: float = RISK_FREE_RATE,
-) -> float:
-    if spot <= 0 or strike <= 0 or iv <= 0:
-        return float("nan")
-
-    d1 = (np.log(spot / strike) + (risk_free_rate + 0.5 * iv * iv) * time_to_expiry) / (
-        iv * np.sqrt(time_to_expiry)
-    )
-
-    if option_type == "CE":
-        return float(norm.cdf(d1))
-
-    if option_type == "PE":
-        return float(norm.cdf(d1) - 1.0)
-
-    return float("nan")
