@@ -11,6 +11,7 @@ from nse_quant.research.backtest.vectorbt_adapter import (
     VectorbtAdapterSettings,
 )
 from nse_quant.research.backtest.vectorbt_backtest import (
+    BacktestTrade,
     VectorbtBacktestRequest,
     run_vectorbt_backtest,
     run_vectorbt_from_completed_trades,
@@ -58,7 +59,7 @@ def test_rejects_index_mismatch():
         strategy="iron_condor_monitor",
         underlying="NIFTY",
         prices=pd.Series([100.0, 101.0, 102.0], index=_index()),
-        entries=pd.Series([True, False, False], index=_index()[:-1]),
+        entries=pd.Series([True, False], index=_index()[:-1]),
         exits=pd.Series([False, False, True], index=_index()),
     )
 
@@ -96,13 +97,16 @@ def test_completed_trades_use_real_prices():
 
     result = run_vectorbt_from_completed_trades(
         trades=[
-            {
-                "entry_ts": entry,
-                "exit_ts": exit_time,
-                "size": 1.0,
-                "entry_price": 100.0,
-                "exit_price": 105.0,
-            }
+            BacktestTrade(
+                entry_ts=entry,
+                exit_ts=exit_time,
+                underlying="NIFTY",
+                strategy="iron_condor_monitor",
+                direction="short",
+                size=1.0,
+                entry_price=100.0,
+                exit_price=105.0,
+            )
         ],
         settings=VectorbtAdapterSettings(
             initial_capital=1_000_000.0,

@@ -42,7 +42,6 @@ class VectorbtBacktestRequest:
     entries: pd.Series
     exits: pd.Series
     settings: VectorbtAdapterSettings = VectorbtAdapterSettings()
-    direction: str = "long"
 
 
 def _validate_request(request: VectorbtBacktestRequest) -> None:
@@ -51,9 +50,6 @@ def _validate_request(request: VectorbtBacktestRequest) -> None:
 
     if request.underlying != "NIFTY":
         raise ValueError("UNSUPPORTED_BACKTEST_UNDERLYING")
-
-    if request.direction not in {"long", "short"}:
-        raise ValueError("UNSUPPORTED_BACKTEST_DIRECTION")
 
     if request.prices.empty or request.entries.empty or request.exits.empty:
         raise ValueError("BACKTEST_INPUT_EMPTY")
@@ -67,7 +63,7 @@ def _validate_request(request: VectorbtBacktestRequest) -> None:
     if request.prices.isna().any():
         raise ValueError("BACKTEST_PRICE_MISSING")
 
-    if not request.entries.dtype == bool or not request.exits.dtype == bool:
+    if request.entries.dtype != bool or request.exits.dtype != bool:
         raise ValueError("BACKTEST_SIGNAL_TYPE_INVALID")
 
 
@@ -76,7 +72,11 @@ def _metrics(portfolio: vbt.Portfolio) -> dict[str, Any]:
 
     return {
         "total_return": float(stats["Total Return [%]"]) / 100.0,
-        "max_drawdown": float(stats["Max Drawdown [%]"]) / 100.0,
+        "max_drawdown": (
+            float(stats["Max Drawdown [%]"]) / 100.0
+            if "Max Drawdown [%]" in stats and pd.notna(stats["Max Drawdown [%]"])
+            else None
+        ),
         "sharpe_ratio": (float(stats["Sharpe Ratio"]) if "Sharpe Ratio" in stats else None),
         "trade_count": int(stats["Total Trades"]) if "Total Trades" in stats else 0,
         "win_rate": (float(stats["Win Rate [%]"]) / 100.0 if "Win Rate [%]" in stats else None),
@@ -96,7 +96,6 @@ def run_vectorbt_backtest(
         init_cash=request.settings.initial_capital,
         fees=request.settings.fees,
         slippage=request.settings.slippage,
-        direction=request.direction,
     )
 
     equity = portfolio.value()
@@ -106,17 +105,10 @@ def run_vectorbt_backtest(
         "available": True,
         "strategy": request.strategy,
         "underlying": request.underlying,
-        "direction": request.direction,
         "initial_capital": request.settings.initial_capital,
         "fees": request.settings.fees,
         "slippage": request.settings.slippage,
-        "equity_curve": [
-            {
-                "ts": timestamp.isoformat(),
-                "equity": float(value),
-            }
-            for timestamp, value in equity.items()
-        ],
+        "equity_curve": [{"ts": timestamp.isoformat(), "equity": float(value)} for timestamp, value in equity.items()],
         **metrics,
         "decision_eligibility_asserted": False,
     }
@@ -127,11 +119,7 @@ def run_vectorbt_from_completed_trades(
     trades: list[BacktestTrade],
     settings: VectorbtAdapterSettings | None = None,
 ) -> dict[str, Any]:
-    """Replay completed historical trades through vectorbt.
-
-    This function uses supplied historical entry and exit prices. It does not
-    synthesize prices and does not authorize execution.
-    """
+    """Replay completed historical trades through vectorbt."""
     settings = settings or VectorbtAdapterSettings()
 
     if not trades:
@@ -178,13 +166,7 @@ def run_vectorbt_from_completed_trades(
     return {
         "available": True,
         "trade_count": len(trades),
-        "equity_curve": [
-            {
-                "ts": timestamp.isoformat(),
-                "equity": float(value),
-            }
-            for timestamp, value in equity.items()
-        ],
+        "equity_curve": [{"ts": timestamp.isoformat(), "equity": float(value)} for timestamp, value in equity.items()],
         **metrics,
         "decision_eligibility_asserted": False,
     }

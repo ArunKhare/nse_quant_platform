@@ -101,15 +101,15 @@ complete NSE trading days and retain auditable evidence for every stage.
 - Backtest CLI.
 - Backtest readiness checks.
 - Walk-forward reporting.
-
-### Remaining
-
-- ntegrate iron-condor trade output with vectorbt backtesting.
+- Integrate iron-condor trade output with vectorbt backtesting.
 - Add multi-leg vectorbt portfolio modeling.
 - Connect walk-forward experiments to vectorbt evaluation.
 - Add vectorbt CLI integration.
 - Add regime-level vectorbt reporting.
 - Add deterministic vectorbt run manifests.
+
+### Remaining
+
 - Independent governance/namespace authority and real lifecycle evidence.
 - Complete required native strategy/analytics inputs and operational acceptance.
 
