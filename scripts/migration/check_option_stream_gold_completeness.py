@@ -65,12 +65,13 @@ def check_gold(conn: duckdb.DuckDBPyConnection) -> int:
     audit_jobs = count(conn, f"SELECT COUNT(*) FROM {jobs}")
     job_events = count(conn, f"SELECT COUNT(*) FROM {events}")
 
-    contracts = count(
+    contracts = _qualify(conn, "medallion_audit", "dataset_contracts")
+    contract_count = count(
         conn,
         f"""
         SELECT COUNT(*) FROM {contracts}
         WHERE dataset_name = '{EXPECTED_CONTRACT}'
-          AND contract_version = '{EXPECTED_CONTRACT_VERSION}'
+        AND contract_version = '{EXPECTED_CONTRACT_VERSION}'
         """,
     )
 
@@ -155,8 +156,16 @@ def check_gold(conn: duckdb.DuckDBPyConnection) -> int:
         except (UnicodeDecodeError, json.JSONDecodeError):
             context_mismatches += 1
             continue
-        feature = document.get("feature") if isinstance(document, dict) else None
-        bronze = document.get("bronze_pins") if isinstance(document, dict) else None
+        feature = document.get("feature")
+        bronze = document.get("bronze_pins")
+        if not isinstance(feature, dict) or not isinstance(bronze, dict):
+            context_mismatches += 1
+            continue
+        if feature.get("version") != EXPECTED_FEATURE_SET:
+            lineage_mismatches += 1
+        if feature.get("decision_eligibility_asserted") is not False:
+            eligibility_mismatches += 1
+
         required_bronze = {
             "snapshot_id",
             "capture_event_id",
@@ -179,13 +188,13 @@ def check_gold(conn: duckdb.DuckDBPyConnection) -> int:
             eligibility_mismatches += 1
 
     checks = [
+        ("gold_dataset_contract", 1, contract_count),
         ("gold_feature_sets", feature_sets, feature_sets),
         ("gold_feature_observations", feature_sets, feature_observations),
         ("gold_feature_attempts", feature_sets, feature_attempts),
         ("gold_audit_jobs", feature_sets, audit_jobs),
         ("gold_job_events", feature_sets * 3, job_events),
         ("gold_completed_jobs", feature_sets, completed_jobs),
-        ("gold_dataset_contract", 1, contracts),
         ("missing_feature_observations", 0, missing_observations),
         ("missing_feature_attempts", 0, missing_attempts),
         ("duplicate_silver_revisions", 0, duplicate_silver_revisions),
