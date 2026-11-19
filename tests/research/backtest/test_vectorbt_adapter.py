@@ -78,3 +78,30 @@ def test_settings_defaults():
     assert settings.initial_capital == 1_000_000.0
     assert settings.fees == 0.0
     assert settings.slippage == 0.0
+
+
+def test_run_vectorbt_from_trades_uses_supplied_prices():
+    entry = _ts(0)
+    exit_time = _ts(5)
+
+    result = run_vectorbt_from_trades(
+        trades=[
+            {
+                "entry_ts": entry,
+                "exit_ts": exit_time,
+                "size": 1.0,
+                "entry_price": 100.0,
+                "exit_price": 105.0,
+            }
+        ],
+        settings=VectorbtAdapterSettings(
+            initial_capital=1_000_000.0,
+            fees=0.0,
+            slippage=0.0,
+        ),
+    )
+
+    assert result["available"] is True
+    assert result["trade_count"] == 1
+    assert result["total_return"] > 0.0
+    assert result["decision_eligibility_asserted"] is False

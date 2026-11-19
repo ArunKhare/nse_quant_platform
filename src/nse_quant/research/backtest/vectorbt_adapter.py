@@ -64,45 +64,43 @@ def run_vectorbt_from_trades(
     trades: list[dict[str, Any]],
     settings: VectorbtAdapterSettings | None = None,
 ) -> dict[str, Any]:
-    """Build a vectorbt Portfolio from a list of trade dicts (entry/exit ts, size, price).
+    """Replay completed historical trades through vectorbt.
 
-    Each trade dict must have: entry_ts, exit_ts, size (positive for long), entry_price, exit_price.
-    This is a research-only adapter: it does not place orders, authorize
-    execution, or assert decision eligibility.
+    Each trade must provide entry_ts, exit_ts, size, entry_price, and
+    exit_price. This function uses supplied historical prices and does not
+    authorize execution.
     """
     settings = settings or VectorbtAdapterSettings()
+
     if not trades:
         return {
             "available": False,
             "reason": "no_trades",
             "decision_eligibility_asserted": False,
         }
-    entries = pd.Series(
-        [True] + [False] * (len(trades) - 1),
-        index=pd.DatetimeIndex([t["entry_ts"] for t in trades]),
-    )
-    exits = pd.Series(
-        [False] * (len(trades) - 1) + [True],
-        index=pd.DatetimeIndex([t["exit_ts"] for t in trades]),
-    )
-    # Build a simple price series spanning entry to exit for each trade (synthetic, research-only)
-    all_ts = sorted({t["entry_ts"] for t in trades} | {t["exit_ts"] for t in trades})
-    price_index = pd.DatetimeIndex(all_ts)
-    prices = pd.Series(1.0, index=price_index)
 
-    entry_timestamps = {t["entry_ts"] for t in trades}
-    exit_timestamps = {t["exit_ts"] for t in trades}
+    timestamps = sorted({trade["entry_ts"] for trade in trades} | {trade["exit_ts"] for trade in trades})
+    index = pd.DatetimeIndex(timestamps)
 
-    entries = pd.Series(
-        [timestamp in entry_timestamps for timestamp in price_index],
-        index=price_index,
-        dtype=bool,
-    )
-    exits = pd.Series(
-        [timestamp in exit_timestamps for timestamp in price_index],
-        index=price_index,
-        dtype=bool,
-    )
+    entries = pd.Series(False, index=index, dtype=bool)
+    exits = pd.Series(False, index=index, dtype=bool)
+    prices = pd.Series(float("nan"), index=index, dtype=float)
+
+    for trade in trades:
+        entries.loc[trade["entry_ts"]] = True
+        exits.loc[trade["exit_ts"]] = True
+        prices.loc[trade["entry_ts"]] = float(trade["entry_price"])
+        prices.loc[trade["exit_ts"]] = float(trade["exit_price"])
+
+    prices = prices.ffill()
+
+    if prices.isna().any():
+        return {
+            "available": False,
+            "reason": "incomplete_trade_prices",
+            "decision_eligibility_asserted": False,
+        }
+
     portfolio = vbt.Portfolio.from_signals(
         prices,
         entries,
@@ -111,11 +109,22 @@ def run_vectorbt_from_trades(
         fees=settings.fees,
         slippage=settings.slippage,
     )
+
+    equity = portfolio.value()
     stats = portfolio.stats()
+
     return {
         "available": True,
+        "trade_count": len(trades),
         "total_return": float(stats["Total Return [%]"]) / 100.0,
         "max_drawdown": float(stats["Max Drawdown [%]"]) / 100.0,
-        "sharpe_ratio": float(stats["Sharpe Ratio"]) if "Sharpe Ratio" in stats else None,
+        "sharpe_ratio": (float(stats["Sharpe Ratio"]) if "Sharpe Ratio" in stats else None),
+        "equity_curve": [
+            {
+                "ts": timestamp.isoformat(),
+                "equity": float(value),
+            }
+            for timestamp, value in equity.items()
+        ],
         "decision_eligibility_asserted": False,
     }

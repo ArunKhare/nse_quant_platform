@@ -58,6 +58,7 @@ safety boundaries.
 - FS4 lineage-pinned decision bundles.
 - FS4 exact Gold replay.
 - FS4 QA and tests passed.
+- FS6 Vectorbt - Backtesting and research implemented
 - Milestone 2 parameter-experiment harness.
 - Experiment exit-reason tracking and analysis.
 - QuantStats backtest reporting.
@@ -120,8 +121,6 @@ Update this document when:
 
 Do not place detailed implementation instructions here. Use the relevant design
 document instead.
-
-- [Future Implementation Configuration](docs/FUTURE_IMPLEMENTATION.md)
 
 Notes:
 - Implement liquidity-aware long wings	Permanent production-quality improvement
