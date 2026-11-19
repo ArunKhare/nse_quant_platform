@@ -24,13 +24,51 @@ Completed:
 - Per-leg iron-condor entry-premium persistence.
 - Net-credit strategy marking and leg-level unrealized P&L reconciliation.
 - Stale option-mark persistence, cycle-level reporting, and stale-mark alert events.
-- stabilize replay/live decision parity checks.
-- Removed the redundant post-proposal regime-policy gate
-- Run and stabilize the end-to-end paper-order proposal, fill, position, marking, exit, and post-trade-review validation.
-- Run and stabilize kill-switch order-block validation.
+- Replay/live decision parity checks.
+- Removed the redundant post-proposal regime-policy gate.
+- End-to-end paper-order proposal, fill, position, marking, exit, and post-trade-review validation.
+- Kill-switch order-block validation.
+- FS4 availability-aware Gold feature retrieval, lineage-pinned decision bundles, and exact replay.
+- FS4 QA and tests passed.
 
-Remaining for full Milestone 1 closure:
-- Run the paper loop reliably across multiple complete trading days.
+## FS5 — Multi-day paper-loop reliability evidence
+
+**Status: Active.**
+
+Objective:
+
+Run the existing NIFTY iron-condor paper decision loop reliably across multiple
+complete NSE trading days and retain auditable evidence for every stage.
+
+Scope:
+
+- Run the paper loop across multiple complete trading days.
+- Persist daily snapshots, feature availability, proposals, gates, paper orders,
+  fills, positions, marks, exits, and post-trade reviews.
+- Validate Gold retrieval and exact replay during live-loop operation.
+- Treat unavailable or stale inputs as unavailable or blocked; do not fill gaps.
+- Preserve `decision_eligibility_asserted=false`; do not assert trading authority.
+- Track failures by capture, Silver, Gold, retrieval, feature, gate, order,
+  persistence, and review category.
+- Produce daily reliability reports and a final multi-day closure report.
+
+Acceptance criteria:
+
+- Multiple complete trading days run without unrecovered loop failure.
+- Gold retrieval and replay remain stable during operation.
+- Missing or invalid data blocks or marks features unavailable.
+- Paper-order lifecycle remains stable.
+- Persistent kill switch continues to halt the loop.
+- Daily evidence health is reportable and persisted.
+- Decision eligibility remains false and live trading remains disabled.
+
+Deliverable:
+
+- `output/fs5-paper-loop-reliability.zip`
+
+## Remaining for full Milestone 1 closure
+
+- Complete FS5 multi-day paper-loop reliability evidence.
 
 ## Milestone 2 — Research depth
 
@@ -92,4 +130,3 @@ Remaining:
   our architecture and implementation discussion, including the legacy loop,
   Medallion path, P0–P5 status, configuration design, analytics/research overlap,
   dashboard scope, safety boundaries, and operational holds.
-  

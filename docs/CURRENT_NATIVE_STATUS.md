@@ -37,6 +37,33 @@ eligibility, execution authority, or close any status gate.
 
 All of these return `decision_eligibility_asserted=False` and are research-only.
 
+## FS4 completion
+
+FS4 delivered availability-aware Gold feature retrieval, lineage-pinned decision
+bundles, and exact replay. The retrieval implementation returns the selected
+Gold row’s feature revision ID; replay validates the bundle revision pin before
+querying Gold.
+
+Repository QA and tests passed. The completeness checker validates Gold feature
+sets, observations, attempts, audit jobs, contracts, context hashes, lineage
+pins, duplicate Silver revisions, and decision-eligibility assertions.
+
+FS4 does not grant decision eligibility, publication authority, live acquisition
+authority, or trading authority. `decision_eligibility_asserted` remains false.
+
+## FS5 active sprint
+
+FS5 is the active milestone: multi-complete-trading-day paper-loop reliability
+evidence.
+
+FS5 must run the existing NIFTY iron-condor paper decision loop across multiple
+complete trading days, persist daily evidence, validate Gold retrieval and exact
+replay during operation, and produce daily reliability reports plus a final
+multi-day closure report.
+
+FS5 remains paper-only. It must not authorize live acquisition, production
+publication, decision eligibility, or trading.
+
 ## Regime-policy timestamp repair
 
 `save_regime_policy` in `src/nse_quant/persistence/duckdb_store.py` was repaired

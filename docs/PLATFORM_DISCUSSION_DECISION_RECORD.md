@@ -481,7 +481,7 @@ The recommended next architecture step is:
 This preserves safety, removes drift, and prepares the platform for operational acceptance without authorizing production cutover.
 --------------------------------------------------------------------------------------------------------------------------------
 
-*_COMPLETED_ Sections*
+## COMPLETED_ Sections
 
 **## 8. Analytics and research overlap
 
