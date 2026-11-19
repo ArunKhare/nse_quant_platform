@@ -1,24 +1,37 @@
 ## Current sprint
 
+# FS5 — Multi-day paper-loop reliability evidence
+
+For current native-platform status, evidence attribution, remaining gates and
+operational holds, see [CURRENT_NATIVE_STATUS.md](CURRENT_NATIVE_STATUS.md).
+
+FS4 is complete: availability-aware Gold feature retrieval, lineage-pinned
+decision bundles, and exact replay are implemented. Repository QA and tests
+passed.
+
+The active sprint is FS5: run the NIFTY iron-condor paper decision loop
+reliably across multiple complete NSE trading days and retain auditable
+evidence for every stage.
+
 ### Objective
 
-Complete Milestone 1 closure validation and harden the evidence, valuation,
-and observability foundation.
+Complete Milestone 1 closure by demonstrating reliable multi-day paper-loop
+operation with complete evidence, stable Gold retrieval/replay, and unchanged
+safety boundaries.
 
 ### Scope
 
-- [x] MFT evidence plugin and decision-loop integration
-- [x] `decision_evidence` persistence
-- [x] Evidence availability, failure, and completeness reporting
-- [x] IV analytics diagnostics and validated IV-rank eligibility checks
-- [x] Per-leg iron-condor entry-premium persistence
-- [x] Net-credit strategy valuation and leg-level P&L reconciliation
-- [x] Stale option-mark persistence and alert events
-- [x] End-to-end paper-order proposal, fill, position, marking, exit, and post-trade-review validation
-- [x] Remove redundant post-proposal regime-policy gate
-- [x] Replay/live decision parity checks
-- [x] Kill-switch order-block validation
-- [x] Multi-complete-trading-day paper-loop reliability run
+- [ ] Run the paper loop across multiple complete trading days.
+- [ ] Persist daily snapshots, feature availability, proposals, gates, paper
+      orders, fills, positions, marks, exits, and post-trade reviews.
+- [ ] Validate Gold retrieval and exact replay during live-loop operation.
+- [ ] Treat unavailable or stale inputs as unavailable or blocked; do not fill gaps.
+- [ ] Track failures by capture, Silver, Gold, retrieval, feature, gate, order,
+      persistence, and review category.
+- [ ] Produce daily reliability reports.
+- [ ] Produce a final multi-day closure report.
+- [ ] Preserve `decision_eligibility_asserted=false`.
+- [ ] Keep live trading disabled.
 
 
 ## Completed
@@ -41,20 +54,27 @@ and observability foundation.
 - Per-leg iron-condor premium persistence.
 - Net-credit strategy marking and leg-level P&L reconciliation.
 - Stale option-mark tracking, persistence, and alert events.
-
+- FS4 availability-aware Gold feature retrieval.
+- FS4 lineage-pinned decision bundles.
+- FS4 exact Gold replay.
+- FS4 QA and tests passed.
+- FS6 Vectorbt - Backtesting and research implemented
 - Milestone 2 parameter-experiment harness.
 - Experiment exit-reason tracking and analysis.
 - QuantStats backtest reporting.
 - Telegram operational test and lifecycle notifications.
 
 ## Next sprint candidates
-1. `Walk-forward parameter` validation.
-2. `event_risk` evidence plugin.
-3. `technical_indicators` evidence plugin.
-4. `volume_flow` evidence plugin.
-5. `option_positioning` evidence plugin.
-6. Event-to-instrument impact mapping.
-7. Multi-horizon NIFTY strategy profiles.
+
+1. `FS5 multi-day paper-loop reliability evidence` — active Milestone 1 closure work.
+2. `Walk-forward parameter` validation — completed; retain only for follow-up validation or extension.
+3. `event_risk` evidence plugin — implemented; requires operational acceptance evidence.
+4. `technical_indicators` evidence plugin — implemented; requires operational acceptance evidence.
+5. `volume_flow` evidence plugin — implemented; requires operational acceptance evidence.
+6. `option_positioning` evidence plugin — implemented; requires operational acceptance evidence.
+7. Event-to-instrument impact mapping — implemented; requires operational acceptance evidence.
+8. Multi-horizon NIFTY strategy profiles — implemented; requires operational acceptance evidence.
+
 
 ## Acceptance criteria for Stage 2
 
@@ -101,8 +121,6 @@ Update this document when:
 
 Do not place detailed implementation instructions here. Use the relevant design
 document instead.
-
-- [Future Implementation Configuration](docs/FUTURE_IMPLEMENTATION.md)
 
 Notes:
 - Implement liquidity-aware long wings	Permanent production-quality improvement

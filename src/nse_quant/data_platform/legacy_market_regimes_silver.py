@@ -1,0 +1,227 @@
+"""Persisted market-regimes Silver derived only from the new Bronze recording."""
+
+from __future__ import annotations
+
+import json
+from datetime import UTC, datetime
+from typing import Any
+
+from nse_quant.data_platform import legacy_silver_common as base
+from nse_quant.data_platform.audit import AuditLedger
+from nse_quant.data_platform.legacy_market_regimes import Rejected, sha
+from nse_quant.data_platform.legacy_market_regimes_bronze import read_market_regimes_bronze
+
+VERSION = "legacy-market-regimes-silver-recording@1"
+COMMAND = "persist.legacy_market_regimes_silver@1"
+TABLE = "market_regimes"
+OBSERVATIONS = "market_regime_observations"
+SETS = "market_regime_sets"
+ATTEMPTS = "market_regime_attempts"
+MAX_CONTEXT = 1048576
+DEFINITION = (VERSION, COMMAND, "derived only from reviewed market-regimes Bronze recording")
+
+
+def scope_id(source_label: str) -> str:
+    return base.sha(base.canonical([VERSION, source_label]))
+
+
+def initialize_market_regimes_silver(target: Any) -> None:
+    AuditLedger(target).initialize()
+    target.execute("CREATE SCHEMA IF NOT EXISTS silver")
+    target.execute(
+        f"CREATE TABLE IF NOT EXISTS silver.{SETS} ("
+        "revision_id VARCHAR PRIMARY KEY,context BLOB NOT NULL,"
+        "context_sha256 VARCHAR NOT NULL,recorded_at TIMESTAMPTZ NOT NULL)"
+    )
+    target.execute(
+        f"CREATE TABLE IF NOT EXISTS silver.{OBSERVATIONS} ("
+        "revision_id VARCHAR NOT NULL,ordinal BIGINT NOT NULL,"
+        "record_bytes BLOB NOT NULL,recorded_at TIMESTAMPTZ NOT NULL,"
+        "PRIMARY KEY(revision_id,ordinal))"
+    )
+    target.execute(
+        f"CREATE TABLE IF NOT EXISTS silver.{ATTEMPTS} ("
+        "revision_id VARCHAR PRIMARY KEY,recorded_at TIMESTAMPTZ NOT NULL)"
+    )
+
+
+def observe_market_regimes_bronze(bronze: Any, *, pins: base.SilverPins) -> bytes:
+    if not base.pin(pins.recording_fingerprint):
+        raise Rejected("EXACT_MARKET_REGIMES_SILVER_BRONZE_PIN_REQUIRED")
+    base.readonly(bronze)
+    records = read_market_regimes_bronze(bronze, **pins.reader_args())
+    context = base.canonical(
+        dict(
+            version=VERSION,
+            pins={
+                "source_label": pins.source_label,
+                "snapshot_id": pins.snapshot_id,
+                "capture_event_id": pins.capture_event_id,
+                "envelope_hash": pins.envelope_hash,
+                "recording_fingerprint": pins.recording_fingerprint,
+            },
+            record_hashes=[sha(record) for record in records],
+        )
+    )
+    if len(context) > MAX_CONTEXT:
+        raise Rejected("MARKET_REGIMES_SILVER_CONTEXT_BOUND")
+    return context
+
+
+def persist_market_regimes_silver(
+    bronze: Any,
+    target: Any,
+    *,
+    pins: base.SilverPins,
+    expected_context_sha256: str,
+    actor_id: str,
+    code_revision: str,
+) -> dict[str, Any]:
+    if (
+        not base.pin(expected_context_sha256)
+        or not base.actor(actor_id)
+        or not base.revision(code_revision)
+    ):
+        raise Rejected("REVIEWED_MARKET_REGIMES_SILVER_REQUEST_REQUIRED")
+    base.separate(bronze, target)
+    base.readonly(bronze)
+    revision_id = base.sha(
+        base.canonical([VERSION, pins.recording_fingerprint, expected_context_sha256])
+    )
+    for table, field in ((f"silver.{SETS}", "revision_id"), (f"silver.{ATTEMPTS}", "revision_id")):
+        if target.execute(
+            f"SELECT 1 FROM {table} WHERE {field}=? LIMIT 1", [revision_id]
+        ).fetchone():
+            raise Rejected("MARKET_REGIMES_SILVER_FIRST_WRITE_ORIGINAL_OBLIGATION")
+    ledger = AuditLedger(target)
+    job = ledger.plan_job(
+        command_name=COMMAND,
+        actor_id=actor_id,
+        code_revision=code_revision,
+        scope_ref="sha256:" + scope_id(pins.source_label),
+        config_hash=expected_context_sha256,
+    )
+    with ledger.execution(job):
+        first = observe_market_regimes_bronze(bronze, pins=pins)
+        if sha(first) != expected_context_sha256:
+            raise Rejected("REVIEWED_MARKET_REGIMES_BRONZE_CONTEXT_CHANGED")
+        second = observe_market_regimes_bronze(bronze, pins=pins)
+        if second != first:
+            raise Rejected("MARKET_REGIMES_BRONZE_CONTEXT_DRIFT")
+        records = read_market_regimes_bronze(bronze, **pins.reader_args())
+        target.execute("BEGIN TRANSACTION")
+        try:
+            target.execute(
+                f"INSERT INTO silver.{SETS} VALUES (?,?,?,?)",
+                [revision_id, first, expected_context_sha256, base.clock(datetime.now(UTC))],
+            )
+            for ordinal, record in enumerate(records):
+                target.execute(
+                    f"INSERT INTO silver.{OBSERVATIONS} VALUES (?,?,?,?)",
+                    [revision_id, ordinal, record, base.clock(datetime.now(UTC))],
+                )
+            target.execute(
+                f"INSERT INTO silver.{ATTEMPTS} VALUES (?,?)",
+                [revision_id, base.clock(datetime.now(UTC))],
+            )
+            target.execute("COMMIT")
+        except BaseException:
+            target.execute("ROLLBACK")
+            raise
+    fingerprint, _ = _read_recording(target, revision_id=revision_id)
+    return dict(
+        revision_id=revision_id,
+        recording_fingerprint=fingerprint,
+        row_count=len(records),
+        job_id=job,
+        decision_eligibility_asserted=False,
+    )
+
+
+def _read_recording(target: Any, *, revision_id: str) -> tuple[str, bytes]:
+    if not base.pin(revision_id):
+        raise Rejected("EXACT_MARKET_REGIMES_SILVER_REVISION_PIN_REQUIRED")
+    rows = base.metadata(
+        target,
+        f"SELECT CASE WHEN octet_length(context)<=? THEN context END,"
+        f"CASE WHEN length(context_sha256)<=64 THEN context_sha256 END,recorded_at "
+        f"FROM silver.{SETS} WHERE revision_id=?",
+        [MAX_CONTEXT, revision_id],
+        1,
+    )
+    context = bytes(rows[0][0])
+    if rows[0][1] != sha(context):
+        raise Rejected("MARKET_REGIMES_SILVER_CONTEXT_HASH_MISMATCH")
+    base.clock(rows[0][2])
+    return sha(base.canonical([VERSION, revision_id, context.hex()])), context
+
+
+def read_market_regimes_silver(
+    reader: Any, *, revision_id: str, expected_recording_fingerprint: str
+) -> tuple[bytes, ...]:
+    if not base.pin(expected_recording_fingerprint):
+        raise Rejected("EXACT_MARKET_REGIMES_SILVER_RECORDING_PIN_REQUIRED")
+    base.readonly(reader)
+    fingerprint, context = _read_recording(reader, revision_id=revision_id)
+    if fingerprint != expected_recording_fingerprint:
+        raise Rejected("MARKET_REGIMES_SILVER_RECORDING_FINGERPRINT_CHANGED")
+    rows = base.metadata(
+        reader,
+        f"SELECT ordinal,CASE WHEN octet_length(record_bytes)<=1048576 THEN record_bytes END,"
+        f"recorded_at FROM silver.{OBSERVATIONS} WHERE revision_id=? ORDER BY ordinal",
+        [revision_id],
+        -1,
+    )
+    records = tuple(bytes(row[1]) for row in rows)
+    try:
+        context_document = json.loads(context)
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise Rejected("MARKET_REGIMES_SILVER_CONTEXT_RECORD_MISMATCH") from exc
+    expected_context = dict(
+        version=VERSION,
+        pins=context_document.get("pins") if isinstance(context_document, dict) else None,
+        record_hashes=[sha(record) for record in records],
+    )
+    if (
+        not isinstance(context_document, dict)
+        or set(context_document) != set(expected_context)
+        or context_document.get("version") != VERSION
+        or not isinstance(context_document.get("pins"), dict)
+        or type(context_document["pins"].get("source_label")) is not str
+        or context_document.get("record_hashes") != expected_context["record_hashes"]
+        or base.canonical(context_document) != context
+    ):
+        raise Rejected("MARKET_REGIMES_SILVER_CONTEXT_RECORD_MISMATCH")
+    base.verify_recording(
+        reader,
+        command=COMMAND,
+        scope_ref="sha256:" + scope_id(context_document["pins"]["source_label"]),
+        config_hash=sha(context),
+        revision_id=revision_id,
+        sets_table=f"silver.{SETS}",
+        observations_table=f"silver.{OBSERVATIONS}",
+        attempts_table=f"silver.{ATTEMPTS}",
+        observation_count=len(records),
+    )
+    return records
+
+
+def revalidate_market_regimes_silver(bronze: Any, reader: Any, **args: Any) -> tuple[bytes, ...]:
+    base.separate(bronze, reader)
+    first = read_market_regimes_silver(
+        reader,
+        revision_id=args["revision_id"],
+        expected_recording_fingerprint=args["expected_recording_fingerprint"],
+    )
+    pins = base.SilverPins(
+        source_label=args.get("source_label", ""),
+        snapshot_id=args.get("snapshot_id", ""),
+        capture_event_id=args.get("capture_event_id", ""),
+        envelope_hash=args.get("envelope_hash", ""),
+        recording_fingerprint=args.get("recording_fingerprint", ""),
+    )
+    context = observe_market_regimes_bronze(bronze, pins=pins)
+    _, recorded_context = _read_recording(reader, revision_id=args["revision_id"])
+    if context != recorded_context:
+        raise Rejected("MARKET_REGIMES_SILVER_REVALIDATION_MISMATCH")
+    return first

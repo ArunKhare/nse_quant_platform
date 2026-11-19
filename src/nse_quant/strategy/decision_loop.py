@@ -51,6 +51,7 @@ from nse_quant.persistence.repositories import (
     PositionRepository,
 )
 from nse_quant.research.evidence_plugins.base import DecisionContext, EvidencePlugin
+from nse_quant.research.evidence_plugins.event_impact import EventImpactMapper
 from nse_quant.research.evidence_plugins.event_risk import EventRiskPlugin
 from nse_quant.research.evidence_plugins.execution_quality import ExecutionQualityPlugin
 from nse_quant.research.evidence_plugins.institutional_regime import InstitutionalRegimePlugin
@@ -162,6 +163,14 @@ class DecisionLoop:
                 InstitutionalRegimePlugin(
                     store=store,
                     settings=institutional_regime,
+                )
+            )
+
+        if self.settings.evidence.enabled and self.settings.evidence.plugins.event_impact.enabled:
+            plugins.append(
+                EventImpactMapper(
+                    store=store,
+                    settings=self.settings.evidence.plugins.event_impact,
                 )
             )
 

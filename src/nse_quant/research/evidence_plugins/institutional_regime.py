@@ -13,6 +13,14 @@ from nse_quant.research.evidence_plugins.base import (
     DecisionContext,
     EvidencePlugin,
 )
+from nse_quant.research.institutional_regime_price_action import (
+    InstitutionalRegimePriceActionSettings,
+    compute_price_action,
+)
+from nse_quant.research.institutional_regime_skew import (
+    InstitutionalRegimeSkewSettings,
+    compute_skew,
+)
 
 HISTORY_SOURCE = "atm_average_live"
 
@@ -28,6 +36,8 @@ class InstitutionalRegimePlugin(EvidencePlugin):
     ) -> None:
         self._store = store
         self._settings = settings
+        self._skew_settings = InstitutionalRegimeSkewSettings()
+        self._price_action_settings = InstitutionalRegimePriceActionSettings()
 
     def build(self, context: DecisionContext) -> dict[str, Any]:
         as_of = self._utc(context.ts)
@@ -151,34 +161,134 @@ class InstitutionalRegimePlugin(EvidencePlugin):
             as_of=as_of,
         )
 
+        skew_component = self._skew(snapshot)
+        price_action_component = self._price_action(context)
+
         components = {
             "iv_state": iv_component,
-            **self._pending_components(),
             "term_structure": term_component,
+            "skew": skew_component,
+            "price_action": price_action_component,
         }
+
+        all_complete = all(component["complete"] for component in components.values())
+        regime_label = (
+            "_".join(
+                [
+                    iv_component["state"],
+                    term_component["state"],
+                    skew_component["state"],
+                    price_action_component["state"],
+                ]
+            )
+            if all_complete
+            else None
+        )
 
         return {
             "available": True,
-            "complete": False,
+            "complete": all_complete,
             "as_of": as_of.isoformat(),
             "symbol": context.symbol,
             "expiry": snapshot.expiry.isoformat(),
             "snapshot_ts": snapshot_ts.isoformat(),
-            "classifier_version": "institutional_iv_term_components_v2",
+            "classifier_version": "institutional_iv_term_components_v4",
             "mode": "observation",
-            "regime_label": None,
+            "regime_label": regime_label,
             "components": components,
             "missing_components": [
                 name for name, component in components.items() if not component["complete"]
             ],
             "reason": (
-                iv_reason
-                if iv_reason is not None
-                else term_component["reason"]
-                if not term_component["complete"]
-                else "remaining_components_not_implemented"
+                None
+                if all_complete
+                else next(
+                    (
+                        component["reason"]
+                        for component in components.values()
+                        if not component["complete"]
+                    ),
+                    "incomplete_components",
+                )
             ),
         }
+
+    def _skew(self, snapshot: ChainSnapshot) -> dict[str, Any]:
+        if not snapshot.quotes:
+            return {
+                "available": False,
+                "complete": False,
+                "state": None,
+                "reason": "no_option_quotes",
+                "decision_eligibility_asserted": False,
+            }
+
+        atm_strike = snapshot.atm_strike()
+        put_iv: float | None = None
+        call_iv: float | None = None
+
+        for quote in snapshot.quotes:
+            if quote.instrument.expiry != snapshot.expiry:
+                continue
+            if quote.instrument.strike != atm_strike:
+                continue
+            if quote.iv is None or not math.isfinite(quote.iv) or quote.iv <= 0:
+                continue
+            if quote.instrument.option_type.value == "PE":
+                put_iv = quote.iv
+            elif quote.instrument.option_type.value == "CE":
+                call_iv = quote.iv
+
+        return compute_skew(
+            put_iv=put_iv,
+            call_iv=call_iv,
+            settings=self._skew_settings,
+        )
+
+    def _price_action(self, context: DecisionContext) -> dict[str, Any]:
+        token = getattr(context, "spot_instrument_token", None)
+
+        if token is None:
+            return {
+                "available": False,
+                "complete": False,
+                "state": "INSUFFICIENT_DATA",
+                "reason": "not_implemented",
+                "decision_eligibility_asserted": False,
+            }
+        rows = self._store.conn.execute(
+            """
+            SELECT ts, open, high, low, close, volume
+            FROM spot_candles
+            WHERE instrument_token = ?
+              AND interval = '1m'
+              AND ts <= ?
+            ORDER BY ts DESC
+            LIMIT ?
+            """,
+            [token, context.ts, 6000],
+        ).fetchall()
+
+        if not rows:
+            return {
+                "available": False,
+                "complete": False,
+                "state": "INSUFFICIENT_DATA",
+                "reason": "no_1m_history",
+                "decision_eligibility_asserted": False,
+            }
+
+        rows = list(reversed(rows))
+        closes = [float(row[4]) for row in rows]
+        highs = [float(row[2]) for row in rows]
+        lows = [float(row[3]) for row in rows]
+
+        return compute_price_action(
+            closes=closes,
+            highs=highs,
+            lows=lows,
+            settings=self._price_action_settings,
+        )
 
     def _term_structure(
         self,
@@ -339,7 +449,7 @@ class InstitutionalRegimePlugin(EvidencePlugin):
             "complete": False,
             "as_of": as_of.isoformat(),
             "symbol": context.symbol,
-            "classifier_version": "institutional_iv_term_components_v2",
+            "classifier_version": "institutional_iv_term_components_v4",
             "mode": "observation",
             "regime_label": None,
             "components": {
@@ -349,7 +459,24 @@ class InstitutionalRegimePlugin(EvidencePlugin):
                     "state": None,
                     "reason": reason,
                 },
-                **self._pending_components(),
+                "skew": {
+                    "available": False,
+                    "complete": False,
+                    "state": None,
+                    "reason": reason,
+                },
+                "price_action": {
+                    "available": False,
+                    "complete": False,
+                    "state": "INSUFFICIENT_DATA",
+                    "reason": reason,
+                },
+                "term_structure": {
+                    "available": False,
+                    "complete": False,
+                    "state": None,
+                    "reason": reason,
+                },
             },
             "missing_components": [
                 "iv_state",
@@ -358,20 +485,6 @@ class InstitutionalRegimePlugin(EvidencePlugin):
                 "price_action",
             ],
             "reason": reason,
-        }
-
-    @staticmethod
-    def _pending_components() -> dict[str, dict[str, Any]]:
-        return {
-            name: {
-                "available": False,
-                "complete": False,
-                "state": None,
-                "reason": (
-                    "current_inputs_unavailable" if name == "term_structure" else "not_implemented"
-                ),
-            }
-            for name in ("term_structure", "skew", "price_action")
         }
 
     @staticmethod

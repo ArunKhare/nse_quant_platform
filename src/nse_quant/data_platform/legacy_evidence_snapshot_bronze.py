@@ -1,0 +1,362 @@
+"""Audited whole-table evidence_snapshots Bronze; not original plugin/provider evidence."""
+
+from __future__ import annotations
+
+from datetime import datetime
+from typing import Any
+
+from nse_quant.data_platform import legacy_daily_rv_bronze as common
+from nse_quant.data_platform import legacy_evidence_snapshots as codec
+from nse_quant.data_platform.audit import AuditLedger
+from nse_quant.data_platform.bronze import BronzeEvent, BronzeEventStore
+
+VERSION = "legacy-evidence-snapshot-bronze-recording@1"
+COMMAND = "migrate.legacy_evidence_snapshots@1"
+SOURCE = "legacy_evidence_snapshot_table_snapshot"
+DEFINITION = (
+    VERSION,
+    COMMAND,
+    SOURCE,
+    codec.DEFINITION,
+    "profile+source-label first write; retained JSON text, not payload interpretation",
+)
+
+
+def scope_id(source_label: str) -> str:
+    if not codec.label(source_label):
+        raise codec.Rejected("EXPLICIT_SOURCE_LABEL_REQUIRED")
+    return codec.sha(codec.canonical([VERSION, source_label]))
+
+
+def capture_evidence_snapshots(source: Any, *, source_label: str) -> codec.Snapshot:
+    scope_id(source_label)
+    common._readonly(source)
+    table = common.name(source, "main", codec.TABLE)
+    source.execute("BEGIN TRANSACTION")
+    try:
+        schema = source.execute(
+            "SELECT column_name,data_type FROM information_schema.columns "
+            "WHERE table_catalog=current_database() AND table_schema='main' AND table_name=? "
+            "ORDER BY ordinal_position LIMIT 7",
+            [codec.TABLE],
+        ).fetchall()
+        objects = source.execute(
+            "SELECT table_type FROM information_schema.tables WHERE table_catalog="
+            "current_database() AND table_schema='main' AND table_name=?",
+            [codec.TABLE],
+        ).fetchall()
+        if tuple(schema) != codec.SCHEMA or objects != [("BASE TABLE",)]:
+            raise codec.Rejected("EXACT_EVIDENCE_SNAPSHOT_BASE_TABLE_SCHEMA_REQUIRED")
+        names = [n for n, kind in codec.SCHEMA if kind in ("VARCHAR", "JSON")]
+        terms = [f'octet_length(encode(CAST("{n}" AS VARCHAR)))' for n in names]
+        total = "+".join(f"coalesce({term},0)" for term in terms)
+        maximum = "greatest(" + ",".join(f"coalesce({term},0)" for term in terms) + ")"
+        budget = source.execute(
+            f"SELECT count(*),coalesce(sum({total}),0),coalesce(max({maximum}),0) FROM {table}"
+        ).fetchone()
+        if budget is None or not 1 <= budget[0] <= codec.MAX_ROWS:
+            raise codec.Rejected("WHOLE_EVIDENCE_SNAPSHOT_ROW_BOUND")
+        if budget[1] > codec.MAX_BYTES or budget[2] > codec.MAX_CELL:
+            raise codec.Rejected("EVIDENCE_SNAPSHOT_TEXT_TRANSFER_BOUND")
+        columns: list[str] = []
+        for n, kind in codec.SCHEMA:
+            if kind in ("VARCHAR", "JSON"):
+                columns.append(
+                    f'CASE WHEN octet_length(encode(CAST("{n}" AS VARCHAR)))'
+                    f'<= {codec.MAX_CELL} THEN CAST("{n}" AS VARCHAR) END'
+                )
+            else:
+                columns.append(f'"{n}"')
+        rows = source.execute(
+            f"SELECT {','.join(columns)} FROM {table} LIMIT ?", [codec.MAX_ROWS + 1]
+        ).fetchall()
+        if len(rows) != budget[0]:
+            raise codec.Rejected("WHOLE_EVIDENCE_SNAPSHOT_ROW_BOUND")
+        encoded = [
+            [codec.encode_cell(v, kind) for v, (_n, kind) in zip(row, codec.SCHEMA, strict=True)]
+            for row in rows
+        ]
+        result = codec.make_snapshot(source_label, encoded)
+        source.execute("COMMIT")
+        return result
+    except BaseException:
+        source.execute("ROLLBACK")
+        raise
+
+
+def preserve_evidence_snapshots(
+    source: Any,
+    bronze: Any,
+    *,
+    source_label: str,
+    expected_snapshot_id: str,
+    imported_at: datetime,
+    actor_id: str,
+    code_revision: str,
+) -> dict[str, Any]:
+    scope = scope_id(source_label)
+    if (
+        not codec.pin(expected_snapshot_id)
+        or not common._actor(actor_id)
+        or len(actor_id.encode()) > 128
+        or not common._revision(code_revision)
+    ):
+        raise codec.Rejected("REVIEWED_EVIDENCE_SNAPSHOT_REQUEST_REQUIRED")
+    common._clock(imported_at)
+    common._separate(source, bronze)
+    paths = bronze.execute(
+        "SELECT path FROM duckdb_databases() WHERE database_name=current_database()"
+    ).fetchall()
+    if len(paths) != 1 or not paths[0][0]:
+        raise codec.Rejected("FILE_BACKED_EVIDENCE_SNAPSHOT_BRONZE_REQUIRED")
+    common._readonly(source)
+    store = BronzeEventStore(bronze)
+    store.verify_target()
+    for table, field, value in (
+        (common.name(bronze, "medallion_audit", "jobs"), "scope_ref", "sha256:" + scope),
+        (store.object_name("event_variants"), "capture_session_id", scope),
+        (store.object_name("ingest_batches"), "batch_key", scope),
+        (store.object_name("input_artifacts"), "artifact_hash", expected_snapshot_id),
+    ):
+        if bronze.execute(f'SELECT 1 FROM {table} WHERE "{field}"=? LIMIT 1', [value]).fetchone():
+            raise codec.Rejected("EVIDENCE_SNAPSHOT_FIRST_WRITE_ORIGINAL_OBLIGATION")
+    ledger = AuditLedger(bronze)
+    job = ledger.plan_job(
+        command_name=COMMAND,
+        actor_id=actor_id,
+        code_revision=code_revision,
+        scope_ref="sha256:" + scope,
+        config_hash=codec.sha(codec.canonical([DEFINITION, expected_snapshot_id])),
+    )
+    with ledger.execution(job):
+        first = capture_evidence_snapshots(source, source_label=source_label)
+        if first.snapshot_id != expected_snapshot_id:
+            raise codec.Rejected("REVIEWED_EVIDENCE_SNAPSHOT_SOURCE_CHANGED")
+        if capture_evidence_snapshots(source, source_label=source_label) != first:
+            raise codec.Rejected("EVIDENCE_SNAPSHOT_SOURCE_CHANGED_DURING_CAPTURE")
+        event = BronzeEvent(
+            SOURCE, scope, codec.TABLE, imported_at, first.payload, codec.VERSION, "legacy_snapshot"
+        )
+        codec.derive_records(
+            first.payload,
+            snapshot_id=expected_snapshot_id,
+            capture_event_id=event.capture_event_id,
+            envelope_hash=event.envelope_hash,
+        )
+        receipt = store.append_batch(
+            (event,), batch_key=scope, input_artifact=first.payload, job_id=job
+        )
+        if (
+            receipt.inserted_variants != 1
+            or receipt.exact_retries
+            or receipt.conflict_variants
+            or receipt.already_committed
+        ):
+            raise codec.Rejected("UNEXPECTED_EVIDENCE_SNAPSHOT_NATIVE_BATCH_REUSE")
+    fingerprint, _raw = read_recording_bytes(
+        bronze,
+        source_label=source_label,
+        snapshot_id=expected_snapshot_id,
+        capture_event_id=event.capture_event_id,
+        envelope_hash=event.envelope_hash,
+    )
+    return dict(
+        source_label=source_label,
+        snapshot_id=expected_snapshot_id,
+        capture_event_id=event.capture_event_id,
+        envelope_hash=event.envelope_hash,
+        recording_fingerprint=fingerprint,
+        row_count=first.row_count,
+        job_id=job,
+        decision_eligibility_asserted=False,
+    )
+
+
+def read_recording_bytes(
+    bronze: Any, *, source_label: str, snapshot_id: str, capture_event_id: str, envelope_hash: str
+) -> tuple[str, bytes]:
+    """Lower-level original recording verifier; public reader adds read-only/review pin."""
+    if not all(codec.pin(p) for p in (snapshot_id, capture_event_id, envelope_hash)):
+        raise codec.Rejected("EXACT_EVIDENCE_SNAPSHOT_BRONZE_PINS_REQUIRED")
+    scope = scope_id(source_label)
+    store = BronzeEventStore(bronze)
+    store.verify_target()
+    variants, batches, artifacts = (
+        store.object_name(n) for n in ("event_variants", "ingest_batches", "input_artifacts")
+    )
+    jobs = common.name(bronze, "medallion_audit", "jobs")
+    events = common.name(bronze, "medallion_audit", "job_events")
+    bronze.execute("BEGIN TRANSACTION")
+    try:
+        rows = bronze.execute(
+            "SELECT CASE WHEN length(capture_event_id)<=64 THEN capture_event_id END,"
+            "CASE WHEN length(envelope_hash)<=64 THEN envelope_hash END,"
+            "CASE WHEN length(source)<=128 THEN source END,"
+            "CASE WHEN length(capture_session_id)<=64 THEN capture_session_id END,"
+            "CASE WHEN length(source_record_id)<=128 THEN source_record_id END,"
+            "received_at,recorded_at,exchange_ts,"
+            "CASE WHEN octet_length(payload)<=? THEN payload END,"
+            "CASE WHEN length(payload_hash)<=64 THEN payload_hash END,"
+            "CASE WHEN length(payload_format)<=128 THEN payload_format END,"
+            "CASE WHEN length(origin_kind)<=32 THEN origin_kind END,"
+            "CASE WHEN octet_length(encode(envelope_json))<=8192 THEN envelope_json END,"
+            "CASE WHEN length(first_batch_key)<=64 THEN first_batch_key END,"
+            f"CASE WHEN length(first_job_id)<=128 THEN first_job_id END,ingest_sequence "
+            f"FROM {variants} WHERE capture_event_id=? OR capture_session_id=? LIMIT 3",
+            [codec.MAX_BYTES, capture_event_id, scope],
+        ).fetchall()
+        if (
+            len(rows) != 1
+            or rows[0][:2] != (capture_event_id, envelope_hash)
+            or rows[0][8] is None
+            or rows[0][12] is None
+        ):
+            raise codec.Rejected("EXACT_ORIGINAL_EVIDENCE_SNAPSHOT_VARIANT_REQUIRED")
+        row = rows[0][2:]
+        raw = bytes(row[6])
+        doc = codec.replay_snapshot(raw, expected_snapshot_id=snapshot_id)
+        event = BronzeEvent(
+            SOURCE, scope, codec.TABLE, row[3], raw, codec.VERSION, "legacy_snapshot"
+        )
+        if (
+            doc["source_label"] != source_label
+            or row[:3] != (SOURCE, scope, codec.TABLE)
+            or row[5] is not None
+            or row[7:12]
+            != (snapshot_id, codec.VERSION, "legacy_snapshot", event.envelope_json, scope)
+            or event.capture_event_id != capture_event_id
+            or event.envelope_hash != envelope_hash
+        ):
+            raise codec.Rejected("NATIVE_EVIDENCE_SNAPSHOT_ENVELOPE_MISMATCH")
+        variant_count = bronze.execute(
+            f"SELECT count(*) FROM {variants} WHERE capture_event_id=? "
+            "OR capture_session_id=? OR first_job_id=?",
+            [capture_event_id, scope, row[12]],
+        ).fetchone()
+        if variant_count != (1,):
+            raise codec.Rejected("EVIDENCE_SNAPSHOT_ORIGINAL_VARIANT_COVERAGE_MISMATCH")
+        scoped = common._metadata(
+            bronze,
+            "SELECT CASE WHEN length(job_id)<=128 THEN job_id END,"
+            "CASE WHEN parent_job_id IS NULL THEN NULL ELSE 'PRESENT' END,"
+            "CASE WHEN length(command_name)<=128 THEN command_name END,"
+            "CASE WHEN octet_length(encode(actor_id))<=128 THEN actor_id END,"
+            "CASE WHEN length(code_revision)<=40 THEN code_revision END,"
+            "CASE WHEN length(config_hash)<=64 THEN config_hash END,"
+            f"CASE WHEN length(scope_ref)<=71 THEN scope_ref END,created_at FROM {jobs} "
+            "WHERE scope_ref=? OR job_id=?",
+            ["sha256:" + scope, row[12]],
+            1,
+        )
+        history = common._metadata(
+            bronze,
+            "SELECT event_index,CASE WHEN length(state)<=32 THEN state END,recorded_at,"
+            "CASE WHEN reason_code IS NULL THEN NULL ELSE 'PRESENT' END "
+            f"FROM {events} WHERE job_id=? ORDER BY event_index",
+            [row[12]],
+            3,
+        )
+        batch = common._metadata(
+            bronze,
+            "SELECT CASE WHEN length(batch_fingerprint)<=64 THEN batch_fingerprint END,"
+            "CASE WHEN length(input_file_hash)<=64 THEN input_file_hash END,input_events,"
+            "inserted_variants,exact_retries,conflict_variants,last_sequence,"
+            "CASE WHEN length(job_id)<=128 THEN job_id END,committed_at "
+            f"FROM {batches} WHERE batch_key=? OR job_id=?",
+            [scope, row[12]],
+            1,
+        )
+        artifact = bronze.execute(
+            "SELECT CASE WHEN octet_length(artifact_bytes)<=? THEN artifact_bytes END,"
+            "CASE WHEN length(first_job_id)<=128 THEN first_job_id END,recorded_at "
+            f"FROM {artifacts} WHERE artifact_hash=? OR first_job_id=? LIMIT 2",
+            [codec.MAX_BYTES, snapshot_id, row[12]],
+        ).fetchall()
+        bronze.execute("COMMIT")
+    except BaseException:
+        bronze.execute("ROLLBACK")
+        raise
+    config = codec.sha(codec.canonical([DEFINITION, snapshot_id]))
+    if (
+        len(scoped) != 1
+        or scoped[0][0] != row[12]
+        or scoped[0][1] is not None
+        or scoped[0][2] != COMMAND
+        or not common._actor(scoped[0][3])
+        or not common._revision(scoped[0][4])
+        or scoped[0][5] != config
+        or scoped[0][6] != "sha256:" + scope
+        or [(h[0], h[1], h[3]) for h in history]
+        != [(1, "PLANNED", None), (2, "RUNNING", None), (3, "SUCCEEDED", None)]
+    ):
+        raise codec.Rejected("ORIGINAL_EVIDENCE_SNAPSHOT_AUDIT_NOT_VERIFIED")
+    batch_fp = codec.sha(
+        codec.canonical(
+            dict(input_file_hash=snapshot_id, events=[(capture_event_id, envelope_hash)])
+        )
+    )
+    if (
+        len(batch) != 1
+        or batch[0][:8] != (batch_fp, snapshot_id, 1, 1, 0, 0, row[13], row[12])
+        or type(row[13]) is not int
+        or row[13] <= 0
+        or len(artifact) != 1
+        or artifact[0][0] is None
+        or bytes(artifact[0][0]) != raw
+        or artifact[0][1] != row[12]
+    ):
+        raise codec.Rejected("ORIGINAL_EVIDENCE_SNAPSHOT_BATCH_NOT_VERIFIED")
+    for at in [row[3], row[4], scoped[0][7], batch[0][8], artifact[0][2], *(h[2] for h in history)]:
+        common._clock(at)
+    metadata = [
+        VERSION,
+        capture_event_id,
+        envelope_hash,
+        list(row[:6]),
+        codec.sha(raw),
+        list(row[7:]),
+        scoped,
+        history,
+        batch,
+        list(artifact[0][1:]),
+    ]
+    return codec.sha(common._json(metadata)), raw
+
+
+def read_evidence_snapshot_bronze(
+    bronze: Any,
+    *,
+    source_label: str,
+    snapshot_id: str,
+    capture_event_id: str,
+    envelope_hash: str,
+    expected_recording_fingerprint: str,
+) -> tuple[bytes, ...]:
+    if not codec.pin(expected_recording_fingerprint):
+        raise codec.Rejected("EXACT_EVIDENCE_SNAPSHOT_RECORDING_PIN_REQUIRED")
+    common._readonly(bronze)
+    fingerprint, raw = read_recording_bytes(
+        bronze,
+        source_label=source_label,
+        snapshot_id=snapshot_id,
+        capture_event_id=capture_event_id,
+        envelope_hash=envelope_hash,
+    )
+    if fingerprint != expected_recording_fingerprint:
+        raise codec.Rejected("EVIDENCE_SNAPSHOT_RECORDING_FINGERPRINT_CHANGED")
+    return codec.derive_records(
+        raw, snapshot_id=snapshot_id, capture_event_id=capture_event_id, envelope_hash=envelope_hash
+    )
+
+
+def revalidate_evidence_snapshot_source(source: Any, bronze: Any, **pins: Any) -> tuple[bytes, ...]:
+    common._separate(source, bronze)
+    first = read_evidence_snapshot_bronze(bronze, **pins)
+    for _ in range(2):
+        current = capture_evidence_snapshots(source, source_label=pins["source_label"])
+        if current.snapshot_id != pins["snapshot_id"]:
+            raise codec.Rejected("CURRENT_LEGACY_EVIDENCE_SNAPSHOT_CHANGED")
+    second = read_evidence_snapshot_bronze(bronze, **pins)
+    if first != second:
+        raise codec.Rejected("EVIDENCE_SNAPSHOT_RECORDING_CHANGED_DURING_REVALIDATION")
+    return second

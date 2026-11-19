@@ -5,11 +5,12 @@ from __future__ import annotations
 import os
 from datetime import date as Date
 from datetime import time
+from enum import StrEnum
 from pathlib import Path
 from typing import Any, Self
 
 import yaml
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 CONFIG_DIR = Path("config")
@@ -156,9 +157,25 @@ class EventRiskSettings(BaseModel):
     lookahead_minutes: int = 0
     blackout_minutes_before: int = 30
     blackout_minutes_after: int = 30
-    high_impact_types: list[str] = Field(
-        default_factory=lambda: ["RBI_POLICY", "FED_POLICY", "UNION_BUDGET"]
+    high_impact_types: list[str] = Field(default_factory=lambda: ["RBI_POLICY", "FED_POLICY", "UNION_BUDGET"])
+
+
+class EventReactionSettings(BaseModel):
+    enabled: bool = False
+    observation_windows: list[int] = Field(
+        default_factory=lambda: [5, 15, 30, 60],
+        min_length=1,
     )
+    max_reactions: int = Field(default=1000, ge=1)
+
+    @field_validator("observation_windows")
+    @classmethod
+    def validate_windows(cls, value: list[int]) -> list[int]:
+        if any(window <= 0 for window in value):
+            raise ValueError("event reaction windows must be positive")
+        if len(value) != len(set(value)):
+            raise ValueError("event reaction windows must not contain duplicates")
+        return value
 
 
 class PaperExecutionSettings(BaseModel):
@@ -267,6 +284,12 @@ class BacktestReadinessSettings(BaseModel):
     min_regime_days: int = 10
 
 
+class EventOutcomePanelSettings(BaseModel):
+    adverse_return_threshold_pct: float = -1.0
+    iv_crush_threshold: float = -0.02
+    min_confidence: float = Field(default=0.0, ge=0.0, le=1.0)
+
+
 class ResearchSettings(BaseModel):
     enforce_feature_availability: bool = True
     enforce_regime_policy: bool = True
@@ -274,6 +297,7 @@ class ResearchSettings(BaseModel):
     min_history_observations: int = 1
     enable_parameter_experiments: bool = False
     backtest_readiness: BacktestReadinessSettings = Field(default_factory=BacktestReadinessSettings)
+    event_outcomes: EventOutcomePanelSettings = EventOutcomePanelSettings()
 
 
 class WalkForwardSettings(BaseModel):
@@ -363,8 +387,7 @@ class MarketContextSettings(BaseModel):
     def validate_symbols(self) -> Self:
         if any(not symbol.strip() or symbol != symbol.strip() for symbol in self.symbols):
             raise ValueError(
-                "market_context.symbols must contain non-empty symbols"
-                "symbols without surrounding whitespace"
+                "market_context.symbols must contain non-empty symbolssymbols without surrounding whitespace"
             )
 
         if len(self.symbols) != len(set(self.symbols)):
@@ -415,18 +438,30 @@ class InstitutionalRegimeSettings(BaseModel):
         return self
 
 
+class EventImpactSettings(BaseModel):
+    enabled: bool = False
+    blackout_minutes_before: int = 30
+    blackout_minutes_after: int = 30
+
+    @model_validator(mode="after")
+    def validate_blackout_windows(self) -> Self:
+        if self.blackout_minutes_before < 0 or self.blackout_minutes_after < 0:
+            raise ValueError("event_impact blackout minutes must be >= 0")
+        return self
+
+
 class EvidencePluginsSettings(BaseModel):
     multi_timeframe: MultiTimeframeEvidenceSettings = MultiTimeframeEvidenceSettings()
     event_risk: EventRiskSettings = EventRiskSettings()
+    event_impact: EventImpactSettings = EventImpactSettings()
+    event_reactions: EventReactionSettings = EventReactionSettings()
     technical_indicators: TechnicalIndicatorSettings = TechnicalIndicatorSettings()
     volume_flow: VolumeFlowSettings = VolumeFlowSettings()
     option_positioning: OptionPositioningSettings = OptionPositioningSettings()
     market_structure: MarketStructureSettings = MarketStructureSettings()
     market_context: MarketContextSettings = Field(default_factory=MarketContextSettings)
     execution_quality: ExecutionQualitySettings = Field(default_factory=ExecutionQualitySettings)
-    institutional_regime: InstitutionalRegimeSettings = Field(
-        default_factory=InstitutionalRegimeSettings
-    )
+    institutional_regime: InstitutionalRegimeSettings = Field(default_factory=InstitutionalRegimeSettings)
 
 
 class EvidenceSettings(BaseModel):
@@ -445,6 +480,100 @@ def _load_yaml(path: Path) -> dict[str, Any]:
     if not isinstance(value, dict):
         raise TypeError(f"{path} must contain a mapping")
     return value
+
+
+class LLMEnrichmentSettings(BaseModel):
+    enabled: bool = False
+    provider: str = "manual"
+    max_headline_length: int = Field(default=512, ge=1)
+    min_confidence: float = Field(default=0.0, ge=0.0, le=1.0)
+    allowed_symbols: list[str] = Field(default_factory=list)
+
+
+class MedallionExecutionMode(StrEnum):
+    PAPER = "paper"
+    DRY_RUN = "dry_run"
+    LIVE = "live"
+
+
+class MedallionLayerSettings(BaseModel):
+    enabled: bool = True
+    root_path: Path = Path("data/medallion")
+
+
+class MedallionBronzeSettings(MedallionLayerSettings):
+    max_payload_bytes: int = Field(default=262_144, ge=1)
+    require_original_first_write: bool = True
+
+
+class MedallionSilverSettings(MedallionLayerSettings):
+    max_revision_bytes: int = Field(default=262_144, ge=1)
+    require_source_link: bool = True
+
+
+class MedallionGoldSettings(MedallionLayerSettings):
+    require_versioned_build: bool = True
+    require_published_bundle: bool = True
+
+
+class MedallionPublicationSettings(BaseModel):
+    enabled: bool = True
+    require_complete_evidence: bool = True
+
+
+class MedallionAdmissionSettings(BaseModel):
+    enabled: bool = True
+    require_explicit_acceptance: bool = True
+    reject_point_in_time_decision: bool = True
+
+
+class MedallionGovernanceSettings(BaseModel):
+    enabled: bool = True
+    retention_days: int = Field(default=365, ge=1)
+    require_final_audit: bool = True
+    require_exact_replay: bool = True
+
+
+class MedallionExecutionSettings(BaseModel):
+    mode: MedallionExecutionMode = MedallionExecutionMode.PAPER
+    live_enabled: bool = False
+    require_explicit_user_authorization: bool = True
+    kill_switch_enforced: bool = True
+
+
+class MedallionExpansionSettings(BaseModel):
+    enabled: bool = True
+    underlyings: list[str] = Field(default_factory=lambda: ["NIFTY", "BANKNIFTY"])
+    stock_options_enabled: bool = False
+    stocks_enabled: bool = False
+    spreads_enabled: bool = False
+    multi_leg_strategies_enabled: bool = False
+
+
+class MedallionSettings(BaseModel):
+    enabled: bool = True
+    root_path: Path = Path("data/medallion")
+    bronze: MedallionBronzeSettings = Field(default_factory=MedallionBronzeSettings)
+    silver: MedallionSilverSettings = Field(default_factory=MedallionSilverSettings)
+    gold: MedallionGoldSettings = Field(default_factory=MedallionGoldSettings)
+    publication: MedallionPublicationSettings = Field(default_factory=MedallionPublicationSettings)
+    admission: MedallionAdmissionSettings = Field(default_factory=MedallionAdmissionSettings)
+    governance: MedallionGovernanceSettings = Field(default_factory=MedallionGovernanceSettings)
+    execution: MedallionExecutionSettings = Field(default_factory=MedallionExecutionSettings)
+    expansion: MedallionExpansionSettings = Field(default_factory=MedallionExpansionSettings)
+
+    @model_validator(mode="after")
+    def validate_medallion_safety(self) -> MedallionSettings:
+        if self.execution.mode == MedallionExecutionMode.LIVE:
+            if not self.execution.live_enabled:
+                raise ValueError("Live Medallion execution requires execution.live_enabled=true")
+            if not self.execution.require_explicit_user_authorization:
+                raise ValueError("Live Medallion execution requires explicit user authorization")
+        if self.admission.reject_point_in_time_decision is not True:
+            raise ValueError("Medallion admission must reject POINT_IN_TIME_DECISION")
+        if self.governance.require_exact_replay is not True:
+            raise ValueError("Medallion governance must require exact replay")
+        return self
 
 
 class Settings(BaseSettings):
@@ -474,6 +603,7 @@ class Settings(BaseSettings):
     walk_forward: WalkForwardSettings = Field(default_factory=WalkForwardSettings)
     evidence: EvidenceSettings = Field(default_factory=EvidenceSettings)
     debug: DebugSettings = Field(default_factory=DebugSettings)
+    medallion: MedallionSettings = Field(default_factory=MedallionSettings)
 
     @model_validator(mode="before")
     @classmethod
@@ -495,15 +625,9 @@ class Settings(BaseSettings):
             if isinstance(safety, dict)
             else getattr(safety, "trading_enabled", False)
         )
-        dry_run = (
-            safety.get("dry_run", True)
-            if isinstance(safety, dict)
-            else getattr(safety, "dry_run", True)
-        )
+        dry_run = safety.get("dry_run", True) if isinstance(safety, dict) else getattr(safety, "dry_run", True)
         paper_trading = (
-            safety.get("paper_trading", True)
-            if isinstance(safety, dict)
-            else getattr(safety, "paper_trading", True)
+            safety.get("paper_trading", True) if isinstance(safety, dict) else getattr(safety, "paper_trading", True)
         )
 
         if trading_enabled and (dry_run or paper_trading):
@@ -513,9 +637,7 @@ class Settings(BaseSettings):
 
         # 2. Check Runtime Timing
         stale_seconds = (
-            runtime.get("stale_seconds", 15.0)
-            if isinstance(runtime, dict)
-            else getattr(runtime, "stale_seconds", 15.0)
+            runtime.get("stale_seconds", 15.0) if isinstance(runtime, dict) else getattr(runtime, "stale_seconds", 15.0)
         )
         loop_interval_seconds = (
             runtime.get("loop_interval_seconds", 15)
@@ -528,18 +650,14 @@ class Settings(BaseSettings):
 
         # 3. Check Analytics Constraints
         min_iv_rank = (
-            analytics.get("min_iv_rank", 40)
-            if isinstance(analytics, dict)
-            else getattr(analytics, "min_iv_rank", 40)
+            analytics.get("min_iv_rank", 40) if isinstance(analytics, dict) else getattr(analytics, "min_iv_rank", 40)
         )
         if not 0 <= min_iv_rank <= 100:
             raise ValueError("min_iv_rank must be 0-100")
 
         # 4. Check Risk Constraints
         max_lots_per_order = (
-            risk.get("max_lots_per_order", 2)
-            if isinstance(risk, dict)
-            else getattr(risk, "max_lots_per_order", 2)
+            risk.get("max_lots_per_order", 2) if isinstance(risk, dict) else getattr(risk, "max_lots_per_order", 2)
         )
         if max_lots_per_order < 1:
             raise ValueError("max_lots_per_order must be >=1")
@@ -576,24 +694,18 @@ class Settings(BaseSettings):
             expected_type = STRATEGY_PROFILE_TYPES.get(profile.strategy_type)
 
             if expected_type is None or not isinstance(profile, expected_type):
-                raise ValueError(
-                    f"Strategy {strategy_id!r} has invalid strategy_type {profile.strategy_type!r}"
-                )
+                raise ValueError(f"Strategy {strategy_id!r} has invalid strategy_type {profile.strategy_type!r}")
 
             if strategy_id in self.safety.allowed_strategies and not profile.enabled:
                 raise ValueError(
-                    f"Strategy {strategy_id!r} is enabled in "
-                    "safety.allowed_strategies but its profile is disabled"
+                    f"Strategy {strategy_id!r} is enabled in safety.allowed_strategies but its profile is disabled"
                 )
 
-            overlap = set(profile.regime_policy.allowed_regimes) & set(
-                profile.regime_policy.blocked_regimes
-            )
+            overlap = set(profile.regime_policy.allowed_regimes) & set(profile.regime_policy.blocked_regimes)
 
             if overlap:
                 raise ValueError(
-                    f"Strategy {strategy_id!r} has overlapping allowed "
-                    f"and blocked regimes: {sorted(overlap)}"
+                    f"Strategy {strategy_id!r} has overlapping allowed and blocked regimes: {sorted(overlap)}"
                 )
 
         return self
@@ -619,16 +731,12 @@ class Settings(BaseSettings):
 
             strategy_type = profile.get("strategy_type")
             if not isinstance(strategy_type, str):
-                raise TypeError(
-                    f"Unknown strategy_type {strategy_type!r} for strategy {strategy_id!r}"
-                )
+                raise TypeError(f"Unknown strategy_type {strategy_type!r} for strategy {strategy_id!r}")
 
             profile_type = STRATEGY_PROFILE_TYPES.get(strategy_type)
 
             if profile_type is None:
-                raise ValueError(
-                    f"Unknown strategy_type {strategy_type!r} for strategy {strategy_id!r}"
-                )
+                raise ValueError(f"Unknown strategy_type {strategy_type!r} for strategy {strategy_id!r}")
 
             normalized[strategy_id] = profile_type(**profile)
 

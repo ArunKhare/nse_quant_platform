@@ -472,6 +472,33 @@ class DuckDBStore:
         """
         self.conn.execute(MARKET_EVENTS)
 
+        LLM_ENRICHMENT = """
+            CREATE TABLE IF NOT EXISTS llm_enrichment (
+                enrichment_id VARCHAR PRIMARY KEY,
+                provider VARCHAR,
+                headline VARCHAR,
+                symbols JSON,
+                topics JSON,
+                sentiment VARCHAR,
+                relevance_confidence DOUBLE,
+                enrichment JSON,
+                ingested_at TIMESTAMPTZ
+            )
+        """
+        self.conn.execute(LLM_ENRICHMENT)
+
+        LLM_ENRICHMENT_EVENT_LINKS = """
+            CREATE TABLE IF NOT EXISTS llm_enrichment_event_links (
+                link_id VARCHAR PRIMARY KEY,
+                enrichment_id VARCHAR,
+                event_id VARCHAR,
+                instrument VARCHAR,
+                linked_at TIMESTAMPTZ,
+                payload JSON
+            )
+        """
+        self.conn.execute(LLM_ENRICHMENT_EVENT_LINKS)
+
         EVENT_IMPACT_EVIDENCE = """
             CREATE TABLE IF NOT EXISTS event_impact_evidence (
                 impact_id VARCHAR PRIMARY KEY,
@@ -490,6 +517,27 @@ class DuckDBStore:
             )
         """
         self.conn.execute(EVENT_IMPACT_EVIDENCE)
+
+        EVENT_REACTIONS = """
+            CREATE TABLE IF NOT EXISTS event_reactions (
+                reaction_id VARCHAR PRIMARY KEY,
+                event_id VARCHAR,
+                instrument VARCHAR,
+                event_ts TIMESTAMPTZ,
+                observation_window_minutes INTEGER,
+                observed_at TIMESTAMPTZ,
+                spot_return_pct DOUBLE,
+                realized_range_points DOUBLE,
+                atm_iv_change DOUBLE,
+                expected_move_change_points DOUBLE,
+                pcr_change DOUBLE,
+                relevant_oi_change BIGINT,
+                option_spread_change_pct DOUBLE,
+                payload JSON,
+                ingested_at TIMESTAMPTZ
+            )
+        """
+        self.conn.execute(EVENT_REACTIONS)
 
     def _compute_option_iv(
         self,
@@ -982,9 +1030,10 @@ class DuckDBStore:
     ) -> None:
         self.conn.execute(
             """
-            INSERT OR REPLACE INTO regime_policies VALUES (
-                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
-            )
+            INSERT OR REPLACE INTO regime_policies (
+                policy_id, symbol, train_start, train_end, test_start, test_end,
+                allowed_regimes, regime_metrics, selection_status, risk_limits, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             [
                 policy_id,
@@ -996,8 +1045,8 @@ class DuckDBStore:
                 json.dumps(sorted(policy.allowed_regimes)),
                 json.dumps(policy.regime_metrics, default=str),
                 policy.selection_status,
-                datetime.now(UTC),
                 json.dumps(risk_limits or {}, default=str),
+                datetime.now(UTC),
             ],
         )
 
@@ -1338,11 +1387,7 @@ class DuckDBStore:
             return_1m = (closes[-1] / closes[-2]) - 1
 
         if len(closes) >= 3:
-            returns = [
-                (closes[index] / closes[index - 1]) - 1
-                for index in range(1, len(closes))
-                if closes[index - 1]
-            ]
+            returns = [(closes[index] / closes[index - 1]) - 1 for index in range(1, len(closes)) if closes[index - 1]]
 
             if len(returns) >= 2:
                 mean_return = sum(returns) / len(returns)
@@ -1393,9 +1438,7 @@ class DuckDBStore:
             mean_volume = sum(recent_volumes) / len(recent_volumes)
 
             if mean_volume > 0:
-                variance = sum((value - mean_volume) ** 2 for value in recent_volumes) / len(
-                    recent_volumes
-                )
+                variance = sum((value - mean_volume) ** 2 for value in recent_volumes) / len(recent_volumes)
 
                 std_volume = variance**0.5
 
@@ -1778,9 +1821,7 @@ class DuckDBStore:
             "open_positions": int(open_positions),
             "stale_leg_marks": int(stale_leg_marks),
             "exits": int(exits),
-            "rejection_reason_counts": {
-                (row[0] or "unknown"): int(row[1]) for row in rejection_rows
-            },
+            "rejection_reason_counts": {(row[0] or "unknown"): int(row[1]) for row in rejection_rows},
             "exit_reason_counts": {(row[0] or "unknown"): int(row[1]) for row in exit_rows},
             "evidence_rows": int(evidence_rows[0]) if evidence_rows else 0,
             "evidence_available": int(evidence_rows[1]) if evidence_rows else 0,

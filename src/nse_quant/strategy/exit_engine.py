@@ -14,7 +14,7 @@ from nse_quant.core.models import (
     StrategyPosition,
     TradeProposal,
 )
-from nse_quant.core.settings import get_settings
+from nse_quant.core.settings import ExitSettings, get_settings
 
 
 class ExitEngine:
@@ -22,7 +22,7 @@ class ExitEngine:
         if settings is None:
             settings = get_settings()
 
-        if hasattr(settings, "theta_decay_target_pct"):
+        if isinstance(settings, ExitSettings):
             # A resolved ExitSettings object was supplied.
             self.settings = settings
             self.exit_settings = settings

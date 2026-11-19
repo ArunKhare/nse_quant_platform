@@ -1,4 +1,4 @@
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from unittest.mock import Mock
 
@@ -219,6 +219,7 @@ def test_ready_policy_allows_matching_regime() -> None:
 def test_position_closes_on_iv_collapse(
     decision_loop_environment,
     entry_snapshots,
+    snapshot_factory,
     _seed_candles,
     test_store,
 ):
@@ -226,24 +227,61 @@ def test_position_closes_on_iv_collapse(
     _seed_candles(test_store, 256265, "NIFTY", 60, "15m")
     _seed_candles(test_store, 256265, "NIFTY", 60, "60m")
 
-    provider = ReplayMarketDataProvider(entry_snapshots["snapshots"])
+    initial = snapshot_factory(
+        spot=23000.0,
+        call_price=120.0,
+        put_price=115.0,
+    )
+    collapsed = snapshot_factory(
+        spot=23000.0,
+        call_price=40.0,
+        put_price=35.0,
+        ts=initial.ts + timedelta(seconds=1),
+    )
+
+    proposal = entry_snapshots["proposal"].model_copy(deep=True)
+
+    # Keep the synthetic proposal's instruments aligned with its actual quotes.
+    for leg in proposal.legs:
+        matches = [
+            quote.instrument
+            for quote in initial.quotes
+            if (
+                quote.instrument.underlying == leg.instrument.underlying
+                and quote.instrument.expiry == leg.instrument.expiry
+                and quote.instrument.strike == leg.instrument.strike
+                and quote.instrument.option_type == leg.instrument.option_type
+            )
+        ]
+        assert len(matches) == 1
+        leg.instrument = matches[0].model_copy(deep=True)
+
+    provider = ReplayMarketDataProvider([initial, collapsed])
     loop = decision_loop_environment.build_loop(
         provider,
-        proposal=entry_snapshots["proposal"],
+        proposal=proposal,
         approve_regime_risk=True,
     )
     loop.settings.research.enforce_strategy_eligibility = False
     loop.settings.research.enforce_feature_availability = False
     loop.settings.research.enforce_regime_policy = False
-    # This fixture's synthetic two-leg credit triggers theta decay too.
+
+    # Isolate IV collapse from the existing competing theta-decay exit.
     loop.exit_engine.exit_settings.theta_decay_target_pct = 10_000
 
-    loop.run_once()
+    first = loop.run_once()
+    assert first["status"] == "paper_filled"
+    assert first.get("exit_reason") is None
+    position_id = first["strategy_position_id"]
+
     result = loop.run_once()
+    outcomes = [
+        outcome
+        for outcome in result["position_outcomes"]
+        if outcome["strategy_position_id"] == position_id
+    ]
 
-    outcomes = result["position_outcomes"]
-
-    assert outcomes
+    assert len(outcomes) == 1
     assert outcomes[0]["status"] == "closed"
     assert outcomes[0]["selected_exit_reason"] == ExitReason.IV_COLLAPSE
 

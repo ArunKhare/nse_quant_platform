@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Protocol
+from typing import Any, Protocol, runtime_checkable
 
 
 @dataclass(frozen=True)
@@ -21,6 +21,7 @@ class DecisionContext:
     spot_instrument_token: int
 
 
+@runtime_checkable
 class EvidencePlugin(Protocol):
     name: str
 

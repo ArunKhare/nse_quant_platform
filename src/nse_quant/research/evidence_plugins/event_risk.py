@@ -32,12 +32,14 @@ class EventRiskPlugin(EvidencePlugin):
                 affected_underlyings
             FROM market_events
             WHERE event_ts >= ?
-              AND event_ts <= ?
-            ORDER BY event_ts
+                AND event_ts <= ?
+                AND ingested_at <= ?
+            ORDER BY event_ts, event_id
             """,
             [
-                as_of,
+                as_of - timedelta(minutes=self._settings.blackout_minutes_after),
                 as_of + timedelta(minutes=self._settings.blackout_minutes_before),
+                as_of,
             ],
         ).fetchall()
 

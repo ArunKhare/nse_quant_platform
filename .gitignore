@@ -227,3 +227,9 @@ data/*
 logs/*
 
 logs/live_status.json
+verify-local.ps1
+uv.lock
+README.txt
+outputs/
+output/
+test_results/

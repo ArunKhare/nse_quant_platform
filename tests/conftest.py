@@ -1,9 +1,14 @@
 from __future__ import annotations
 
+import gc
+import logging
+import os
+import shutil
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
+import duckdb
 import pandas as pd
 import pytest
 
@@ -28,9 +33,86 @@ from nse_quant.persistence.duckdb_store import DuckDBStore
 from nse_quant.research.evidence_plugins.base import DecisionContext
 from nse_quant.research.regime_risk_policy import RegimeRiskLimits
 from nse_quant.strategy.decision_loop import DecisionLoop
+from tests.data_platform.native_failure_acceptance_lab import NativeFailureLab
+
+
+def pytest_configure(config):
+    """Give each terminal run its own timestamped folder and per-worker log files."""
+    worker_id = os.environ.get("PYTEST_XDIST_WORKER", "master")
+
+    if worker_id == "master":
+        run_id = f"run_{datetime.now(UTC).strftime('%Y%m%d_%H%M%S')}_{os.getpid()}"
+        os.environ["PYTEST_RUN_ID"] = run_id
+    else:
+        run_id = os.environ.get("PYTEST_RUN_ID", f"run_fallback_{os.getppid()}")
+
+    run_dir = Path("test_results") / run_id
+    run_dir.mkdir(parents=True, exist_ok=True)
+
+    config.option.log_file = str(run_dir / f"pytest_{worker_id}.log")
+
+    if getattr(config.option, "xmlpath", None):
+        config.option.xmlpath = str(run_dir / "junit.xml")
+
+
+@pytest.hookimpl(hookwrapper=True)
+def pytest_runtest_protocol(item, nextitem):
+    """Log exact START and END markers for every test in the worker log file."""
+    worker_id = os.environ.get("PYTEST_XDIST_WORKER", "master")
+    logging.info(f"[{worker_id}] START: {item.nodeid}")
+    yield
+    logging.info(f"[{worker_id}] END:   {item.nodeid}")
+
+
+@pytest.fixture(scope="session", autouse=True)
+def cap_duckdb_resources():
+    """Bound DuckDB memory and threads for 4 workers on a 15.2 GB / 12-core machine."""
+    original_connect = duckdb.connect
+
+    def bounded_connect(*args, **kwargs):
+        config = dict(kwargs.get("config") or {})
+        config.setdefault("memory_limit", "2GB")
+        config.setdefault("threads", 2)
+        kwargs["config"] = config
+        return original_connect(*args, **kwargs)
+
+    duckdb.connect = bounded_connect
+    yield
+    duckdb.connect = original_connect
+
+
+@pytest.fixture(scope="session")
+def _seed_native_failure_lab(tmp_path_factory):
+    """Build NativeFailureLab ONCE at a fixed work_root path and snapshot it to backup_root."""
+
+    work_root = tmp_path_factory.mktemp("native_failure_lab_work")
+    backup_root = tmp_path_factory.mktemp("native_failure_lab_backup")
+
+    lab_instance = NativeFailureLab(work_root)
+    # Snapshot the clean 8 DuckDB files + artifacts while paths match work_root
+    shutil.copytree(work_root, backup_root, dirs_exist_ok=True)
+    return work_root, backup_root, lab_instance
 
 
 @pytest.fixture
+def lab(_seed_native_failure_lab):
+    """Restore the clean snapshot into the exact same work_root path in ~10ms per test."""
+    work_root, backup_root, lab_instance = _seed_native_failure_lab
+
+    # Remove any tampered/extra files created by the previous test and restore clean state
+    shutil.rmtree(work_root)
+    shutil.copytree(backup_root, work_root)
+    return lab_instance
+
+
+@pytest.fixture(autouse=True)
+def cleanup_memory_after_test():
+    """Release pandas DataFrames and DuckDB buffers immediately after each test."""
+    yield
+    gc.collect()
+
+
+@pytest.fixture(scope="session")
 def test_settings():
     settings = Settings.model_validate(get_settings().model_dump())
     settings.safety.dry_run = False
@@ -41,7 +123,7 @@ def test_settings():
     return settings
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def _seed_candles():
     def seed(
         store: DuckDBStore,
@@ -74,7 +156,7 @@ def _seed_candles():
     return seed
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def seed_spot_features():
     def seed(store: DuckDBStore, symbol: str = "NIFTY") -> None:
         now = datetime.now(UTC)
@@ -105,14 +187,26 @@ def seed_spot_features():
     return seed
 
 
+@pytest.fixture(scope="session")
+def _template_duckdb(tmp_path_factory) -> Path:
+    """Create and initialize the DuckDB schema once per xdist worker."""
+    template_path = tmp_path_factory.mktemp("db_template") / "template.duckdb"
+    store = DuckDBStore(path=template_path)
+    store.close()
+    return template_path
+
+
 @pytest.fixture
-def test_store(tmp_path: Path):
-    store = DuckDBStore(path=tmp_path / "test.duckdb")
+def test_store(_template_duckdb: Path, tmp_path: Path):
+    """Clone the pre-initialized DB file for each test to skip DDL overhead."""
+    db_path = tmp_path / "test.duckdb"
+    shutil.copy2(_template_duckdb, db_path)
+    store = DuckDBStore(path=db_path)
     yield store
     store.close()
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def expiry() -> Any:
     return (datetime.now(UTC) + timedelta(days=3)).date()
 
