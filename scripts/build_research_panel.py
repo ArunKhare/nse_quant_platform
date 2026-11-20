@@ -1,4 +1,40 @@
-"""Build the daily Milestone 2 research panel."""
+"""Build the daily Legacy research panel.
+ builds a daily research panel by combining daily spot candles, daily aggregates of spot features,
+ RV-regime results, and daily IV-surface metrics
+Legacy 1m spot candles
+  -> aggregate into daily OHLCV
+  -> daily return and range percentage
+
+Legacy spot_features
+  -> daily mean/max aggregates
+
+Legacy_run_warehouse_validate_research.py outputs
+  -> RV regimes CSV
+  -> daily IV surface CSV
+
+Merge by trade_date
+  -> daily_research_panel_NIFTY.csv
+ Output: csv
+
+Features in the panel:
+    - Daily candle features
+    - Daily spot-feature aggregates
+    - RV regime fields
+    - IV surface fields
+
+    only merges the already-produced RV-regime and daily IV-surface CSVs into the panel.
+
+pipeline order:
+    1. Capture and store 1m/15m/60m candles
+    2. build_spot_features.py
+    3. Export option_stream to Parquet
+    4. run_milestone2_research.py
+        -> iv_surface_daily_NIFTY.csv
+        -> rv_regimes_NIFTY.csv
+    5. build_research_panel.py
+        -> daily_research_panel_NIFTY.csv
+
+"""
 
 from __future__ import annotations
 
@@ -17,9 +53,7 @@ def parse_args() -> argparse.Namespace:
         "--rv-regimes",
         default=("data/research/milestone2/rv_regimes_NIFTY.csv"),
     )
-    parser.add_argument(
-        "--iv-daily", default=("data/research/milestone2/iv_surface_daily_NIFTY.csv")
-    )
+    parser.add_argument("--iv-daily", default=("data/research/milestone2/iv_surface_daily_NIFTY.csv"))
     parser.add_argument(
         "--output",
         default=("data/research/milestone2/daily_research_panel_NIFTY.csv"),
@@ -103,6 +137,7 @@ def build_spot_feature_daily(
         """,
         [symbol],
     ).fetchdf()
+    frame["trade_date"] = pd.to_datetime(frame["trade_date"]).dt.date
 
     return frame
 
@@ -146,6 +181,9 @@ def main() -> int:
 
     rv = load_csv(args.rv_regimes)
     iv = load_csv(args.iv_daily)
+
+    candles["trade_date"] = pd.to_datetime(candles["trade_date"]).dt.date
+    spot_features["trade_date"] = pd.to_datetime(spot_features["trade_date"]).dt.date
 
     panel = candles.merge(
         rv[

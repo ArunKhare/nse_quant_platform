@@ -1,4 +1,22 @@
-"""Run scalable Milestone 2 research over the Parquet warehouse."""
+"""Run scalable Milestone 2 research over the Parquet warehouse.
+
+broader research pipeline that reads the Parquet warehouse,validates
+research-grade days, builds IV surface/daily reports, classifies IV regimes,
+and optionally builds RV regimes.
+
+Produces:Parquet warehouse
+  -> warehouse validation
+  -> research-grade option-stream days
+  -> IV surface snapshot report
+  -> daily IV summary
+  -> IV regime classification
+  -> CSV reports
+  -> optional RV regime classification
+
+Combines : -> IV-only regime research + optional RV-only regime research
+
+Use: for the validated, warehouse-based research workflow and reproducible research artifacts
+"""
 
 from __future__ import annotations
 

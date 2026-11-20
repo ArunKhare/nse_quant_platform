@@ -1,4 +1,23 @@
-"""Build daily realized-volatility observations from 1-minute candles."""
+"""Build daily realized-volatility observations from 1-minute candles.
+
+Reads	                Calculates	                Writes
+1-minute spot_candles	Daily realized volatility	daily_rv_observations
+
+For each trading day, it:
+
+Calculates minute-to-minute close returns.
+
+Computes the standard deviation of those returns.
+
+Annualizes it using 252 trading days.
+
+Writes one daily RV observation.
+Ouput: daily_rv_observations
+
+uv run python scripts/build_daily_rv.py `
+  --symbol NIFTY `
+  --instrument-token 256265
+"""
 
 from __future__ import annotations
 

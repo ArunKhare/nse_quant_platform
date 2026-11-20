@@ -18,7 +18,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--symbol",
         action="append",
-        default=None,
+        default="NIFTY",
         help="Underlying symbol; repeat for multiple symbols",
     )
 

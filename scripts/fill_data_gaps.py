@@ -1,4 +1,18 @@
 """Identify and fill historical NIFTY spot-candle gaps from Kite.
+
+Detect low-candle-count days
+  -> download that day from Kite
+  -> write candles to spot_candles
+
+Aspect	            fill_data_gaps
+Trigger	            Low candle count per day
+Checks existing data	Yes
+Downloads	        Only incomplete days
+Time window	        Fixed 09:15–15:30 IST per day
+Chunking	        One day at a time
+Holiday handling	Treats weekdays as trading days; no holiday calendar
+Idempotency	        Uses INSERT OR REPLACE
+
 uv run python scripts/fill_data_gaps.py `
   --symbol NIFTY `
   --from 2026-10-29 `
@@ -66,9 +80,7 @@ def parse_args() -> argparse.Namespace:
         "--min-candles",
         type=int,
         default=1,
-        help=(
-            "Minimum expected candles per trading day; days below this are treated as incomplete"
-        ),
+        help=("Minimum expected candles per trading day; days below this are treated as incomplete"),
     )
 
     return parser.parse_args()

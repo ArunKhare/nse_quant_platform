@@ -1,4 +1,20 @@
 """Backfill explicit historical candle ranges in Kite-sized chunks.
+
+Explicit  start-to-end datetimerange
+  -> chunk into Kite limits
+  -> download candles
+  -> write candles to spot_candles
+
+Aspect	            backfill_candles.py
+Trigger	            Explicit requested range
+Checks existing data	No
+Downloads	        Entire requested range
+Time window	        User-supplied start/end datetimes
+Chunking	        Kite-sized multi-day chunks
+Holiday handling	Downloads whatever Kite returns
+Idempotency	        Uses INSERT OR REPLACE
+
+
 python scripts/backfill_candles.py --symbol NIFTY --interval 1m --from 2026-10-29 --to 2026-10-31
 """
 

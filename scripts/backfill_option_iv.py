@@ -1,4 +1,41 @@
-"""Backfill implied volatility into historical option_stream rows."""
+"""Backfill implied volatility into historical option_stream rows.
+These scripts repair historical ``option_stream`` rows when IV or Greeks were
+not calculated at capture time. They do not download market data, create
+missing snapshots, or interpolate absent prices.
+
+Recomputes implied volatility for historical option rows that have a valid LTP
+and spot but missing IV.
+
+Calculates:
+
+- ``iv``
+
+Updates:
+
+- ``option_stream.iv``
+
+Requires:
+
+- ``ltp``
+- ``spot``
+- ``expiry``
+- ``strike``
+- ``option_type``
+
+Run order
+---------
+
+.. code-block:: text
+
+    backfill_option_iv.py
+      -> backfill_option_greeks.py
+      -> backfill_iv.py
+
+uv run python scripts/backfill_option_iv.py `
+  --underlying NIFTY `
+  --from 2026-10-18T00:00:00+05:30 `
+  --to 2026-11-19T23:59:59+05:30
+"""
 
 from __future__ import annotations
 

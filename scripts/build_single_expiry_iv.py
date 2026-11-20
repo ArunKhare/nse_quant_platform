@@ -1,4 +1,28 @@
-"""Build single-expiry IV research from a validated Parquet file."""
+"""Build single-expiry IV research from a validated Parquet file.
+
+| Reads                       | Calculates                        | Writes                   |
+| One validated option_stream | Single-expiry IV surface snapshot | Two CSV research reports |
+| Parquet file                | and daily summary                 |                          |
+
+ouput:
+- single_expiry_iv_snapshots_NIFTY.csv
+- single_expiry_iv_daily_NIFTY.csv
+daily report includes:
+    median_spot
+    median_atm_iv
+    mean_atm_iv
+    min_atm_iv
+    max_atm_iv
+    median_put_call_skew
+    median_risk_reversal
+    median_butterfly
+    snapshots
+
+uv run python scripts/build_single_expiry_iv.py `
+  --parquet data/exports/underlying=NIFTY/year=2026/month=11/option_stream_2026-11-19.parquet `
+  --symbol NIFTY
+
+"""
 
 from __future__ import annotations
 

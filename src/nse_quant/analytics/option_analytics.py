@@ -1,4 +1,55 @@
-"""Black-Scholes analytics using canonical calculation primitives."""
+"""Black-Scholes analytics using canonical calculation primitives.
+Option-stream feature calculation.
+
+This module enriches each option-chain quote during live option-stream capture
+and derives chain-level Gold features after the corresponding option-stream
+snapshot has been normalized into Silver.
+
+Per-contract features
+---------------------
+
+For every option contract in a snapshot, the following analytics are calculated
+from the option quote, underlying spot, expiry, strike, option type, and
+configured risk-free rate:
+
+- ``iv``: Implied volatility.
+- ``delta``: Sensitivity of option price to underlying spot.
+- ``gamma``: Rate of change of delta with respect to spot.
+- ``vega``: Sensitivity of option price to implied volatility.
+- ``theta``: Time-decay sensitivity of option price.
+
+These values are persisted in the legacy ``option_stream`` table alongside
+``spot``, ``ltp``, ``bid``, ``ask``, ``volume``, ``oi``, ``quote_status``, and
+the raw payload.
+
+Chain-level Gold features
+-------------------------
+
+After Silver normalization, one Gold feature record is built per Silver
+revision. It aggregates the valid CE and PE observations in that snapshot:
+
+- ``atm_strike``: Strike of the call closest to spot, or the put closest to
+  spot when no usable call is available.
+- ``atm_iv``: Implied volatility of the nearest-strike call, falling back to
+  the nearest-strike put when call IV is unavailable.
+- ``call_oi``: Total open interest across CE contracts.
+- ``put_oi``: Total open interest across PE contracts.
+- ``pcr``: Put-call ratio, calculated as ``put_oi / call_oi``.
+- ``total_volume``: Total volume across all CE and PE contracts.
+- ``straddle``: ATM call LTP plus ATM put LTP.
+- ``expected_move``: ATM straddle divided by underlying spot.
+- ``observation_count``: Number of option-chain observations in the revision.
+- ``quality_status``: ``VALID`` when no observations were quarantined;
+  otherwise ``QUARANTINED``.
+ The capture runner src/nse_quant/market_data/kite_stream.py calls the analytics module
+Scope
+-----
+
+This module does not calculate daily IV, IV rank, realized volatility, SMA,
+ATR, regime classification, skew, term structure, strategy eligibility, or
+decision eligibility. Missing inputs remain null; no gap filling, publication,
+or trading authority is asserted.
+"""
 
 from __future__ import annotations
 

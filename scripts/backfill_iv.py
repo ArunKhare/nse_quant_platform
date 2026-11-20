@@ -1,8 +1,34 @@
 """Backfill underlying-level ATM IV history from option_stream.
 
+Derives underlying-level ATM IV history from already-stored option-stream IV
+values and writes observations to ``underlying_iv_observations``.
+
+Calculates:
+
+- Underlying ATM IV observations
+
+Writes:
+
+- ``underlying_iv_observations``
+
+Requires:
+
+- Existing non-null ``option_stream.iv`` values
+
+Run order
+---------
+
+.. code-block:: text
+
+    backfill_option_iv.py
+      -> backfill_option_greeks.py
+      -> backfill_iv.py
+
 uv run python scripts/backfill_iv.py --underlying NIFTY `
 --from 2026-10-23T00:00:00+05:30 `
 --to 2026-10-30T23:59:59+05:30
+
+
 """
 
 from __future__ import annotations

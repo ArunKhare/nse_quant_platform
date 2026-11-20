@@ -1,4 +1,42 @@
-"""Backfill Black-Scholes Greeks into persisted option streams."""
+"""Backfill Black-Scholes Greeks into persisted option streams.
+Recomputes Black-Scholes Greeks for historical option rows that already have a
+valid IV and spot.
+
+Calculates:
+
+- ``delta``
+- ``gamma``
+- ``vega``
+- ``theta``
+
+Updates:
+
+- ``option_stream.delta``
+- ``option_stream.gamma``
+- ``option_stream.vega``
+- ``option_stream.theta`
+
+Requires:
+
+- ``iv``
+- ``spot``
+- ``expiry``
+- ``strike``
+- ``option_type``
+Run order
+---------
+
+.. code-block:: text
+
+    backfill_option_iv.py
+      -> backfill_option_greeks.py
+      -> backfill_iv.py
+
+uv run python scripts/backfill_option_greeks.py `
+  --underlying NIFTY `
+  --trade-date 2026-11-19 `
+  --risk-free-rate 0.07
+"""
 
 from __future__ import annotations
 

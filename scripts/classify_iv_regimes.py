@@ -1,4 +1,15 @@
-"""Classify daily IV regimes from IV surface research data."""
+"""Classify daily IV regimes from IV surface research data.
+ - IV-only classifier that reads legacy option_stream and can persist IV regimes
+ Produces: option_stream
+  -> IV surface snapshot report
+  -> daily IV summary
+  -> IV regime classification
+  -> CSV report
+  -> optional market_regimes persistence
+
+   -> IV-only regime
+Use:  for a quick, legacy-DB IV-regime classification and optional persistence.
+"""
 
 from __future__ import annotations
 

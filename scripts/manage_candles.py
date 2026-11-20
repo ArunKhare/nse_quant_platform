@@ -1,4 +1,41 @@
-"""Canonical CLI for aggregation of persisted one-minute spot candles."""
+"""Canonical CLI for aggregation of persisted one-minute spot candles.
+Existing 1m spot candles
+  -> aggregate into 5m / 15m / 30m / 60m candles
+  -> aggregate into daily candles
+  -> write results to spot_candles
+
+| Command            | Input                | Output                                                      |
+| ------------------ | -------------------- | ----------------------------------------------------------- |
+| aggregate-intraday | One trading date     | 5m, 15m, 30m, and/or 60m candles. scripts/manage_candles.py |
+| aggregate-daily    | Inclusive date range | Daily candles. scripts/manage_candles.py                    |
+
+Build all default intraday intervals for one date:
+uv run python scripts/manage_candles.py aggregate-intraday `
+  --symbol NIFTY `
+  --trade-date 2026-11-19
+
+Build only selected intervals:
+uv run python scripts/manage_candles.py aggregate-intraday `
+  --symbol NIFTY `
+  --trade-date 2026-11-19 `
+  --intervals 15m,60m
+
+Build daily candles for a date range:
+uv run python scripts/manage_candles.py aggregate-daily `
+  --symbol NIFTY `
+  --start-date 2026-08-03 `
+  --end-date 2026-11-19
+
+It does not:
+- Download candles from Kite.
+- Detect missing candles.
+- Fill gaps.
+- Backfill history.
+- Interpolate missing bars.
+- Build spot features.
+- Export Parquet.
+- Write Medallion Bronze, Silver, or Gold
+"""
 
 from __future__ import annotations
 
@@ -57,8 +94,7 @@ def main(argv: list[str] | None = None) -> int:
                 interval=interval,
             )
             print(
-                f"{args.symbol}: built {count} {interval} candles "
-                f"for {args.trade_date.isoformat()}",
+                f"{args.symbol}: built {count} {interval} candles for {args.trade_date.isoformat()}",
             )
         return 0
     finally:

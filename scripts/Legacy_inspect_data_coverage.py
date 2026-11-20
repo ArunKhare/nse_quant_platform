@@ -10,8 +10,8 @@ Or restrict the warehouse report:
 powershell
 uv run python scripts/inspect_data_coverage.py `
   --underlying NIFTY `
-  --start-date 2026-10-29 `
-  --end-date 2026-10-29 `
+  --start-date 2026-10-01 `
+  --end-date 2026-11-19 `
   --min-snapshots 30 `
   --min-iv-coverage 0.80
 

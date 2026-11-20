@@ -1,4 +1,41 @@
-"""Export persisted data into the partitioned Parquet warehouse."""
+"""Export persisted Legacy db data into the partitioned Parquet warehouse.
+Command         Source table   Output
+option-stream  option_stream  One Parquet file for the selected underlying and date.
+market-regimes market_regimes One Parquet file for each available regime day in the range.
+source: data/nse_quant.duckdb
+output: data/exports
+
+Option-stream export
+-------------------
+- after a trading day’s option_stream rows are complete:
+
+uv run python scripts/export_warehouse.py option-stream `
+  --underlying NIFTY `
+  --date 2026-11-19
+
+Market-regime export
+--------------------
+Use this after build_daily_market_regimes.py has written regimes:
+uv run python scripts/export_warehouse.py market-regimes `
+  --underlying NIFTY `
+  --start-date 2026-10-18 `
+  --end-date 2026-11-19
+
+Important limitations
+- It exports one option-stream day at a time; there is no bulk date-range option-stream command.
+- It does not export spot_candles, spot_features, daily_rv_observations, or underlying_iv_observations.
+- It does not validate IV coverage or snapshot count; that validation is performed by
+    Legacy_run_warehouse_validate_research.py after export.
+
+uses the legacy DuckDB store, not Medallion Bronze/Silver/Gold.
+
+Option-Stream export contains trading day's rows per symbol:
+[run_id,ts,underlying,expiry,strike,option_type,tradingsymbol,instrument_token,lot_size,spot,ltp,
+bid,ask,volume,oi,iv,delta,gamma,vega,theta,quote_status,payload_json]
+
+The regime export contains the latest regime row per symbol for each date:
+[ts, trend_regime, volatility_regime, iv_regime, regime, features]
+"""
 
 from __future__ import annotations
 
