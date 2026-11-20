@@ -233,7 +233,7 @@ def inspect_warehouse(
 def main() -> int:
     args = parse_args()
 
-    store = DuckDBStore()
+    store = DuckDBStore(read_only=True)
 
     try:
         inspect_database(store)

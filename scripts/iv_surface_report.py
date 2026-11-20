@@ -1,4 +1,135 @@
-"""Build IV surface and term-structure research reports."""
+"""Build multi-expiry IV surface and term-structure research reports.
+
+This script reads eligible option-stream observations from the legacy DuckDB
+store, builds snapshot-level IV-surface metrics, aggregates them into daily
+research summaries, and writes two CSV reports.
+
+It is a research-only reporting tool. It does not acquire live market data,
+modify ``option_stream``, build Medallion Bronze/Silver/Gold data, authorize
+execution, or assert decision eligibility.
+
+Data flow
+---------
+
+.. code-block:: text
+
+    option_stream
+      -> eligible IV/delta observations
+      -> multi-expiry snapshot IV surface
+      -> daily IV summary
+      -> CSV research reports
+
+Required inputs
+---------------
+
+For each option-stream row, the script requires:
+
+- ``ts``
+- ``underlying``
+- ``expiry``
+- ``strike``
+- ``option_type``
+- ``ltp``
+- ``spot``
+- ``iv``
+- ``delta``
+
+Rows are eligible only when:
+
+- The underlying matches ``--underlying``.
+- ``iv`` is non-null.
+- ``delta`` is non-null.
+- ``ltp`` is greater than zero.
+
+Snapshot requirements
+---------------------
+
+A timestamp produces an IV-surface snapshot only when it contains at least two
+distinct expiries and both the near and next expiry have an available ATM IV.
+
+For each eligible near/next expiry pair, the script calculates:
+
+- ``atm_iv_near``: Mean IV of the CE and PE contracts at the strike nearest
+  to spot in the near expiry.
+- ``atm_iv_next``: Mean IV of the CE and PE contracts at the strike nearest
+  to spot in the next expiry.
+- ``term_structure``: ``atm_iv_next - atm_iv_near``.
+- ``put_call_skew``: IV of the out-of-the-money put nearest to spot minus IV
+  of the out-of-the-money call nearest to spot.
+- ``risk_reversal_25d``: IV of the call whose absolute delta is closest to
+  0.25 minus IV of the put whose absolute delta is closest to 0.25.
+- ``butterfly_25d``: ``2 * ATM call IV - 2 * 25-delta call IV``.
+
+Daily summary
+-------------
+
+The daily report aggregates snapshot-level metrics by trading date using
+medians:
+
+- ``median_spot``
+- ``median_atm_iv_near``
+- ``median_atm_iv_next``
+- ``median_term_structure``
+- ``median_put_call_skew``
+- ``median_risk_reversal``
+- ``median_butterfly``
+- ``snapshots``: Number of distinct IV-surface snapshot timestamps.
+
+Output files
+------------
+
+The script writes:
+
+.. code-block:: text
+
+    <output-dir>/iv_surface_snapshots_<underlying>.csv
+    <output-dir>/iv_surface_daily_<underlying>.csv
+
+Command-line interface
+----------------------
+
+.. code-block:: powershell
+
+    uv run python scripts/iv_surface_report.py `
+      --underlying NIFTY `
+      --from 2026-10-18 `
+      --to 2026-11-19 `
+      --output-dir data/research
+
+Limitations
+-----------
+
+- A date with only one expiry cannot produce an IV-surface snapshot.
+- A date with missing delta cannot produce risk-reversal or butterfly metrics.
+- A date with missing IV or non-positive LTP is excluded from ATM IV and skew
+  calculations.
+- The script does not fill, interpolate, or synthesize missing IV, delta,
+  prices, expiries, or contracts.
+- It does not calculate daily IV rank, realized volatility, market regimes, or
+  decision eligibility.
+
+Examples
+--------
+
+Build reports for NIFTY:
+
+.. code-block:: powershell
+
+    uv run python scripts/iv_surface_report.py `
+      --underlying NIFTY `
+      --from 2026-10-18 `
+      --to 2026-11-19
+
+Write reports to the Milestone 2 research directory:
+
+.. code-block:: powershell
+
+    uv run python scripts/iv_surface_report.py `
+      --underlying NIFTY `
+      --from 2026-10-18 `
+      --to 2026-11-19 `
+      --output-dir data/research/milestone2
+"""
 
 from __future__ import annotations
 

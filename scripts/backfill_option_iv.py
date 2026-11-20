@@ -96,6 +96,7 @@ def main() -> int:
           AND ltp IS NOT NULL
           AND ltp > 0
           AND spot IS NOT NULL
+          AND iv is NULL
         ORDER BY ts
         """,
         [args.underlying, from_dt, to_dt],
