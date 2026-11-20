@@ -7,6 +7,8 @@ from datetime import UTC, datetime, timedelta
 
 from nse_quant.features.feature_service import SpotFeatureSnapshot
 
+MIN_TREND_STRENGTH = 0.0005
+
 
 @dataclass(frozen=True)
 class FeatureGateResult:
@@ -36,6 +38,7 @@ class SpotFeatureGate:
         self._require_trend_alignment = require_trend_alignment
         self._max_age_seconds = max_age_seconds
         self._index_symbols = set(index_symbols)
+        self._min_trend_strength = MIN_TREND_STRENGTH
 
     def evaluate(
         self,
@@ -59,9 +62,7 @@ class SpotFeatureGate:
         if rv is not None and rv <= 0:
             rv = None
         checks["realized_vol_available"] = rv is not None
-        checks["realized_vol_in_range"] = (
-            rv is not None and self._min_realized_vol <= rv <= self._max_realized_vol
-        )
+        checks["realized_vol_in_range"] = rv is not None and self._min_realized_vol <= rv <= self._max_realized_vol
         if not checks["realized_vol_in_range"]:
             reasons.append("realized_vol_out_of_range")
 
@@ -85,13 +86,16 @@ class SpotFeatureGate:
         trend_15m = snapshot.trend_15m
         trend_60m = snapshot.trend_60m
 
+        trend_15m_directional = trend_15m is not None and abs(trend_15m) >= self._min_trend_strength
+
+        trend_60m_directional = trend_60m is not None and abs(trend_60m) >= self._min_trend_strength
         checks["trend_context_available"] = trend_15m is not None and trend_60m is not None
 
         if self._require_trend_alignment:
             checks["trend_aligned"] = (
                 trend_15m is not None
                 and trend_60m is not None
-                and (trend_15m >= 0) == (trend_60m >= 0)
+                and (not trend_15m_directional or not trend_60m_directional or (trend_15m >= 0) == (trend_60m >= 0))
             )
             if not checks["trend_aligned"]:
                 reasons.append("multi_timeframe_trend_misaligned")

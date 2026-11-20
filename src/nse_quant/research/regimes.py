@@ -104,9 +104,7 @@ def classify_regime(
             "close": close,
             "sma50": sma,
             "atr14": atr,
-            "normalized_trend_distance": (
-                (close - sma) / atr if sma is not None and atr and atr > 0 else None
-            ),
+            "normalized_trend_distance": ((close - sma) / atr if sma is not None and atr and atr > 0 else None),
             "realized_volatility": realized_volatility,
             "rv_percentile": rv_percentile,
             "iv_rank": iv_rank,

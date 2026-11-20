@@ -118,13 +118,7 @@ Implied-volatility features
 ATR feature
 ~~~~~~~~~~~
 
-- ``atr14``: The latest available 1-minute ATR(14) for the trading date, read
-  from ``spot_features.atr_1m_14``.
-
-  .. important::
-      This is **not** a conventional daily ATR calculated from daily OHLC
-      bars. It is the final available 1-minute ATR(14) observation for that
-      date.
+- ``atr14``:  "14-day average true range from daily OHLC candles".
 
 Regimes classified
 ------------------
@@ -265,7 +259,7 @@ from __future__ import annotations
 import argparse
 import json
 from datetime import date, datetime, timedelta
-from typing import cast
+from typing import Any, cast
 
 import pandas as pd
 
@@ -320,6 +314,9 @@ def _load_daily_candles(
         """
         SELECT
             ts,
+            open,
+            high,
+            low,
             close
         FROM spot_candles
         WHERE symbol = ?
@@ -341,6 +338,25 @@ def _load_daily_candles(
 
     daily["sma50"] = daily["close"].rolling(SMA_WINDOW, min_periods=SMA_WINDOW).mean()
     daily["returns"] = daily["close"].pct_change()
+    daily["previous_close"] = daily["close"].shift(1)
+
+    daily["true_range"] = pd.concat(
+        [
+            daily["high"] - daily["low"],
+            (daily["high"] - daily["previous_close"]).abs(),
+            (daily["low"] - daily["previous_close"]).abs(),
+        ],
+        axis=1,
+    ).max(axis=1)
+
+    daily["atr14"] = (
+        daily["true_range"]
+        .rolling(
+            window=14,
+            min_periods=14,
+        )
+        .mean()
+    )
     daily["realized_volatility"] = daily["returns"].rolling(RV_WINDOW, min_periods=RV_WINDOW).std(ddof=1) * (252**0.5)
     daily["rv_percentile"] = rolling_percentile(
         daily["realized_volatility"],
@@ -402,35 +418,6 @@ def _load_iv_history(
     return iv_history
 
 
-def _load_atr_by_date(
-    store: DuckDBStore,
-    *,
-    symbol: str,
-    end_date: date,
-) -> dict[date, float]:
-    atr = store.conn.execute(
-        """
-        SELECT
-            ts,
-            atr_1m_14
-        FROM spot_features
-        WHERE symbol = ?
-          AND atr_1m_14 IS NOT NULL
-          AND CAST(ts AS DATE) <= ?
-        ORDER BY ts
-        """,
-        [symbol, end_date],
-    ).fetchdf()
-
-    if atr.empty:
-        return {}
-
-    atr["trading_date"] = pd.to_datetime(atr["ts"], utc=True).dt.tz_convert("Asia/Kolkata").dt.date
-    latest_atr = atr.groupby("trading_date", as_index=False).last()
-
-    return {cast(date, row.trading_date): float(cast(float, row.atr_1m_14)) for row in latest_atr.itertuples()}
-
-
 def main() -> int:
     args = parse_args()
 
@@ -480,12 +467,6 @@ def main() -> int:
                 max(iv_percentiles) if iv_percentiles else None,
             )
 
-        atr_by_date = _load_atr_by_date(
-            store,
-            symbol=args.symbol,
-            end_date=end_date,
-        )
-
         target_daily = daily[(daily["trading_date"] >= requested_start) & (daily["trading_date"] <= end_date)]
 
         if target_daily.empty:
@@ -500,12 +481,16 @@ def main() -> int:
             close = float(cast(float, row.close))
 
             sma50 = float(cast(float, row.sma50)) if pd.notna(row.sma50) else None
+
             realized_volatility = (
                 float(cast(float, row.realized_volatility)) if pd.notna(row.realized_volatility) else None
             )
+
             rv_percentile = float(cast(float, row.rv_percentile)) if pd.notna(row.rv_percentile) else None
+
             iv_rank = iv_percentiles.get(trading_date)
-            atr14 = atr_by_date.get(trading_date)
+
+            atr14 = float(cast(float, row.atr14)) if pd.notna(row.atr14) else None
 
             if sma50 is None or realized_volatility is None:
                 skipped += 1
@@ -521,7 +506,7 @@ def main() -> int:
                 iv_percentile=iv_rank,
             )
 
-            features = dict(classification.features)
+            features: dict[str, Any] = dict(classification.features)
             features["build_contract"] = {
                 "script_version": SCRIPT_VERSION,
                 "requested_start": requested_start.isoformat(),
@@ -533,8 +518,8 @@ def main() -> int:
                 "rv_percentile_window": RV_PERCENTILE_WINDOW,
                 "iv_rank_window": IV_RANK_WINDOW,
                 "iv_rank_min_periods": IV_RANK_MIN_PERIODS,
-                "atr_source": "spot_features.atr_1m_14",
-                "atr_definition": "latest available 1-minute ATR(14) per trading date",
+                "atr_source": "spot_candles interval='day'",
+                "atr_definition": "14-day average true range from daily OHLC candles",
                 "dry_run": args.dry_run,
             }
 
