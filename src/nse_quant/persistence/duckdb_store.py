@@ -17,8 +17,9 @@ from nse_quant.analytics.implied_volatility import (
     time_to_expiry_years,
 )
 from nse_quant.core.constants import IST
-from nse_quant.core.models import ChainSnapshot
+from nse_quant.core.models import ChainSnapshot, Instrument, OptionType
 from nse_quant.core.settings import get_settings
+from nse_quant.market_data import chain
 
 
 def _as_json_object(value: Any) -> Any:
@@ -538,6 +539,93 @@ class DuckDBStore:
             )
         """
         self.conn.execute(EVENT_REACTIONS)
+
+        self.conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS option_chain_snapshots (
+                underlying VARCHAR NOT NULL,
+                ts TIMESTAMPTZ NOT NULL,
+                run_id VARCHAR NOT NULL,
+                spot DOUBLE,
+                expiry_count INTEGER NOT NULL,
+                quote_count INTEGER NOT NULL,
+                complete BOOLEAN NOT NULL,
+                near_expiry DATE,
+                deferred_expiry DATE,
+                completeness JSON,
+                PRIMARY KEY (underlying, ts)
+            )
+            """
+        )
+
+        self.conn.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_option_chain_snapshots_lookup
+            ON option_chain_snapshots (underlying, ts DESC)
+            """
+        )
+
+        self.conn.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_option_stream_ts_expiry
+            ON option_stream (underlying, ts, expiry)
+            """
+        )
+
+    def write_chain_snapshot_summary(
+        self,
+        *,
+        run_id: str,
+        snapshots: list[ChainSnapshot],
+    ) -> int:
+        if not snapshots:
+            return 0
+
+        underlying = snapshots[0].underlying
+        ts = snapshots[0].ts
+        spot = snapshots[0].spot
+        expiries = sorted({snapshot.expiry for snapshot in snapshots})
+        quote_count = sum(len(snapshot.quotes) for snapshot in snapshots)
+
+        completeness = {
+            snapshot.expiry.isoformat(): {
+                "quote_count": len(snapshot.quotes),
+                "has_atm_iv": any(quote.iv is not None for quote in snapshot.quotes),
+                "has_greeks": any(
+                    quote.delta is not None
+                    and quote.gamma is not None
+                    and quote.vega is not None
+                    and quote.theta is not None
+                    for quote in snapshot.quotes
+                ),
+            }
+            for snapshot in snapshots
+        }
+
+        complete = len(expiries) >= self.settings.analytics.expiries_per_snapshot and all(
+            item["has_atm_iv"] and item["has_greeks"] for item in completeness.values()
+        )
+
+        self.conn.execute(
+            """
+            INSERT OR REPLACE INTO option_chain_snapshots VALUES (
+                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+            )
+            """,
+            [
+                underlying,
+                ts,
+                run_id,
+                spot,
+                len(expiries),
+                quote_count,
+                complete,
+                expiries[0] if expiries else None,
+                expiries[1] if len(expiries) > 1 else None,
+                json.dumps(completeness, default=str),
+            ],
+        )
+        return 1
 
     def _compute_option_iv(
         self,
@@ -1847,3 +1935,276 @@ class DuckDBStore:
                 ],
             },
         }
+
+    @staticmethod
+    def _optional_float(value: Any) -> float | None:
+        if value is None:
+            return None
+        return float(value)
+
+    def latest_complete_chain_snapshots(
+        self,
+        underlying: str,
+        *,
+        required_expiries: int = 2,
+        max_age_seconds: float | None = None,
+    ) -> list[ChainSnapshot]:
+        """Return the latest complete persisted option-chain snapshots.
+
+        Uses the compact option_chain_snapshots header when available. Falls
+        back to option_stream-derived completeness when no header exists.
+        """
+        max_age_seconds = max_age_seconds if max_age_seconds is not None else self.settings.runtime.stale_seconds
+
+        max_age_seconds_int = int(max_age_seconds)
+        cutoff = datetime.now(UTC) - timedelta(seconds=max_age_seconds_int)
+
+        header = self.conn.execute(
+            """
+            SELECT
+                ts,
+                spot
+            FROM option_chain_snapshots
+            WHERE underlying = ?
+              AND complete = TRUE
+              AND expiry_count >= ?
+              AND ts >= ?
+            ORDER BY ts DESC
+            LIMIT 1
+            """,
+            [underlying, required_expiries, cutoff],
+        ).fetchone()
+
+        if header is not None:
+            snapshot_ts = header[0]
+            spot = float(header[1])
+
+            rows = self._fetch_option_rows_for_snapshot(
+                underlying=underlying,
+                snapshot_ts=snapshot_ts,
+            )
+
+            if rows:
+                return self._build_chain_snapshots_from_rows(
+                    rows=rows,
+                    underlying=underlying,
+                    snapshot_ts=snapshot_ts,
+                    spot=spot,
+                )
+
+            return []
+
+        return self._latest_complete_chain_snapshots_from_option_stream(
+            underlying=underlying,
+            required_expiries=required_expiries,
+            max_age_seconds=max_age_seconds_int,
+        )
+
+    def _latest_complete_chain_snapshots_from_option_stream(
+        self,
+        *,
+        underlying: str,
+        required_expiries: int,
+        max_age_seconds: int,
+    ) -> list[ChainSnapshot]:
+        """Legacy fallback: derive completeness directly from option_stream."""
+        cutoff = datetime.now(UTC) - timedelta(seconds=max_age_seconds)
+
+        snapshot_row = self.conn.execute(
+            """
+            WITH expiry_stats AS (
+                SELECT
+                    ts,
+                    expiry,
+                    COUNT(*) AS quote_count,
+                    SUM(
+                        CASE
+                            WHEN iv IS NOT NULL THEN 1
+                            ELSE 0
+                        END
+                    ) AS iv_count,
+                    SUM(
+                        CASE
+                            WHEN delta IS NOT NULL
+                            AND gamma IS NOT NULL
+                            AND vega IS NOT NULL
+                            AND theta IS NOT NULL
+                            THEN 1
+                            ELSE 0
+                        END
+                    ) AS greeks_count
+                FROM option_stream
+                WHERE underlying = ?
+                AND ts >= ?
+                GROUP BY ts, expiry
+            ),
+            eligible_expiries AS (
+                SELECT
+                    ts,
+                    expiry
+                FROM expiry_stats
+                WHERE iv_count > 0
+                AND greeks_count > 0
+            ),
+            eligible_snapshots AS (
+                SELECT
+                    ts,
+                    COUNT(DISTINCT expiry) AS expiry_count
+                FROM eligible_expiries
+                GROUP BY ts
+                HAVING COUNT(DISTINCT expiry) >= ?
+            )
+            SELECT
+                ts
+            FROM eligible_snapshots
+            ORDER BY ts DESC
+            LIMIT 1
+            """,
+            [underlying, cutoff, required_expiries],
+        ).fetchone()
+
+        if snapshot_row is None:
+            return []
+
+        snapshot_ts = snapshot_row[0]
+
+        spot_row = self.conn.execute(
+            """
+            SELECT
+                spot
+            FROM option_stream
+            WHERE underlying = ?
+            AND ts = ?
+            AND spot IS NOT NULL
+            LIMIT 1
+            """,
+            [underlying, snapshot_ts],
+        ).fetchone()
+
+        if spot_row is None or spot_row[0] is None:
+            return []
+
+        spot = float(spot_row[0])
+
+        rows = self._fetch_option_rows_for_snapshot(
+            underlying=underlying,
+            snapshot_ts=snapshot_ts,
+        )
+
+        if not rows:
+            return []
+
+        return self._build_chain_snapshots_from_rows(
+            rows=rows,
+            underlying=underlying,
+            snapshot_ts=snapshot_ts,
+            spot=spot,
+        )
+
+    def _fetch_option_rows_for_snapshot(
+        self,
+        *,
+        underlying: str,
+        snapshot_ts: datetime,
+    ) -> list[tuple[Any, ...]]:
+        """Fetch only the numeric fields needed to rebuild chain snapshots."""
+        return self.conn.execute(
+            """
+            SELECT
+                ts,
+                expiry,
+                instrument_token,
+                tradingsymbol,
+                strike,
+                option_type,
+                lot_size,
+                spot,
+                ltp,
+                bid,
+                ask,
+                volume,
+                oi,
+                iv,
+                delta,
+                gamma,
+                vega,
+                theta,
+                quote_status
+            FROM option_stream
+            WHERE underlying = ?
+            AND ts = ?
+            ORDER BY
+                expiry,
+                strike,
+                option_type
+            """,
+            [underlying, snapshot_ts],
+        ).fetchall()
+
+    def _build_chain_snapshots_from_rows(
+        self,
+        *,
+        rows: list[tuple[Any, ...]],
+        underlying: str,
+        snapshot_ts: datetime,
+        spot: float,
+    ) -> list[ChainSnapshot]:
+        """Group persisted option rows by expiry and rebuild chain snapshots."""
+        grouped: dict[date, list[tuple[Any, ...]]] = {}
+
+        for row in rows:
+            expiry = row[1]
+            grouped.setdefault(expiry, []).append(row)
+
+        snapshots: list[ChainSnapshot] = []
+
+        for expiry, expiry_rows in sorted(grouped.items()):
+            instruments: list[Instrument] = []
+            ticks: dict[int, dict[str, Any]] = {}
+
+            for row in expiry_rows:
+                instrument_token = int(row[2])
+
+                instrument = Instrument(
+                    tradingsymbol=str(row[3]),
+                    instrument_token=instrument_token,
+                    underlying=underlying,
+                    expiry=expiry,
+                    strike=float(row[4]),
+                    option_type=OptionType(str(row[5])),
+                    lot_size=int(row[6]),
+                )
+
+                instruments.append(instrument)
+
+                ticks[instrument_token] = {
+                    "ltp": self._optional_float(row[8]),
+                    "bid": self._optional_float(row[9]),
+                    "ask": self._optional_float(row[10]),
+                    "volume": row[11],
+                    "oi": row[12],
+                }
+
+            snapshot = chain.build_snapshot(
+                underlying=underlying,
+                spot=spot,
+                expiry=expiry,
+                instruments=instruments,
+                ticks=ticks,
+                now=snapshot_ts,
+            )
+
+            snapshots.append(snapshot)
+        if not snapshots:
+            return []
+
+        combined_quotes = [quote for snapshot in snapshots for quote in snapshot.quotes]
+
+        combined_snapshot = snapshots[0].model_copy(
+            update={
+                "quotes": combined_quotes,
+                "expiry": min(snapshot.expiry for snapshot in snapshots),
+            }
+        )
+
+        return [combined_snapshot]

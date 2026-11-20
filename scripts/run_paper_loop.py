@@ -8,14 +8,16 @@ from __future__ import annotations
 
 import argparse
 import json
+import threading
 import time
 import traceback
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol
 from uuid import uuid4
 from zoneinfo import ZoneInfo
 
+from nse_quant.analytics.option_analytics import enrich_quote
 from nse_quant.core.market_calendar import is_market_open_now
 from nse_quant.core.settings import get_settings
 from nse_quant.execution.broker import PaperBroker
@@ -40,6 +42,64 @@ def to_ist(value: datetime) -> datetime:
     if value.tzinfo is None:
         value = value.replace(tzinfo=UTC)
     return value.astimezone(IST)
+
+
+CHAIN_CAPTURE_INTERVAL_SECONDS = 30
+
+
+class ChainSnapshotProvider(Protocol):
+    def get_chain_snapshots(self) -> list[Any]: ...
+
+
+def capture_chain_snapshots(
+    *,
+    provider: ChainSnapshotProvider,
+    store: DuckDBStore,
+    run_id: str,
+    settings: Any,
+    db_lock: threading.RLock,
+) -> int:
+    """Capture, enrich, persist, and summarize the current option chains."""
+    snapshots = provider.get_chain_snapshots()
+
+    if not snapshots:
+        print("No chain snapshots returned by provider")
+        return 0
+
+    snapshot_ts = datetime.now(UTC)
+
+    for snapshot in snapshots:
+        snapshot.ts = snapshot_ts
+
+    for snapshot in snapshots:
+        for quote in snapshot.quotes:
+            enrich_quote(
+                quote=quote,
+                spot=snapshot.spot,
+                expiry=snapshot.expiry,
+                now=snapshot_ts,
+                rate=settings.analytics.risk_free_rate,
+            )
+
+    with db_lock:
+        for snapshot in snapshots:
+            store.write_option_stream(
+                run_id,
+                snapshot,
+                {},
+            )
+
+        store.write_chain_snapshot_summary(
+            run_id=run_id,
+            snapshots=snapshots,
+        )
+
+    print(
+        "Captured chain snapshots:",
+        [(str(snapshot.expiry), len(snapshot.quotes)) for snapshot in snapshots],
+    )
+
+    return len(snapshots)
 
 
 def parse_args() -> argparse.Namespace:
@@ -75,27 +135,20 @@ def parse_args() -> argparse.Namespace:
         "--warmup-from",
         dest="warmup_from",
         default=None,
-        help=(
-            "Optional ISO start datetime for explicit historical "
-            "candle warm-up; no default lookback is applied"
-        ),
+        help=("Optional ISO start datetime for explicit historical candle warm-up; no default lookback is applied"),
     )
     parser.add_argument(
         "--warmup-to",
         dest="warmup_to",
         default=None,
         help=(
-            "Optional ISO end datetime for explicit historical "
-            "candle warm-up; required when --warmup-from is supplied"
+            "Optional ISO end datetime for explicit historical candle warm-up; required when --warmup-from is supplied"
         ),
     )
     parser.add_argument(
         "--allow-stale-features",
         action="store_true",
-        help=(
-            "Allow stale historical spot features during out-of-hours "
-            "testing. Never use for live decision-making."
-        ),
+        help=("Allow stale historical spot features during out-of-hours testing. Never use for live decision-making."),
     )
     parser.add_argument(
         "--spot-token",
@@ -120,9 +173,7 @@ def main() -> int:
         provider = ReplayMarketDataProvider.from_json(
             args.replay_file,
             spot_instrument_tokens=(
-                {settings.market_data.default_symbol: args.spot_token}
-                if args.spot_token is not None
-                else None
+                {settings.market_data.default_symbol: args.spot_token} if args.spot_token is not None else None
             ),
         )
 
@@ -167,11 +218,20 @@ def main() -> int:
     intervals = list(settings.market_data.candle_intervals)
 
     store = DuckDBStore()
+    db_lock = threading.RLock()
     broker = PaperBroker()
     kill_switch = KillSwitch()
     notifier = Notifier() if settings.notifier.enabled else NullNotifier()
     run_id = uuid4().hex
     decision = DecisionRepository(store.conn)
+
+    print(
+        "provider:",
+        type(provider).__module__,
+        type(provider).__name__,
+        "has_resolver:",
+        hasattr(provider, "resolve_spot_instrument_token"),
+    )
 
     loop = DecisionLoop(
         store=store,
@@ -179,6 +239,9 @@ def main() -> int:
         broker=broker,
         run_id=run_id,
         settings=settings,
+        spot_instrument_token_resolver=(
+            provider.resolve_spot_instrument_token if isinstance(provider, KiteMarketDataProvider) else None
+        ),
         feature_gate=feature_gate,
     )
 
@@ -215,11 +278,7 @@ def main() -> int:
     failure_error: BaseException | None = None
 
     try:
-        if (
-            isinstance(provider, KiteMarketDataProvider)
-            and warmup_from is not None
-            and warmup_to is not None
-        ):
+        if isinstance(provider, KiteMarketDataProvider) and warmup_from is not None and warmup_to is not None:
             for symbol in symbols:
                 if spot_token is None:
                     spot_token = provider.resolve_spot_instrument_token(primary_symbol)
@@ -252,6 +311,54 @@ def main() -> int:
                 "scripts/import_candle.py."
             )
 
+        stop_capture = threading.Event()
+
+        def chain_capture_worker() -> None:
+            next_capture = 0.0
+
+            while not stop_capture.is_set():
+                # if not isinstance(provider, KiteMarketDataProvider):  threaded capture only runs for live Kite data
+                # return
+                if not is_market_open_now():
+                    time.sleep(1)
+                    continue
+
+                if time.monotonic() < next_capture:
+                    time.sleep(1)
+                    continue
+
+                capture_started = time.perf_counter()
+
+                try:
+                    captured_expiries = capture_chain_snapshots(
+                        provider=provider,
+                        store=store,
+                        run_id=run_id,
+                        settings=settings,
+                        db_lock=db_lock,
+                    )
+
+                    capture_elapsed = time.perf_counter() - capture_started
+
+                    print(
+                        "Chain capture elapsed seconds:",
+                        f"{capture_elapsed:.3f}",
+                        "expiries:",
+                        captured_expiries,
+                    )
+
+                except Exception:  # noqa: BLE001
+                    print("Chain capture failed:")
+                    traceback.print_exc()
+
+                next_capture = time.monotonic() + CHAIN_CAPTURE_INTERVAL_SECONDS
+
+        capture_thread = threading.Thread(
+            target=chain_capture_worker,
+            name="chain-capture-worker",
+            daemon=True,
+        )
+        capture_thread.start()
         end_time = time.monotonic() + args.seconds
         result: dict[str, Any] = {}
         candle_minute: datetime | None = None
@@ -285,37 +392,38 @@ def main() -> int:
 
                     spot_price = provider.get_spot()
 
-                    rows_written = store.write_spot_candles(
-                        candles=[
-                            {
-                                "date": candle_minute,
-                                "open": spot_price,
-                                "high": spot_price,
-                                "low": spot_price,
-                                "close": spot_price,
-                                "volume": 0,
-                                "oi": None,
-                            }
-                        ],
-                        symbol=primary_symbol,
-                        instrument_token=spot_token,
-                        interval="1m",
-                    )
+                    with db_lock:
+                        rows_written = store.write_spot_candles(
+                            candles=[
+                                {
+                                    "date": candle_minute,
+                                    "open": spot_price,
+                                    "high": spot_price,
+                                    "low": spot_price,
+                                    "close": spot_price,
+                                    "volume": 0,
+                                    "oi": None,
+                                }
+                            ],
+                            symbol=primary_symbol,
+                            instrument_token=spot_token,
+                            interval="1m",
+                        )
 
-                    print(
-                        "Persisted 1m candle:",
-                        candle_minute_ist.isoformat(),
-                        "close:",
-                        spot_price,
-                        "rows:",
-                        rows_written,
-                    )
+                        print(
+                            "Persisted 1m candle:",
+                            candle_minute_ist.isoformat(),
+                            "close:",
+                            spot_price,
+                            "rows:",
+                            rows_written,
+                        )
 
-                    store.refresh_latest_spot_feature(
-                        symbol=primary_symbol,
-                        instrument_token=spot_token,
-                        as_of=now,
-                    )
+                        store.refresh_latest_spot_feature(
+                            symbol=primary_symbol,
+                            instrument_token=spot_token,
+                            as_of=now,
+                        )
 
                 except Exception:  # noqa:BLE001
                     print("Spot candle capture failed:")
@@ -336,7 +444,8 @@ def main() -> int:
                 )
 
             try:
-                result = loop.run_once()
+                with db_lock:
+                    result = loop.run_once()
                 print(result)
 
             except ReplayExhaustedError:
@@ -431,6 +540,8 @@ def main() -> int:
         )
 
     finally:
+        stop_capture.set()
+        capture_thread.join(timeout=5)
         end_status = "failed" if loop_failed and failure_error is not None else "completed"
 
         notifier.send(

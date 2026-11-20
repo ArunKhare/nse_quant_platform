@@ -109,8 +109,12 @@ def main() -> int:
             with lock:
                 current = dict(state)
             now = datetime.now()
+            snapshot = datetime.now()
+            for snapshot in snapshots:
+                snapshot.ts = snapshot_ts
             for snapshot in snapshots:
                 print(snapshot)
+
                 for quote in snapshot.quotes:
                     enrich_quote(
                         quote=quote,
@@ -125,6 +129,11 @@ def main() -> int:
                     snapshot,
                     current,
                 )
+
+            store.write_chain_snapshot_summary(
+                run_id=run_id,
+                snapshots=snapshots,
+            )
 
             atomic_write(
                 Path("market_data/latest_stream.json"),
