@@ -71,7 +71,7 @@ def cap_duckdb_resources():
 
     def bounded_connect(*args, **kwargs):
         config = dict(kwargs.get("config") or {})
-        config.setdefault("memory_limit", "2GB")
+        config.setdefault("memory_limit", "4GB")
         config.setdefault("threads", 2)
         kwargs["config"] = config
         return original_connect(*args, **kwargs)
