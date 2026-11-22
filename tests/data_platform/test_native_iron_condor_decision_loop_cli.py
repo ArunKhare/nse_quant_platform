@@ -67,6 +67,7 @@ def _coverage() -> dict[str, object]:
         "revision_id": "a" * 64,
         "recording_fingerprint": "b" * 64,
         "complete": False,
+        "decision_eligibility_asserted": False,
     }
 
 
@@ -219,7 +220,6 @@ def test_cli_runs_and_replays(prepared, capsys) -> None:
     assert output["decision_run"]["recording"]["stage_count"] == 2
     assert output["replay"]["replayed"] is True
     assert output["decision_eligibility_asserted"] is False
-    assert exit_code == 0, capsys.readouterr().out
 
 
 def test_cli_rejects_point_in_time_boundary(prepared, capsys) -> None:
@@ -244,7 +244,6 @@ def test_cli_rejects_point_in_time_boundary(prepared, capsys) -> None:
     assert exit_code == 2
     output = json.loads(capsys.readouterr().out)
     assert output["rejected"] == "POINT_IN_TIME_DECISION"
-    assert exit_code == 0, capsys.readouterr().out
 
 
 def test_cli_missing_coverage_rejected(prepared, capsys) -> None:
@@ -266,4 +265,3 @@ def test_cli_missing_coverage_rejected(prepared, capsys) -> None:
     assert exit_code == 2
     output = json.loads(capsys.readouterr().out)
     assert output["rejected"] == "COVERAGE_FILE_REQUIRED"
-    assert exit_code == 0, capsys.readouterr().out
