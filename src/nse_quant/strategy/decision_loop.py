@@ -76,6 +76,10 @@ from nse_quant.research.variance_risk_premium import (
     trailing_daily_realized_volatility,
 )
 from nse_quant.risk.risk_engine import RiskEngine
+from nse_quant.strategy.canonical_risk_context import (
+    canonical_regime_for_risk,
+    canonical_risk_rejection,
+)
 from nse_quant.strategy.exit_engine import ExitEngine
 from nse_quant.strategy.iron_condor import IronCondorMonitor
 from nse_quant.strategy.timing_filters import MultiTimeframeTimingFilter
@@ -593,7 +597,7 @@ class DecisionLoop:
         )
 
         regime_limits = self._apply_regime_limits(
-            current_regime=current_regime,
+            current_regime=canonical_regime_for_risk(evidence) or "UNKNOWN",
             regime_policy=regime_policy,
         )
 
@@ -1304,6 +1308,19 @@ class DecisionLoop:
         current_regime: str,
         regime_policy: dict[str, Any] | None,
     ) -> RegimeRiskLimits:
+        rejection = canonical_risk_rejection(current_regime, regime_policy)
+        if rejection is not None:
+            return RegimeRiskLimits(
+                regime=current_regime if is_canonical_regime_label(current_regime) else "UNKNOWN",
+                allowed=False,
+                max_lots_per_order=0,
+                max_open_positions=0,
+                max_notional_exposure=0.0,
+                max_portfolio_vega=0.0,
+                max_daily_loss=0.0,
+                reason=rejection,
+            )
+
         regime_limits_config = regime_policy["risk_limits"].get(current_regime) if regime_policy else None
 
         if regime_limits_config:

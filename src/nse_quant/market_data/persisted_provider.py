@@ -25,7 +25,7 @@ class PersistedSnapshotError(ValueError):
 
 class PersistedOptionQuote(OptionQuote):
     # Unlike live quotes, historical rows may have no known receipt timestamp.
-    received_at: datetime | None = None  # type: ignore[assignment]
+    received_at: datetime | None = None
 
 
 class PersistedChainSnapshot(ChainSnapshot):
@@ -161,21 +161,44 @@ class PersistedChainSnapshotProvider:
             token = int(row[1])
             if "instrument_token" in payload and payload["instrument_token"] != token:
                 raise PersistedSnapshotError("payload_instrument_mismatch")
-            times = {name: _timestamp(payload.get(name), name)
-                     for name in ("exchange_ts", "trade_ts", "received_at")}
-            provenance[token] = {name: "persisted_payload" if value is not None else "missing"
-                                 for name, value in times.items()}
+            times = {name: _timestamp(payload.get(name), name) for name in ("exchange_ts", "trade_ts", "received_at")}
+            provenance[token] = {
+                name: "persisted_payload" if value is not None else "missing" for name, value in times.items()
+            }
             instrument = Instrument(
-                underlying=self.underlying, expiry=row[0], instrument_token=token,
-                tradingsymbol=row[2], strike=row[3], option_type=OptionType(row[4]), lot_size=row[5],
+                underlying=self.underlying,
+                expiry=row[0],
+                instrument_token=token,
+                tradingsymbol=row[2],
+                strike=row[3],
+                option_type=OptionType(row[4]),
+                lot_size=row[5],
             )
-            quotes.append(PersistedOptionQuote(
-                instrument=instrument, instrument_token=token,
-                ltp=row[7], bid=row[8], ask=row[9], volume=row[10], oi=row[11], iv=row[12],
-                delta=row[13], gamma=row[14], vega=row[15], theta=row[16], **times,
-            ))
-        return [PersistedChainSnapshot(
-            run_id=run_id, ts=ts, underlying=self.underlying, spot=spot,
-            expiry=min(quote.instrument.expiry for quote in quotes), quotes=quotes,
-            timestamp_provenance=provenance,
-        )]
+            quotes.append(
+                PersistedOptionQuote(
+                    instrument=instrument,
+                    instrument_token=token,
+                    ltp=row[7],
+                    bid=row[8],
+                    ask=row[9],
+                    volume=row[10],
+                    oi=row[11],
+                    iv=row[12],
+                    delta=row[13],
+                    gamma=row[14],
+                    vega=row[15],
+                    theta=row[16],
+                    **times,
+                )
+            )
+        return [
+            PersistedChainSnapshot(
+                run_id=run_id,
+                ts=ts,
+                underlying=self.underlying,
+                spot=spot,
+                expiry=min(quote.instrument.expiry for quote in quotes),
+                quotes=quotes,
+                timestamp_provenance=provenance,
+            )
+        ]
