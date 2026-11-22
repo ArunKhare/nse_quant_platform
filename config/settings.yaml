@@ -139,16 +139,15 @@ strategies:
     min_iv_rank: 30
 
     regime_policy:
+      # Exact playbook iron-condor regimes (H06, H12, H18, H24, H30, H36).
+      # Backwardation and Low IV chop regimes are excluded by the playbook.
       allowed_regimes:
-        - HIGH_IV_CONTANGO_NORMAL_SKEW_HIGH_VOL_CHOP
-        - HIGH_IV_CONTANGO_STEEP_DOWNSIDE_SKEW_HIGH_VOL_CHOP
-        - HIGH_IV_CONTANGO_FORWARD_REVERSE_SKEW_HIGH_VOL_CHOP
-        - HIGH_IV_FLAT_NORMAL_SKEW_HIGH_VOL_CHOP
-        - HIGH_IV_FLAT_STEEP_DOWNSIDE_SKEW_HIGH_VOL_CHOP
-        - HIGH_IV_FLAT_FORWARD_REVERSE_SKEW_HIGH_VOL_CHOP
-        - HIGH_IV_BACKWARDATION_NORMAL_SKEW_HIGH_VOL_CHOP
-        - HIGH_IV_BACKWARDATION_STEEP_DOWNSIDE_SKEW_HIGH_VOL_CHOP
-        - HIGH_IV_BACKWARDATION_FORWARD_REVERSE_SKEW_HIGH_VOL_CHOP
+        - HIGH_IV_CONTANGO_NORMAL_SKEW_HIGH_VOL_CHOP  # H06
+        - HIGH_IV_CONTANGO_HIGH_PUT_SKEW_HIGH_VOL_CHOP  # H12
+        - HIGH_IV_CONTANGO_FORWARD_REVERSE_SKEW_HIGH_VOL_CHOP  # H18
+        - HIGH_IV_FLAT_TERM_NORMAL_SKEW_HIGH_VOL_CHOP  # H24
+        - HIGH_IV_FLAT_TERM_HIGH_PUT_SKEW_HIGH_VOL_CHOP  # H30
+        - HIGH_IV_FLAT_TERM_FORWARD_REVERSE_SKEW_HIGH_VOL_CHOP  # H36
       blocked_regimes: []
       require_iv_rank_available: true
     timing_filter:
@@ -158,6 +157,12 @@ strategies:
       required_timeframes:
         - 15m
         - 60m
+    # Mandatory VRP entry gate: VRP = IV^2 - E[RV^2] (charter section 7).
+    # Unavailable or below-minimum VRP blocks new iron-condor entries.
+    vrp_gate:
+      minimum_vrp: 0.0
+      rv_window_days: 20
+      max_daily_close_age_days: 5
     risk:
       max_lots_per_order: 2
       max_open_positions: 1

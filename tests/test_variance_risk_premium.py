@@ -76,3 +76,31 @@ def test_negative_inputs_are_unavailable() -> None:
     assert result.passed is False
     assert "implied_volatility_invalid" in result.reasons
     assert "expected_realized_volatility_invalid" in result.reasons
+
+
+def test_trailing_daily_rv_matches_manual_calculation() -> None:
+    import math
+
+    from nse_quant.research.variance_risk_premium import (
+        EXPECTED_RV_VERSION,
+        trailing_daily_realized_volatility,
+    )
+
+    closes = [100.0, 101.0, 100.0, 102.0, 101.0, 103.0]
+    rv, details = trailing_daily_realized_volatility(closes, window_days=5)
+
+    returns = [math.log(closes[i] / closes[i - 1]) for i in range(1, len(closes))]
+    mean = sum(returns) / len(returns)
+    expected = math.sqrt(sum((r - mean) ** 2 for r in returns) / (len(returns) - 1)) * math.sqrt(252)
+    assert rv == pytest.approx(expected)
+    assert details["version"] == EXPECTED_RV_VERSION
+    assert details["closes_required"] == 6
+
+
+def test_trailing_daily_rv_unavailable_with_too_few_closes() -> None:
+    from nse_quant.research.variance_risk_premium import trailing_daily_realized_volatility
+
+    rv, details = trailing_daily_realized_volatility([100.0, 101.0], window_days=5)
+
+    assert rv is None
+    assert details["reason"] == "insufficient_daily_closes"

@@ -917,6 +917,35 @@ class DuckDBStore:
 
         return [float(row[0]) for row in reversed(rows)]
 
+    def completed_daily_closes(
+        self,
+        *,
+        instrument_token: int,
+        before: datetime,
+        limit: int,
+    ) -> list[tuple[datetime, float]]:
+        """Return (ts, close) for completed daily candles strictly before ``before``.
+
+        Point-in-time: callers pass the start of the current session so the
+        in-progress daily candle is excluded. Oldest first.
+        """
+        rows = self.conn.execute(
+            """
+            SELECT ts, close
+            FROM spot_candles
+            WHERE instrument_token = ?
+              AND interval = 'day'
+              AND ts < ?
+              AND isfinite(close)
+              AND close > 0
+            ORDER BY ts DESC
+            LIMIT ?
+            """,
+            [instrument_token, before, limit],
+        ).fetchall()
+
+        return [(row[0], float(row[1])) for row in reversed(rows)]
+
     def read_spot_candles(
         self,
         symbol: str,

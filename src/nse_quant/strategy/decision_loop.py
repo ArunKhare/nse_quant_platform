@@ -15,11 +15,13 @@ import math
 import time
 from collections.abc import Callable
 from datetime import UTC, datetime
+from datetime import time as dt_time
 from pathlib import Path
 from typing import Any, cast
 from uuid import uuid4
 
 from nse_quant.analytics.features import build_features
+from nse_quant.core.constants import IST
 from nse_quant.core.evidence import EvidenceMode
 from nse_quant.core.models import (
     ChainSnapshot,
@@ -34,6 +36,7 @@ from nse_quant.core.models import (
     StrategyPositionStatus,
     TradeProposal,
 )
+from nse_quant.core.regime_registry import REGIME_REGISTRY_VERSION, is_canonical_regime_label
 from nse_quant.core.settings import IronCondorProfileSettings, Settings, get_settings
 from nse_quant.execution.broker import PaperBroker
 from nse_quant.features.availability import FeatureAvailability
@@ -67,6 +70,11 @@ from nse_quant.research.evidence_plugins.volume_flow import VolumeFlowPlugin
 from nse_quant.research.regime_policy import RegimePolicy
 from nse_quant.research.regime_policy_evaluation import resolve_effective_regimes
 from nse_quant.research.regime_risk_policy import RegimeRiskLimits, build_regime_risk_limits
+from nse_quant.research.variance_risk_premium import (
+    VRP_CALCULATION_VERSION,
+    evaluate_variance_risk_premium,
+    trailing_daily_realized_volatility,
+)
 from nse_quant.risk.risk_engine import RiskEngine
 from nse_quant.strategy.exit_engine import ExitEngine
 from nse_quant.strategy.iron_condor import IronCondorMonitor
@@ -443,6 +451,27 @@ class DecisionLoop:
                     "evidence": evidence,
                 },
             )
+        # Mandatory iron-condor VRP entry gate (charter section 7). Fails closed:
+        # an unavailable VRP blocks a new entry exactly like a negative one.
+        vrp_result = evidence.get("variance_risk_premium") or {}
+        if vrp_result.get("applicable") and not vrp_result.get("gate_passed"):
+            return self._finish_cycle(
+                status="vrp_gate_rejected",
+                features=features,
+                data_quality=data_quality,
+                iv_history=iv_history,
+                extra={
+                    "rejection_reason": (
+                        "variance_risk_premium_unavailable"
+                        if not vrp_result.get("available")
+                        else "variance_risk_premium_below_minimum"
+                    ),
+                    "position_outcomes": position_outcomes,
+                    "persisted_option_rows": persisted_rows,
+                    "evidence": evidence,
+                },
+            )
+
         if self.settings.research.enforce_strategy_eligibility:
             market_regime = self.store.get_market_regime_as_of(
                 symbol=symbol,
@@ -473,16 +502,24 @@ class DecisionLoop:
                 learned_policy=regime_policy,
             )
 
-            regime_allowed = current_regime in effective_regimes
+            # Charter section 6: iron-condor eligibility uses the full canonical
+            # institutional regime_label. Daily/spot regimes (e.g. BULL|NORMAL)
+            # are market context only and are never compared to the allowlist.
+            institutional = self._institutional_regime_audit(evidence)
+            eligibility_regime = institutional["regime_label"] if institutional["regime_label_canonical"] else None
+            regime_allowed = eligibility_regime is not None and eligibility_regime in effective_regimes
 
             eligibility = self._evaluate_strategy_eligibility(
                 profile=profile,
                 features=features,
                 iv_history_count=iv_history_count,
-                current_regime=current_regime,
+                current_regime=eligibility_regime or "UNKNOWN",
                 regime_allowed=regime_allowed,
                 regime_policy=regime_policy,
-                regime_source=regime_source,
+                regime_source="institutional_regime",
+                market_context_regime=current_regime,
+                market_context_source=regime_source,
+                classifier_version=institutional["classifier_version"],
             )
 
             self.decisions.save_decision(
@@ -712,6 +749,14 @@ class DecisionLoop:
 
         evidence_results = self.evidence_runner.run(context)
         evidence = {result.plugin: result.payload for result in evidence_results}
+        for result in evidence_results:
+            self.store.write_decision_evidence(
+                run_id=self.run_id,
+                ts=context.ts,
+                symbol=context.symbol,
+                plugin=result.plugin,
+                evidence=result.payload,
+            )
 
         strategy_id = self._resolve_active_strategy_id()
         timing_filter = self._resolve_timing_filter(strategy_id)
@@ -729,6 +774,23 @@ class DecisionLoop:
             "reasons": timing_result.reasons,
             "details": timing_result.details,
         }
+        evidence["variance_risk_premium"] = self._evaluate_vrp(
+            strategy_id=strategy_id,
+            features=features,
+            snapshot=snapshot,
+            instrument_token=instrument_token,
+        )
+
+        # Derived decision evidence is persisted alongside plugin evidence so
+        # every decision can be replayed from decision_evidence alone.
+        for plugin_name in ("timing_filter", "variance_risk_premium"):
+            self.store.write_decision_evidence(
+                run_id=self.run_id,
+                ts=context.ts,
+                symbol=context.symbol,
+                plugin=plugin_name,
+                evidence=evidence[plugin_name],
+            )
 
         return features, len(iv_history), evidence
 
@@ -742,7 +804,15 @@ class DecisionLoop:
     ) -> dict[str, Any]:
         proposal = details.get("proposal")
         gates = cast(list[Any] | None, details.get("gates"))
-        extra = cast(dict[str, Any] | None, details.get("extra"))
+        extra = dict(cast(dict[str, Any] | None, details.get("extra")) or {})
+
+        # Stage 1 audit: every decision that reached evidence retains regime,
+        # RV/VRP, timing-filter, provenance, and outcome fields (charter s7/s8).
+        cycle_evidence = extra.get("evidence")
+        if isinstance(cycle_evidence, dict) and cycle_evidence:
+            extra.setdefault("timing_filter", cycle_evidence.get("timing_filter"))
+            extra.setdefault("variance_risk_premium", cycle_evidence.get("variance_risk_premium"))
+            extra["decision_audit"] = self._decision_audit(status=status, evidence=cycle_evidence)
 
         kill_switch_active = self.kill_switch.is_active()
 
@@ -1282,6 +1352,9 @@ class DecisionLoop:
         regime_allowed: bool,
         regime_policy: dict[str, Any] | None,
         regime_source: str,
+        market_context_regime: str | None = None,
+        market_context_source: str | None = None,
+        classifier_version: str | None = None,
     ) -> GateResult:
         iv_rank = features.iv_rank
         iv_rank_available = iv_rank is not None
@@ -1298,6 +1371,10 @@ class DecisionLoop:
             "current_regime": current_regime,
             "regime_source": regime_source,
             "regime_allowed": regime_allowed,
+            "regime_classifier_version": classifier_version,
+            "regime_registry_version": REGIME_REGISTRY_VERSION,
+            "market_context_regime": market_context_regime,
+            "market_context_source": market_context_source,
             "iv_history_count": iv_history_count,
             "minimum_iv_history": minimum_iv_history,
             "iv_history_available": iv_history_count >= minimum_iv_history,
@@ -1403,6 +1480,157 @@ class DecisionLoop:
             "dte_days": dte_days,
             "expected_move_points": features.expected_move_points,
             "implied_annualised_iv_from_expected_move": implied_iv,
+        }
+
+    def _evaluate_vrp(
+        self,
+        *,
+        strategy_id: str,
+        features: MarketFeatures,
+        snapshot: ChainSnapshot,
+        instrument_token: int,
+    ) -> dict[str, Any]:
+        """Evaluate the iron-condor VRP gate with full input provenance.
+
+        IV input: ``features.atm_iv`` (near-expiry ATM IV, annualized decimal).
+        E[RV^2] input: trailing close-to-close RV from completed daily candles
+        strictly before the current IST session (point-in-time). The 1-minute
+        ``features.realized_vol`` is never used here.
+        """
+        profile = self.settings.get_strategy_profile(strategy_id)
+        if not isinstance(profile, IronCondorProfileSettings):
+            return {
+                "applicable": False,
+                "strategy_id": strategy_id,
+                "calculation_version": VRP_CALCULATION_VERSION,
+                "reason": "vrp_gate_not_applicable_to_strategy_type",
+            }
+
+        gate = profile.vrp_gate
+        snapshot_ts = snapshot.ts if snapshot.ts.tzinfo else snapshot.ts.replace(tzinfo=UTC)
+        session_start = datetime.combine(snapshot_ts.astimezone(IST).date(), dt_time.min, tzinfo=IST)
+        daily = self.store.completed_daily_closes(
+            instrument_token=instrument_token,
+            before=session_start,
+            limit=gate.rv_window_days + 1,
+        )
+        expected_rv, rv_details = trailing_daily_realized_volatility(
+            [close for _ts, close in daily],
+            window_days=gate.rv_window_days,
+        )
+        last_close_age_days = (session_start.date() - daily[-1][0].astimezone(IST).date()).days if daily else None
+        rv_details["last_close_age_days"] = last_close_age_days
+        rv_details["max_daily_close_age_days"] = gate.max_daily_close_age_days
+        if last_close_age_days is not None and last_close_age_days > gate.max_daily_close_age_days:
+            expected_rv = None
+            rv_details["reason"] = "stale_daily_closes"
+        rv_details.update(
+            {
+                "source_table": "spot_candles",
+                "interval": "day",
+                "instrument_token": instrument_token,
+                "before": session_start.isoformat(),
+                "first_close_ts": daily[0][0].isoformat() if daily else None,
+                "last_close_ts": daily[-1][0].isoformat() if daily else None,
+            }
+        )
+
+        result = evaluate_variance_risk_premium(
+            implied_volatility=features.atm_iv,
+            expected_realized_volatility=expected_rv,
+            minimum_vrp=gate.minimum_vrp,
+        )
+        return {
+            "applicable": True,
+            "strategy_id": strategy_id,
+            "calculation_version": result.calculation_version,
+            "available": result.available,
+            "passed": result.passed,
+            "gate_passed": result.available and result.passed,
+            "gate_mode": EvidenceMode.HARD_GATE.value,
+            "minimum_vrp": gate.minimum_vrp,
+            "implied_volatility": result.implied_volatility,
+            "implied_volatility_input": {
+                "source": "features.atm_iv",
+                "basis": "near_expiry_atm",
+                "constant_maturity_30d": False,
+                "expiry": features.expiry.isoformat() if features.expiry else None,
+                "as_of": features.ts.isoformat(),
+            },
+            "expected_realized_volatility": expected_rv,
+            "expected_realized_variance": result.expected_realized_variance,
+            "expected_realized_volatility_input": rv_details,
+            "variance_risk_premium": result.variance_risk_premium,
+            "reasons": result.reasons,
+            "details": result.details,
+        }
+
+    def _decision_audit(self, *, status: str, evidence: dict[str, Any]) -> dict[str, Any]:
+        """Build the replayable Stage 1 decision-audit record."""
+        timing = evidence.get("timing_filter") or {}
+        vrp = evidence.get("variance_risk_premium") or {}
+        provenance: dict[str, Any] = {}
+        for plugin, payload in evidence.items():
+            if not isinstance(payload, dict):
+                continue
+            provenance[plugin] = {
+                "available": payload.get("available"),
+                "complete": payload.get("complete"),
+                "as_of": payload.get("as_of"),
+                "version": (
+                    payload.get("classifier_version")
+                    or payload.get("calculation_version")
+                    or payload.get("filter_version")
+                    or payload.get("version")
+                ),
+                "mode": payload.get("mode") or payload.get("gate_mode"),
+            }
+        return {
+            "audit_version": "stage1_decision_audit_v1",
+            "decision_outcome": status,
+            "run_id": self.run_id,
+            "regime": self._institutional_regime_audit(evidence),
+            "realized_volatility_input": vrp.get("expected_realized_volatility_input"),
+            "variance_risk_premium": {
+                "applicable": vrp.get("applicable"),
+                "calculation_version": vrp.get("calculation_version"),
+                "available": vrp.get("available"),
+                "value": vrp.get("variance_risk_premium"),
+                "implied_volatility": vrp.get("implied_volatility"),
+                "expected_realized_volatility": vrp.get("expected_realized_volatility"),
+                "minimum_vrp": vrp.get("minimum_vrp"),
+                "gate_passed": vrp.get("gate_passed"),
+                "reasons": vrp.get("reasons"),
+            },
+            "timing_filter": {
+                "filter_name": timing.get("filter_name"),
+                "filter_version": timing.get("filter_version"),
+                "mode": timing.get("mode"),
+                "status": timing.get("status"),
+                "size_multiplier": timing.get("size_multiplier"),
+                "reasons": timing.get("reasons"),
+            },
+            "evidence_provenance": provenance,
+            "paper_trading": self.settings.safety.paper_trading,
+            "dry_run": self.settings.safety.dry_run,
+            "decision_eligibility_asserted": False,
+        }
+
+    @staticmethod
+    def _institutional_regime_audit(evidence: dict[str, Any]) -> dict[str, Any]:
+        """Extract the canonical-regime audit fields from institutional evidence."""
+        payload = evidence.get("institutional_regime")
+        institutional = payload if isinstance(payload, dict) else {}
+        label = institutional.get("regime_label")
+        return {
+            "regime_label": label,
+            "regime_label_canonical": is_canonical_regime_label(label),
+            "classifier_version": institutional.get("classifier_version"),
+            "regime_registry_version": REGIME_REGISTRY_VERSION,
+            "as_of": institutional.get("as_of"),
+            "complete": bool(institutional.get("complete")),
+            "missing_components": institutional.get("missing_components") or [],
+            "reason": institutional.get("reason") if institutional else "institutional_regime_evidence_missing",
         }
 
     def _resolve_active_strategy_id(self) -> str:

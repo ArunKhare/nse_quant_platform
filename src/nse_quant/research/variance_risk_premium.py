@@ -15,6 +15,13 @@ from typing import Any
 
 VRP_CALCULATION_VERSION = "variance_risk_premium_v1"
 
+# E[RV^2] forecast used by the iron-condor VRP gate. A trailing realized
+# variance from completed daily closes is the baseline (random-walk) forecast;
+# any better forecaster must ship under a new version string.
+EXPECTED_RV_METHOD = "trailing_close_to_close_daily"
+EXPECTED_RV_VERSION = "expected_rv_trailing_daily_v1"
+TRADING_DAYS_PER_YEAR = 252
+
 
 @dataclass(frozen=True)
 class VarianceRiskPremiumResult:
@@ -115,3 +122,37 @@ def _validate_volatility(
     if not math.isfinite(number) or number < 0.0:
         return None, f"{name}_invalid"
     return number, None
+
+
+def trailing_daily_realized_volatility(
+    closes: list[float],
+    *,
+    window_days: int,
+) -> tuple[float | None, dict[str, Any]]:
+    """Annualized close-to-close realized volatility from completed daily closes.
+
+    Uses the last ``window_days`` daily log returns (``window_days + 1`` closes),
+    sample standard deviation, annualized with sqrt(252). Returns ``(None, ...)``
+    when there are too few valid closes.
+    """
+    if window_days < 2:
+        raise ValueError("window_days must be at least 2")
+    valid = [float(c) for c in closes if c is not None and math.isfinite(float(c)) and float(c) > 0.0]
+    details: dict[str, Any] = {
+        "method": EXPECTED_RV_METHOD,
+        "version": EXPECTED_RV_VERSION,
+        "window_days": window_days,
+        "annualization_days": TRADING_DAYS_PER_YEAR,
+        "closes_available": len(valid),
+        "closes_required": window_days + 1,
+    }
+    if len(valid) < window_days + 1:
+        details["reason"] = "insufficient_daily_closes"
+        return None, details
+    tail = valid[-(window_days + 1) :]
+    returns = [math.log(tail[i] / tail[i - 1]) for i in range(1, len(tail))]
+    mean = sum(returns) / len(returns)
+    variance = sum((r - mean) ** 2 for r in returns) / (len(returns) - 1)
+    rv = math.sqrt(variance) * math.sqrt(TRADING_DAYS_PER_YEAR)
+    details["reason"] = None
+    return rv, details

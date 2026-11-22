@@ -14,6 +14,7 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from nse_quant.core.evidence import EvidenceMode
+from nse_quant.core.regime_registry import IRON_CONDOR_REGIMES, validate_regime_labels
 
 CONFIG_DIR = Path("config")
 SETTINGS_YAML = CONFIG_DIR / "settings.yaml"
@@ -131,12 +132,27 @@ class StrategyTimingFilterSettings(BaseModel):
     )
 
 
+class StrategyVrpGateSettings(BaseModel):
+    """Mandatory iron-condor variance-risk-premium entry gate (charter section 7).
+
+    There is deliberately no ``enabled`` flag: a non-passing or unavailable VRP
+    always blocks a new iron-condor entry.
+    """
+
+    minimum_vrp: float = 0.0
+    rv_window_days: int = Field(default=20, ge=5, le=252)
+    # Stale-data guardrail: the latest completed daily close must be at most
+    # this many calendar days before the session, else VRP is unavailable.
+    max_daily_close_age_days: int = Field(default=5, ge=1, le=30)
+
+
 class IronCondorProfileSettings(StrategyProfileSettings):
     strategy_type: str = "iron_condor"
     wing_distance_points: float = 200.0
     min_credit: float = 20.0
     min_days_to_expiry: int = 1
     timing_filter: StrategyTimingFilterSettings = Field(default_factory=StrategyTimingFilterSettings)
+    vrp_gate: StrategyVrpGateSettings = Field(default_factory=StrategyVrpGateSettings)
 
 
 STRATEGY_PROFILE_TYPES: dict[str, type[StrategyProfileSettings]] = {
@@ -720,6 +736,25 @@ class Settings(BaseSettings):
                 raise ValueError(
                     f"Strategy {strategy_id!r} has overlapping allowed and blocked regimes: {sorted(overlap)}"
                 )
+
+            # Charter: regime policies use only exact canonical four-component
+            # labels; iron condors may only allow the six playbook IC regimes.
+            validate_regime_labels(
+                profile.regime_policy.allowed_regimes,
+                context=f"strategies.{strategy_id}.regime_policy.allowed_regimes",
+            )
+            validate_regime_labels(
+                profile.regime_policy.blocked_regimes,
+                context=f"strategies.{strategy_id}.regime_policy.blocked_regimes",
+            )
+            if isinstance(profile, IronCondorProfileSettings):
+                outside = sorted(set(profile.regime_policy.allowed_regimes) - IRON_CONDOR_REGIMES)
+                if outside:
+                    raise ValueError(
+                        f"Strategy {strategy_id!r} allows non-iron-condor regimes {outside}; "
+                        "iron-condor allowlist must be a subset of the six playbook "
+                        "HIGH_VOL_CHOP regimes (H06, H12, H18, H24, H30, H36)"
+                    )
 
         return self
 

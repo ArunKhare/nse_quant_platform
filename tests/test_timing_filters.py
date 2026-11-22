@@ -1,3 +1,5 @@
+import pytest
+
 from nse_quant.core.evidence import EvidenceMode
 from nse_quant.strategy.timing_filters import (
     MultiTimeframeTimingFilter,
@@ -69,3 +71,44 @@ def test_missing_evidence_is_observation() -> None:
     assert result.status is TimingFilterStatus.OBSERVE
     assert result.passed
     assert result.alignment is None
+
+
+
+ALIGNED = _evidence("BULLISH", 0.01, 0.02)
+MISALIGNED = _evidence("MIXED", 0.01, -0.01)
+WEAK = _evidence("BULLISH", 0.0001, 0.0001)
+
+
+@pytest.mark.parametrize(
+    "mode,evidence,status,multiplier",
+    [
+        # Charter / Stage 1 item 8: mode-specific policy matrix.
+        (EvidenceMode.OBSERVATION, MISALIGNED, TimingFilterStatus.OBSERVE, 1.0),
+        (EvidenceMode.RISK_SIZING, MISALIGNED, TimingFilterStatus.OBSERVE, 0.0),
+        (EvidenceMode.HARD_GATE, MISALIGNED, TimingFilterStatus.BLOCK, 0.0),
+        (EvidenceMode.OBSERVATION, ALIGNED, TimingFilterStatus.OBSERVE, 1.0),
+        (EvidenceMode.RISK_SIZING, ALIGNED, TimingFilterStatus.PASS, 1.0),
+        (EvidenceMode.HARD_GATE, ALIGNED, TimingFilterStatus.PASS, 1.0),
+        # Weak, missing, unavailable, or incomplete trend never blocks.
+        (EvidenceMode.HARD_GATE, WEAK, TimingFilterStatus.OBSERVE, 1.0),
+        (EvidenceMode.HARD_GATE, None, TimingFilterStatus.OBSERVE, 1.0),
+        (EvidenceMode.HARD_GATE, {"available": False}, TimingFilterStatus.OBSERVE, 1.0),
+        (EvidenceMode.HARD_GATE, {**ALIGNED, "complete": False}, TimingFilterStatus.OBSERVE, 1.0),
+    ],
+)
+def test_mode_policy_matrix(mode, evidence, status, multiplier) -> None:
+    result = MultiTimeframeTimingFilter(mode=mode).evaluate(evidence)
+
+    assert result.status is status
+    assert result.size_multiplier == multiplier
+    assert result.filter_version == "multi_timeframe_timing_v1"
+
+
+def test_multi_timeframe_plugin_emits_relative_change_for_timing_filter() -> None:
+    from types import SimpleNamespace
+
+    from nse_quant.research.evidence_plugins.mutli_timeframe import MultiTimeframeTrendPlugin
+
+    candles = [SimpleNamespace(close=100.0), SimpleNamespace(close=101.0)]
+
+    assert MultiTimeframeTrendPlugin._relative_change(candles) == pytest.approx(0.01)

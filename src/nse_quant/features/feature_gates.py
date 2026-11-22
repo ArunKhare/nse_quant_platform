@@ -23,7 +23,7 @@ class SpotFeatureGate:
         min_realized_vol: float = 0.0,
         max_realized_vol: float = 1.0,
         max_vwap_distance: float = 0.01,
-        require_trend_alignment: bool = True,
+        require_trend_alignment: bool = False,
         max_age_seconds: int = 300,
         index_symbols: tuple[str, ...] = (
             "NIFTY",
@@ -91,17 +91,20 @@ class SpotFeatureGate:
         trend_60m_directional = trend_60m is not None and abs(trend_60m) >= self._min_trend_strength
         checks["trend_context_available"] = trend_15m is not None and trend_60m is not None
 
-        if self._require_trend_alignment:
-            checks["trend_aligned"] = (
-                trend_15m is not None
-                and trend_60m is not None
-                and (not trend_15m_directional or not trend_60m_directional or (trend_15m >= 0) == (trend_60m >= 0))
-            )
-            if not checks["trend_aligned"]:
-                reasons.append("multi_timeframe_trend_misaligned")
-        else:
-            checks["trend_aligned"] = True
-            reasons.append("multi_timeframe_trend_context_unavailable")
+        # Multi-timeframe alignment is recorded as observational context only.
+        # Charter section 9: it must not be an implicit feature-gate rejection;
+        # the strategy-specific timing filter (multi_timeframe_timing_v1) owns
+        # any gating or sizing decision. require_trend_alignment=True remains
+        # available only as an explicit, opt-in legacy behaviour.
+        checks["trend_aligned"] = (
+            trend_15m is not None
+            and trend_60m is not None
+            and (not trend_15m_directional or not trend_60m_directional or (trend_15m >= 0) == (trend_60m >= 0))
+        )
+        checks["trend_alignment_required"] = self._require_trend_alignment
+
+        if self._require_trend_alignment and not checks["trend_aligned"]:
+            reasons.append("multi_timeframe_trend_misaligned")
 
         required_checks = {
             "feature_snapshot_available",

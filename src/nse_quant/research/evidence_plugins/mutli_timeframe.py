@@ -96,9 +96,13 @@ class MultiTimeframeTrendPlugin(EvidencePlugin):
             )
 
             trend = self._trend(completed) if len(completed) >= required_buckets else None
+            # Relative change (last/first - 1) over the completed buckets. The
+            # strategy timing filter compares it against min_trend_strength.
+            change = self._relative_change(completed) if trend is not None else None
 
             timeframe_results[timeframe] = {
                 "trend": trend,
+                "change": change,
                 "completed_buckets": len(completed),
                 "required_buckets": required_buckets,
                 "complete": trend is not None,
@@ -134,6 +138,15 @@ class MultiTimeframeTrendPlugin(EvidencePlugin):
             return "DOWN"
 
         return "FLAT"
+
+    @staticmethod
+    def _relative_change(candles: list[ResampledCandle]) -> float | None:
+        first_close = candles[0].close
+        last_close = candles[-1].close
+        if not first_close or first_close <= 0:
+            return None
+        return float(last_close / first_close - 1.0)
+
 
     def _alignment(
         self,

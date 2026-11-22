@@ -38,8 +38,19 @@ def test_gate_passes_when_features_align() -> None:
     assert result.reasons == []
 
 
-def test_gate_rejects_misaligned_trend() -> None:
+def test_misaligned_trend_is_observational_by_default() -> None:
+    # Charter section 9: no implicit multi-timeframe hard gate.
     gate = SpotFeatureGate()
+    result = gate.evaluate(make_snapshot(0.001, -0.002))
+
+    assert result.passed
+    assert result.checks["trend_aligned"] is False
+    assert result.checks["trend_alignment_required"] is False
+    assert "multi_timeframe_trend_misaligned" not in result.reasons
+
+
+def test_misaligned_trend_rejects_only_when_explicitly_required() -> None:
+    gate = SpotFeatureGate(require_trend_alignment=True)
     result = gate.evaluate(make_snapshot(0.001, -0.002))
 
     assert not result.passed

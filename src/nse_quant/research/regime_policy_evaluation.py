@@ -10,6 +10,7 @@ from typing import Any
 
 import duckdb
 
+from nse_quant.core.regime_registry import is_canonical_regime_label
 from nse_quant.core.settings import (
     IronCondorProfileSettings,
     Settings,
@@ -135,16 +136,25 @@ def resolve_effective_regimes(
     *,
     learned_policy: dict[str, Any] | None,
 ) -> tuple[list[str], str, str | None]:
+    """Return the effective canonical regime allowlist for a strategy profile.
+
+    The configured allowlist is the upper bound. A READY learned policy may
+    only narrow it, never widen it, and any learned label that is not an exact
+    canonical four-component regime (e.g. ``BULL|NORMAL``) is ignored.
+    """
     policy_status = learned_policy.get("selection_status") if learned_policy else None
 
     learned_allowed = set(learned_policy.get("allowed_regimes") or []) if learned_policy else set()
+    learned_canonical = {label for label in learned_allowed if is_canonical_regime_label(label)}
 
-    configured_allowed = set(profile.regime_policy.allowed_regimes)
+    configured_allowed = {
+        label for label in profile.regime_policy.allowed_regimes if is_canonical_regime_label(label)
+    }
     blocked = set(profile.regime_policy.blocked_regimes)
 
     if policy_status == "READY":
-        effective = sorted(learned_allowed - blocked)
-        source = "learned_policy"
+        effective = sorted((learned_canonical & configured_allowed) - blocked)
+        source = "learned_policy_within_configured"
     else:
         effective = sorted(configured_allowed - blocked)
         source = "configured_profile"

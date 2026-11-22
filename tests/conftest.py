@@ -183,8 +183,48 @@ def seed_spot_features():
                 ]
             )
         )
+        seed_daily_candles(store, symbol=symbol)
 
     return seed
+
+
+SPOT_TOKEN = 256265
+
+
+def seed_daily_candles(
+    store: DuckDBStore,
+    symbol: str = "NIFTY",
+    *,
+    days: int = 30,
+    daily_move: float = 0.003,
+    instrument_token: int = SPOT_TOKEN,
+) -> None:
+    """Seed completed daily candles before today (IST) for the VRP RV input.
+
+    Alternating +/- ``daily_move`` closes give a trailing annualized RV of
+    roughly daily_move * sqrt(252) (about 0.05 by default), well below the
+    fixtures' ATM IV, so the mandatory VRP gate passes in happy-path tests.
+    """
+    from zoneinfo import ZoneInfo
+
+    ist = ZoneInfo("Asia/Kolkata")
+    today = datetime.now(ist).date()
+    close = 23000.0
+    candles = []
+    for offset in range(days, 0, -1):
+        day = today - timedelta(days=offset)
+        close *= 1 + (daily_move if offset % 2 else -daily_move)
+        candles.append(
+            {
+                "date": datetime(day.year, day.month, day.day, tzinfo=ist),
+                "open": close,
+                "high": close * 1.002,
+                "low": close * 0.998,
+                "close": close,
+                "volume": 0,
+            }
+        )
+    store.write_spot_candles(candles, symbol=symbol, instrument_token=instrument_token, interval="day")
 
 
 @pytest.fixture(scope="session")
