@@ -1,10 +1,11 @@
-"""Regime-specific risk limits derived from training-fold outcomes."""
+"""Canonical-regime risk limits derived from training-fold outcomes."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Any
 
+from nse_quant.core.regime_registry import is_canonical_regime_label
 from nse_quant.research.regime_policy import RegimePolicy
 
 
@@ -26,21 +27,34 @@ def build_regime_risk_limits(
     policy: RegimePolicy,
     base_limits: Any,
 ) -> RegimeRiskLimits:
-    """Return conservative limits for a regime.
+    """Require a canonical label and an explicitly allowing READY policy.
 
-    A regime must be explicitly allowed by a READY walk-forward policy.
-    Unknown, unproven, or disallowed regimes receive no-entry limits.
+    Historical labels are never translated into current risk keys. Missing,
+    noncanonical, unproven, or disallowed regimes receive no-entry limits.
+    Existing readiness, training-evidence, and risk-tier rules remain.
     """
-    if regime is None or not policy.allows(regime):
+    if regime is None or not is_canonical_regime_label(regime):
         return RegimeRiskLimits(
-            regime=regime or "UNKNOWN",
+            regime="UNKNOWN",
             allowed=False,
             max_lots_per_order=0,
             max_open_positions=0,
             max_notional_exposure=0.0,
             max_portfolio_vega=0.0,
             max_daily_loss=0.0,
-            reason=("regime_not_allowed" if policy.is_usable else "policy_not_ready"),
+            reason="regime_unavailable" if regime is None else "non_canonical_regime",
+        )
+
+    if not policy.allows(regime):
+        return RegimeRiskLimits(
+            regime=regime,
+            allowed=False,
+            max_lots_per_order=0,
+            max_open_positions=0,
+            max_notional_exposure=0.0,
+            max_portfolio_vega=0.0,
+            max_daily_loss=0.0,
+            reason="regime_not_allowed" if policy.is_usable else "policy_not_ready",
         )
 
     metrics = policy.regime_metrics.get(regime, {})
@@ -73,16 +87,10 @@ def build_regime_risk_limits(
     return RegimeRiskLimits(
         regime=regime,
         allowed=True,
-        max_lots_per_order=max(
-            1,
-            int(base_limits.max_lots_per_order * scale),
-        ),
-        max_open_positions=max(
-            1,
-            int(base_limits.max_open_positions * scale),
-        ),
-        max_notional_exposure=(float(base_limits.max_notional_exposure) * scale),
-        max_portfolio_vega=(float(base_limits.max_portfolio_vega) * scale),
-        max_daily_loss=(float(base_limits.max_daily_loss) * scale),
+        max_lots_per_order=max(1, int(base_limits.max_lots_per_order * scale)),
+        max_open_positions=max(1, int(base_limits.max_open_positions * scale)),
+        max_notional_exposure=float(base_limits.max_notional_exposure) * scale,
+        max_portfolio_vega=float(base_limits.max_portfolio_vega) * scale,
+        max_daily_loss=float(base_limits.max_daily_loss) * scale,
         reason=tier,
     )
