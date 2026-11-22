@@ -136,8 +136,19 @@ def build_features(
     rate = settings.analytics.risk_free_rate
     enriched = [enrich_quote(q, snapshot.spot, snapshot.expiry, now, rate) for q in snapshot.quotes]
     atm = snapshot.atm_strike()
-    atm_q = [q for q in enriched if q.instrument.strike == atm]
-    iv_by_strike = {q.instrument.strike: q.iv for q in atm_q}
+    # ATM IV uses only quotes on the snapshot's own expiry: enrich_quote prices
+    # every quote against snapshot.expiry, so other-expiry IVs are not comparable.
+    atm_q = [q for q in enriched if q.instrument.strike == atm and q.instrument.expiry == snapshot.expiry]
+    # Average the valid call/put IVs per strike. A dict keyed only by strike would
+    # let the last quote (e.g. a put priced below intrinsic, iv=None) overwrite a
+    # valid call IV, which is what made ATM IV None after 83e8a58.
+    ivs_by_strike: dict[float, list[float]] = {}
+    for q in atm_q:
+        if q.iv is not None and np.isfinite(q.iv) and q.iv > 0:
+            ivs_by_strike.setdefault(q.instrument.strike, []).append(float(q.iv))
+    iv_by_strike: dict[float, float | None] = {
+        strike: float(np.mean(values)) for strike, values in ivs_by_strike.items()
+    }
     atm_iv = canonical_atm_iv(
         iv_by_strike=iv_by_strike,
         spot=snapshot.spot,

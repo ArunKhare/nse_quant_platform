@@ -173,7 +173,7 @@ def test_write_option_stream_computes_iv(
         snapshot,
     )
 
-    assert written == 2
+    assert written == len(snapshot.quotes)
 
     rows = test_store.conn.execute(
         """
@@ -183,7 +183,7 @@ def test_write_option_stream_computes_iv(
         """
     ).fetchall()
 
-    assert len(rows) == 2
+    assert len(rows) == len(snapshot.quotes)
     assert all(row[0] is not None for row in rows)
 
     assert test_store.count_underlying_iv_observations(underlying="NIFTY") == 1
@@ -260,3 +260,22 @@ def test_iv_regime_gate_defaults_to_global_threshold():
     gate = IvRegimeGate(settings)
 
     assert gate.min_iv_rank == settings.analytics.min_iv_rank
+
+
+def test_atm_iv_keeps_valid_call_when_put_iv_unsolvable(snapshot_factory):
+    # Spot 22550 / strike 23000: put at 115 is below intrinsic (450), so its IV
+    # cannot be solved. ATM IV must fall back to the valid call IV, not None.
+    snapshot = snapshot_factory(spot=22550.0, call_price=120.0, put_price=115.0)
+    features = build_features(snapshot, now=snapshot.ts)
+    assert features.atm_iv is not None
+    assert features.atm_iv > 0
+
+
+def test_atm_iv_ignores_other_expiry_quotes(snapshot_factory):
+    snapshot = snapshot_factory(spot=23000.0, call_price=120.0, put_price=115.0)
+    near_only = snapshot.model_copy(
+        update={"quotes": [q for q in snapshot.quotes if q.instrument.expiry == snapshot.expiry]}
+    )
+    full = build_features(snapshot, now=snapshot.ts)
+    near = build_features(near_only, now=snapshot.ts)
+    assert full.atm_iv == pytest.approx(near.atm_iv)
