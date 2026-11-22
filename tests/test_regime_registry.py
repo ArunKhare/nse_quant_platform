@@ -1,4 +1,4 @@
-"""Canonical regime registry and exact iron-condor allowlist (charter Stage 1)."""
+"""Canonical registry and exact iron-condor allowlist contract tests."""
 
 from __future__ import annotations
 
@@ -6,6 +6,7 @@ import pytest
 
 from nse_quant.core.regime_registry import (
     IRON_CONDOR_REGIMES,
+    REGIME_REGISTRY_VERSION,
     REGIMES,
     REGIMES_BY_ID,
     PriceAction,
@@ -40,15 +41,30 @@ def test_registry_has_exactly_108_unique_four_component_labels():
         )
 
 
+def test_registry_v2_uses_charter_price_actions_without_aliases():
+    assert REGIME_REGISTRY_VERSION == "institutional_regime_registry_v2"
+    assert set(PriceAction.__members__) == {
+        "STRONG_BULL_TREND",
+        "STRONG_BEAR_TREND",
+        "RANGE_HIGH",
+        "RANGE_LOW",
+        "COMPRESSION",
+        "HIGH_VOL_CHOP",
+    }
+    assert len(PriceAction.__members__) == len(PriceAction)
+
+
 @pytest.mark.parametrize(
     "regime_id,label",
     [
-        ("H01", "HIGH_IV_CONTANGO_NORMAL_SKEW_STRONG_BULL"),
+        ("H01", "HIGH_IV_CONTANGO_NORMAL_SKEW_STRONG_BULL_TREND"),
+        ("H02", "HIGH_IV_CONTANGO_NORMAL_SKEW_STRONG_BEAR_TREND"),
         ("H06", "HIGH_IV_CONTANGO_NORMAL_SKEW_HIGH_VOL_CHOP"),
         ("H18", "HIGH_IV_CONTANGO_FORWARD_REVERSE_SKEW_HIGH_VOL_CHOP"),
         ("H42", "HIGH_IV_BACKWARDATION_NORMAL_SKEW_HIGH_VOL_CHOP"),
         ("H54", "HIGH_IV_BACKWARDATION_FORWARD_REVERSE_SKEW_HIGH_VOL_CHOP"),
-        ("L01", "LOW_IV_CONTANGO_NORMAL_SKEW_STRONG_BULL"),
+        ("L01", "LOW_IV_CONTANGO_NORMAL_SKEW_STRONG_BULL_TREND"),
+        ("L02", "LOW_IV_CONTANGO_NORMAL_SKEW_STRONG_BEAR_TREND"),
         ("L54", "LOW_IV_BACKWARDATION_FORWARD_REVERSE_SKEW_HIGH_VOL_CHOP"),
     ],
 )
@@ -74,13 +90,14 @@ def test_iron_condor_allowlist_is_exactly_the_six_playbook_regimes():
         "BEARISH",
         "MIXED",
         "HIGH_VOL_CHOP",
-        # v4 classifier vocabulary is not canonical
+        "HIGH_IV_CONTANGO_NORMAL_SKEW_STRONG_BULL",
+        "HIGH_IV_CONTANGO_NORMAL_SKEW_STRONG_BEAR",
+        "LOW_IV_CONTANGO_NORMAL_SKEW_STRONG_BULL",
+        "LOW_IV_CONTANGO_NORMAL_SKEW_STRONG_BEAR",
         "HIGH_IV_FLAT_NORMAL_SKEW_HIGH_VOL_CHOP",
         "NORMAL_IV_CONTANGO_NORMAL_SKEW_RANGE_MIDDLE",
         "HIGH_IV_CONTANGO_STEEP_DOWNSIDE_SKEW_HIGH_VOL_CHOP",
-        # malformed code from an earlier playbook draft
         "HIGH_IV_CONTANGO_FORWARD_REVERSE_SKEW_REVERSE_SKEW",
-        # no appended RV / VRP / trend
         "HIGH_IV_CONTANGO_NORMAL_SKEW_HIGH_VOL_CHOP_POSITIVE_VRP",
         "HIGH_IV_CONTANGO_NORMAL_SKEW_HIGH_VOL_CHOP_BULLISH",
         "",
@@ -94,6 +111,11 @@ def test_non_canonical_labels_are_rejected(label):
 def test_validate_regime_labels_raises_on_any_invalid_label():
     with pytest.raises(ValueError, match="non-canonical"):
         validate_regime_labels(["HIGH_IV_CONTANGO_NORMAL_SKEW_HIGH_VOL_CHOP", "BULL|NORMAL"], context="t")
+
+
+def test_get_regime_does_not_translate_legacy_labels():
+    with pytest.raises(ValueError, match="Not a canonical"):
+        get_regime("HIGH_IV_CONTANGO_NORMAL_SKEW_STRONG_BULL")
 
 
 def test_configured_iron_condor_allowlist_is_exact():

@@ -1,27 +1,13 @@
 """Canonical 108-regime institutional registry.
 
-Sources of truth (charter section 2):
+Sources: docs/strategies/108-regime-strategy-playbook.md,
+docs/strategies/IRON_CONDOR_MASTER_MANUAL.md, and the implementation charter.
 
-- ``docs/strategies/108-regime-strategy-playbook.md``: the 108 cards (H01-H54,
-  L01-L54), their descriptive regimes, and the recommended strategy per card.
-- ``docs/strategies/IRON_CONDOR_MASTER_MANUAL.md``: the systematic label
-  spelling (``FLAT_TERM``, ``HIGH_PUT_SKEW``, ``FORWARD_REVERSE_SKEW``) and the
-  six iron-condor regimes.
-- ``docs/strategies/framework-foundations-quantitative-measurement.md``: the
-  four structural dimensions.
-
-The canonical institutional regime has exactly four components::
-
-    IV state x term structure x skew x price action
-
-Labels are generated from the component vocabularies below in playbook card
-order, so no label is hand-typed. Realized volatility, variance risk premium,
-and multi-timeframe trend are never regime components and must not be
-appended to a label.
-
-Note: an earlier playbook draft (``INFO/108-regime-strategy-playbook-v2.md``,
-not in this repository) printed all 36 FORWARD_REVERSE_SKEW label codes as
-``..._FORWARD_REVERSE_SKEW_REVERSE_SKEW``. Those malformed codes are rejected.
+The regime has exactly four components: IV state, term structure, skew, and
+price action. RV, VRP, and multi-timeframe trend are separate evidence.
+Registry v2 uses the charter's strong-trend spelling without legacy aliases.
+Historical artifacts must retain their original version and must not be
+silently relabelled.
 """
 
 from __future__ import annotations
@@ -31,13 +17,13 @@ from dataclasses import dataclass
 from enum import StrEnum
 from itertools import product
 
-REGIME_REGISTRY_VERSION = "institutional_regime_registry_v1"
+REGIME_REGISTRY_VERSION = "institutional_regime_registry_v2"
 PLAYBOOK_SOURCE = "docs/strategies/108-regime-strategy-playbook.md"
 
 
 class IvState(StrEnum):
     HIGH_IV = "HIGH_IV"
-    LOW_IV = "LOW_IV"  # playbook: "Normal / Low IV" (IVR < 70)
+    LOW_IV = "LOW_IV"
 
 
 class TermStructure(StrEnum):
@@ -48,13 +34,13 @@ class TermStructure(StrEnum):
 
 class Skew(StrEnum):
     NORMAL_SKEW = "NORMAL_SKEW"
-    HIGH_PUT_SKEW = "HIGH_PUT_SKEW"  # playbook: "Steep Downside Skew"
+    HIGH_PUT_SKEW = "HIGH_PUT_SKEW"
     FORWARD_REVERSE_SKEW = "FORWARD_REVERSE_SKEW"
 
 
 class PriceAction(StrEnum):
-    STRONG_BULL = "STRONG_BULL"
-    STRONG_BEAR = "STRONG_BEAR"
+    STRONG_BULL_TREND = "STRONG_BULL_TREND"
+    STRONG_BEAR_TREND = "STRONG_BEAR_TREND"
     RANGE_HIGH = "RANGE_HIGH"
     RANGE_LOW = "RANGE_LOW"
     COMPRESSION = "COMPRESSION"
@@ -92,21 +78,18 @@ def _build_registry() -> dict[str, RegimeDefinition]:
 REGIMES: dict[str, RegimeDefinition] = _build_registry()
 REGIMES_BY_ID: dict[str, RegimeDefinition] = {r.regime_id: r for r in REGIMES.values()}
 
-# Playbook "Top Recommended Strategy: Asymmetric defined-risk iron condor":
-# exactly H06, H12, H18, H24, H30, H36 (High IV, Contango or Flat term, any skew,
-# High-vol chop). Backwardation chop (H42/H48/H54) and all Low IV chop regimes
-# are explicitly excluded by the playbook and the iron-condor master manual.
+# Only the six playbook iron-condor cells; backwardation is excluded.
 IRON_CONDOR_REGIME_IDS: tuple[str, ...] = ("H06", "H12", "H18", "H24", "H30", "H36")
 IRON_CONDOR_REGIMES: frozenset[str] = frozenset(REGIMES_BY_ID[i].label for i in IRON_CONDOR_REGIME_IDS)
 
 
 def is_canonical_regime_label(label: object) -> bool:
-    """Return True only for an exact, complete four-component canonical label."""
+    """Accept only an exact, complete four-component canonical label."""
     return isinstance(label, str) and label in REGIMES
 
 
 def get_regime(label: str) -> RegimeDefinition:
-    """Return the definition for a canonical label; raise ValueError otherwise."""
+    """Return the canonical definition or raise ValueError."""
     try:
         return REGIMES[label]
     except KeyError:
@@ -114,7 +97,7 @@ def get_regime(label: str) -> RegimeDefinition:
 
 
 def validate_regime_labels(labels: object, *, context: str) -> list[str]:
-    """Validate that every label is canonical; return them unchanged."""
+    """Validate every label without coercing or translating legacy labels."""
     if labels is None:
         return []
     if isinstance(labels, str):
