@@ -1,10 +1,15 @@
-from datetime import date
+import pytest
 
+from nse_quant.core.regime_registry import REGIMES, is_canonical_regime_label
 from nse_quant.research.regime_policy import (
     RegimePolicy,
     select_regime_policy,
+    summarize_by_regime,
 )
 from nse_quant.research.trade_outcomes import TradeOutcome
+
+CANONICAL = "HIGH_IV_CONTANGO_NORMAL_SKEW_HIGH_VOL_CHOP"
+OTHER_CANONICAL = "HIGH_IV_FLAT_TERM_NORMAL_SKEW_HIGH_VOL_CHOP"
 
 
 def make_outcome(regime: str, pnl: float) -> TradeOutcome:
@@ -20,68 +25,101 @@ def make_outcome(regime: str, pnl: float) -> TradeOutcome:
 
 
 def test_regime_requires_minimum_trades_and_positive_pnl() -> None:
-    outcomes = [make_outcome("RANGE|HIGH", 100) for _ in range(10)] + [
-        make_outcome("BULL|NORMAL", -50) for _ in range(10)
+    outcomes = [make_outcome(CANONICAL, 100) for _ in range(10)] + [
+        make_outcome(OTHER_CANONICAL, -50) for _ in range(10)
     ]
-
     policy = select_regime_policy(outcomes)
-
     assert policy.is_usable
-    assert "RANGE|HIGH" in policy.allowed_regimes
-    assert "BULL|NORMAL" not in policy.allowed_regimes
+    assert policy.allowed_regimes == frozenset({CANONICAL})
+    assert set(policy.regime_metrics) == {CANONICAL, OTHER_CANONICAL}
+    assert all(is_canonical_regime_label(label) for label in policy.regime_metrics)
 
 
 def test_insufficient_regime_history_is_not_allowed() -> None:
-    outcomes = [make_outcome("RANGE|HIGH", 100)]
-
-    policy = select_regime_policy(outcomes)
-
+    policy = select_regime_policy([make_outcome(CANONICAL, 100)])
     assert policy.is_usable
     assert policy.allowed_regimes == frozenset()
 
 
 def test_empty_training_data_is_unusable() -> None:
     policy = select_regime_policy([])
-
     assert not policy.is_usable
     assert policy.allowed_regimes == frozenset()
     assert policy.selection_status == "INSUFFICIENT_TRAIN_DATA"
 
 
 def test_policy_allowlist_check() -> None:
-    policy = RegimePolicy(
-        allowed_regimes=frozenset({"RANGE|HIGH"}),
-        regime_metrics={},
-        selection_status="READY",
-    )
-
-    assert policy.allows("RANGE|HIGH")
-    assert not policy.allows("BEAR|HIGH")
+    policy = RegimePolicy(frozenset({CANONICAL}), {}, "READY")
+    assert policy.allows(CANONICAL)
+    assert not policy.allows(OTHER_CANONICAL)
+    assert not policy.allows(None)
 
 
 def test_stale_policy_is_not_actionable() -> None:
-    allowed_regimes = {"RANGE|HIGH"}
-    policy: dict[str, str | set[str] | date | None] = {
-        "allowed_regimes": allowed_regimes,
-        "selection_status": "STALE",
-        "test_end": date(2026, 1, 1),
-    }
+    policy = RegimePolicy(frozenset({CANONICAL}), {}, "STALE")
+    assert not policy.is_usable
+    assert not policy.allows(CANONICAL)
 
-    current_regime = "RANGE|HIGH"
-    policy_regimes = policy["allowed_regimes"]
-    assert isinstance(policy_regimes, set)
 
-    policy_allows = (
-        policy is not None
-        and policy["selection_status"] == "READY"
-        and current_regime in policy_regimes
+@pytest.mark.parametrize("label", list(REGIMES))
+def test_every_complete_canonical_label_is_supported(label: str) -> None:
+    policy = RegimePolicy(frozenset({label}), {}, "READY")
+    assert policy.allows(label)
+
+
+@pytest.mark.parametrize(
+    "legacy",
+    [
+        "RANGE|HIGH",
+        "BULL|NORMAL",
+        "BEAR|HIGH",
+        "BULLISH",
+        "BEARISH",
+        "MIXED",
+        "HIGH_IV_CONTANGO_NORMAL_SKEW_STRONG_BULL",
+        "NORMAL_IV_CONTANGO_NORMAL_SKEW_RANGE_MIDDLE",
+        "HIGH_IV_CONTANGO_NORMAL_SKEW_HIGH_VOL_CHOP_POSITIVE_VRP",
+        "UNKNOWN",
+        "",
+    ],
+)
+def test_legacy_policy_cannot_authorize_any_label(legacy: str) -> None:
+    policy = RegimePolicy(frozenset({CANONICAL, legacy}), {}, "READY")
+    assert not policy.is_usable
+    assert not policy.allows(legacy)
+    assert not policy.allows(CANONICAL)
+
+
+def test_legacy_metric_keys_make_policy_unusable() -> None:
+    policy = RegimePolicy(
+        frozenset({CANONICAL}), {"RANGE|HIGH": {"trades": 100}}, "READY"
     )
+    assert not policy.is_usable
+    assert not policy.allows(CANONICAL)
 
-    assert policy_allows is False
+
+@pytest.mark.parametrize("selector", [select_regime_policy, summarize_by_regime])
+def test_training_rejects_legacy_labels_instead_of_translating(selector) -> None:
+    outcomes = [make_outcome("RANGE|HIGH", 100) for _ in range(10)]
+    with pytest.raises(ValueError, match="training_outcomes.regime: non-canonical"):
+        selector(outcomes)
 
 
-def test_combined_regime_label_is_required() -> None:
-    market_regime = {"regime": "RANGE|HIGH"}
-    allowed = {"RANGE|HIGH"}
+@pytest.mark.parametrize("selector", [select_regime_policy, summarize_by_regime])
+def test_mixed_training_input_is_not_silently_filtered(selector) -> None:
+    outcomes = [make_outcome(CANONICAL, 100) for _ in range(10)]
+    outcomes.append(make_outcome("RANGE|HIGH", -1000))
+    with pytest.raises(ValueError, match="non-canonical"):
+        selector(outcomes)
 
-    assert market_regime["regime"] in allowed
+
+def test_canonical_summary_preserves_training_pnl() -> None:
+    metrics = summarize_by_regime(
+        [make_outcome(CANONICAL, 100), make_outcome(CANONICAL, -40)]
+    )[CANONICAL]
+    assert metrics["trades"] == 2
+    assert metrics["wins"] == 1
+    assert metrics["pnl"] == 60
+    assert metrics["avg_pnl"] == 30
+    assert metrics["win_rate"] == 0.5
+    assert metrics["profit_factor"] == 2.5
