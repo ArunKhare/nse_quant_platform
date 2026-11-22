@@ -1,6 +1,5 @@
 """Proposal-only NIFTY iron-condor strategy.
 
-
 The strategy emits a TradeProposal. It never submits, modifies, or cancels an
 order.
 """
@@ -42,9 +41,7 @@ class IronCondorMonitor:
             raise TypeError(f"{self.strategy_name} must use IronCondorProfileSettings")
 
         self.config = self.profile
-        self.risk_settings: RiskSettings = self.settings.get_effective_risk_settings(
-            self.strategy_name
-        )
+        self.risk_settings: RiskSettings = self.settings.get_effective_risk_settings(self.strategy_name)
         self.exit_settings = self.settings.get_effective_exit_settings(self.strategy_name)
         self.gates = GateEvaluator(
             self.settings,
@@ -82,8 +79,7 @@ class IronCondorMonitor:
         short_call_strike = atm_strike + wing
 
         quote_lookup = {
-            (quote.instrument.option_type.value, quote.instrument.strike): quote
-            for quote in snapshot.quotes
+            (quote.instrument.option_type.value, quote.instrument.strike): quote for quote in snapshot.quotes
         }
 
         long_put_quote = self._select_long_quote(
@@ -209,8 +205,7 @@ class IronCondorMonitor:
             underlying=snapshot.underlying,
             expiry=snapshot.expiry,
             thesis=(
-                "Range-bound NIFTY assumption supported by IV rank, IV-RV spread, "
-                "and available expected-move estimate."
+                "Range-bound NIFTY assumption supported by IV rank, IV-RV spread, and available expected-move estimate."
             ),
             legs=valid_legs,
             entry_limit_price=credit,
@@ -289,9 +284,7 @@ class IronCondorMonitor:
         direction: int,
         max_spread_pct: float,
     ) -> Any | None:
-        strikes = sorted(
-            strike for contract_type, strike in quote_lookup if contract_type == option_type.value
-        )
+        strikes = sorted(strike for contract_type, strike in quote_lookup if contract_type == option_type.value)
 
         if direction < 0:
             candidates = [strike for strike in strikes if strike <= target_strike]
