@@ -24,28 +24,47 @@ def make_provider(monkeypatch: pytest.MonkeyPatch, days: tuple[int, ...]):
     monkeypatch.setattr(module, "datetime", Clock)
     settings = SimpleNamespace(
         universe=SimpleNamespace(underlying="NIFTY", strikes_per_side=2),
-        analytics=SimpleNamespace(expiries_per_snapshot=2),
+        analytics=SimpleNamespace(expiries_per_snapshot=2, capture_horizon_days=90),
     )
     monkeypatch.setattr(module, "get_settings", lambda: settings)
     rows = []
     for index, day in enumerate(days):
         for offset, kind in enumerate(("CE", "PE")):
             expiry = AS_OF + timedelta(days=day)
-            rows.append(dict(
-                name="NIFTY", instrument_type=kind, expiry=expiry.isoformat(),
-                strike=25000, instrument_token=index * 2 + offset + 1,
-                tradingsymbol=f"NIFTY-{day}-{kind}", lot_size=75,
-            ))
+            rows.append(
+                dict(
+                    name="NIFTY",
+                    instrument_type=kind,
+                    expiry=expiry.isoformat(),
+                    strike=25000,
+                    instrument_token=index * 2 + offset + 1,
+                    tradingsymbol=f"NIFTY-{day}-{kind}",
+                    lot_size=75,
+                )
+            )
     # A different underlying must not supply horizon coverage or quotes.
-    rows.append(dict(name="BANKNIFTY", instrument_type="CE",
-                     expiry=(AS_OF + timedelta(days=200)).isoformat(),
-                     strike=50000, instrument_token=9999, tradingsymbol="BANK-200-CE", lot_size=30))
+    rows.append(
+        dict(
+            name="BANKNIFTY",
+            instrument_type="CE",
+            expiry=(AS_OF + timedelta(days=200)).isoformat(),
+            strike=50000,
+            instrument_token=9999,
+            tradingsymbol="BANK-200-CE",
+            lot_size=30,
+        )
+    )
     kite = Mock()
     kite.instruments.return_value = rows
-    kite.quote.side_effect = lambda keys: {key: {
-        "last_price": 100.0, "oi": 100_000, "volume": 1000,
-        "depth": {"buy": [{"price": 99}], "sell": [{"price": 101}]},
-    } for key in keys}
+    kite.quote.side_effect = lambda keys: {
+        key: {
+            "last_price": 100.0,
+            "oi": 100_000,
+            "volume": 1000,
+            "depth": {"buy": [{"price": 99}], "sell": [{"price": 101}]},
+        }
+        for key in keys
+    }
     provider = module.KiteMarketDataProvider(kite)
     monkeypatch.setattr(provider, "get_spot", lambda: 25000.0)
     return provider, kite
@@ -94,5 +113,4 @@ def test_missing_quote_does_not_acquire_later_expiry_as_substitute(monkeypatch) 
     kite.quote.side_effect = lambda keys: {}
     snapshots = provider.get_chain_snapshots()
     assert [(item.expiry - AS_OF).days for item in snapshots] == [30, 60, 91]
-    assert all(q.ltp is None and q.bid is None and q.ask is None
-               for item in snapshots for q in item.quotes)
+    assert all(q.ltp is None and q.bid is None and q.ask is None for item in snapshots for q in item.quotes)

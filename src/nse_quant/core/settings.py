@@ -15,6 +15,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from nse_quant.core.evidence import EvidenceMode
 from nse_quant.core.regime_registry import IRON_CONDOR_REGIMES, validate_regime_labels
+from nse_quant.core.s2_input_settings import IndiaVixInputSettings
 
 CONFIG_DIR = Path("config")
 SETTINGS_YAML = CONFIG_DIR / "settings.yaml"
@@ -59,7 +60,9 @@ class AnalyticsSettings(BaseModel):
     max_expected_move_buffer: float = 1.15
     min_iv_history_observations: int = 30
     allow_iv_rank_cold_start: bool = True
+    # Minimum persisted completeness, not the acquisition limit.
     expiries_per_snapshot: int = 2
+    capture_horizon_days: int = Field(default=90, ge=90, strict=True)
 
     sma20_window: int = 20
     sma50_window: int = 50
@@ -234,6 +237,7 @@ class CandleIntervalSettings(BaseModel):
 
 
 class MarketDataSettings(BaseModel):
+    india_vix: IndiaVixInputSettings = Field(default_factory=IndiaVixInputSettings)
     default_symbol: str = "NIFTY"
     risk_free_rate: float = 0.065
 

@@ -35,7 +35,9 @@ analytics:
   max_expected_move_buffer: 1.15
   min_iv_history_observations: 30
   allow_iv_rank_cold_start: true
+  # Minimum complete expiries; does not cap horizon acquisition.
   expiries_per_snapshot: 2
+  capture_horizon_days: 90
   sma20_window: 20
   sma50_window: 50
   atr14_window: 14
@@ -77,6 +79,12 @@ notifier:
     enabled: true
 
 market_data:
+  india_vix:
+    # Explicit read-only acquisition API; not yet launcher/publication wiring.
+    enabled: false
+    quote_key: "NSE:INDIA VIX"
+    tradingsymbol: "INDIA VIX"
+    max_age_seconds: 300
   default_symbol: NIFTY
   index_symbols:
     - NIFTY
