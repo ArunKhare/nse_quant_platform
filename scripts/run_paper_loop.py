@@ -24,6 +24,7 @@ from nse_quant.execution.broker import PaperBroker
 from nse_quant.features.feature_gates import SpotFeatureGate
 from nse_quant.integrations.kite_session import get_cached_kite
 from nse_quant.market_data.kite_provider import KiteMarketDataProvider
+from nse_quant.market_data.persisted_provider import PersistedChainSnapshotProvider
 from nse_quant.market_data.replay_provider import (
     ReplayExhaustedError,
     ReplayMarketDataProvider,
@@ -243,6 +244,13 @@ def main() -> int:
             provider.resolve_spot_instrument_token if isinstance(provider, KiteMarketDataProvider) else None
         ),
         feature_gate=feature_gate,
+        # Decisions read complete snapshots persisted by the background
+        # capture thread; the loop never fetches the live chain synchronously.
+        chain_snapshot_provider=PersistedChainSnapshotProvider(
+            store=store,
+            underlying=settings.universe.underlying,
+            required_expiries=settings.analytics.expiries_per_snapshot,
+        ),
     )
 
     symbols: list[str] = args.symbol if args.symbol else [settings.market_data.default_symbol]

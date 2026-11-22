@@ -1,8 +1,9 @@
 # NSE Quant Platform — Implementation Charter
 
 **Status:** Authoritative implementation contract  
-**Version:** 1.0.0  
+**Version:** 1.1.0  
 **Created:** 2026-11-22  
+**Last updated:** 2026-11-22  
 **Owner:** Platform owner  
 
 This charter is the single source of truth for implementation decisions. It prevents architectural, regime, data, execution, and UI drift.
@@ -25,8 +26,6 @@ The platform must remain safe, observable, reproducible, and portable between Wi
 
 ## 2. Authoritative sources
 
-The following sources govern implementation:
-
 | Area | Authoritative source |
 |---|---|
 | Canonical options regime taxonomy and strategy playbook | `INFO/108-regime-strategy-playbook-v2.md` |
@@ -35,6 +34,7 @@ The following sources govern implementation:
 | Quantitative governance principles | `INFO/framework-foundations-quantitative-measurement.md` |
 | Optimization and governance principles | `INFO/quantitative-optimization-governance-operating-principles.md` |
 | Strategy structures and controls | `INFO/strategy-structures-execution-risks-controls.md` |
+| Iron-condor operational manual | `docs/strategies/iron_condor_master_manual.md` |
 | Current platform configuration | `config/settings.yaml` |
 | Test configuration | `config/settings.test.yaml` |
 
@@ -62,8 +62,6 @@ INFO documents may contain informational guidance, external research, or propose
 | Future OS | Linux / cloud-ready |
 
 ## 4. Canonical architecture
-
-The platform has two coordinated paths:
 
 ```text
 Operational path
@@ -158,15 +156,83 @@ The platform must use the exact four-component regime-label grammar and spelling
 - Iron-condor eligibility uses the full institutional `regime_label`.
 - Daily spot regimes such as `BULL|NORMAL` are market context only.
 - `BULLISH`, `BEARISH`, and `MIXED` are multi-timeframe trend evidence, not regimes.
-- Realized volatility is a separate risk/filter input, not a regime axis.
+- Realized volatility is not a fifth regime axis.
 - The iron-condor allowlist contains only complete four-component regime labels.
 - No strategy may compare incompatible regime vocabularies.
 - Every regime artifact includes `regime_version`, `as_of`, `classifier_version`, and input provenance.
 - Regime labels must be validated against the canonical registry.
 
-The initial iron-condor eligibility set must include only the exact full four-component `HIGH_VOL_CHOP` regime labels identified in the v2 playbook.
+### Canonical price-action states
 
-## 7. Evidence-plugin contract
+The canonical price-action states are:
+
+```text
+STRONG_BULL_TREND
+STRONG_BEAR_TREND
+RANGE_HIGH
+RANGE_LOW
+COMPRESSION
+HIGH_VOL_CHOP
+```
+
+The current v4 price-action states must not be silently reinterpreted as canonical playbook states. A new versioned classifier must produce the canonical states.
+
+## 7. Realized volatility contract
+
+Realized volatility is not a fifth regime axis.
+
+The canonical institutional regime remains:
+
+```text
+IV state × term structure × skew × price action
+```
+
+However, realized volatility is required for:
+
+1. Price-action classification, especially distinguishing `COMPRESSION` from `HIGH_VOL_CHOP`.
+2. Mandatory iron-condor entry validation through variance risk premium.
+3. Optional risk-sizing inputs after validation.
+
+### Variance risk premium
+
+The iron-condor master manual requires positive variance risk premium before entry:
+
+```text
+VRP = IV² - E[RV²] > 0
+```
+
+Where:
+
+- `IV` is current 30-day constant-maturity implied volatility.
+- `E[RV²]` is a forecast of realized variance over the 30-day holding period.
+- A positive VRP is required before an iron-condor entry can be considered.
+- High IV Rank alone does not authorize an entry.
+
+A regime label permits strategy evaluation; it does not authorize a trade until VRP and all other mandatory gates pass.
+
+### Regime-label rule
+
+Do not append RV, VRP, or trend to the regime label.
+
+```text
+Correct:
+HIGH_IV_CONTANGO_NORMAL_SKEW_HIGH_VOL_CHOP
+
+Incorrect:
+HIGH_IV_CONTANGO_NORMAL_SKEW_HIGH_VOL_CHOP_POSITIVE_VRP
+```
+
+Every decision record must retain:
+
+```text
+regime label
+classifier version
+realized volatility input
+VRP result
+VRP gate outcome
+```
+
+## 8. Evidence-plugin contract
 
 Every evidence plugin must declare one runtime mode:
 
@@ -204,7 +270,71 @@ decision_outcome
 
 No plugin may silently replace an instrument-specific regime.
 
-## 8. Cross-asset context
+## 9. Multi-timeframe trend contract
+
+Multi-timeframe trend is spot-price directional evidence.
+
+It is not a regime axis and must not be appended to the canonical four-component institutional regime label.
+
+The canonical regime remains:
+
+```text
+IV state × term structure × skew × price action
+```
+
+### Permitted roles
+
+Multi-timeframe trend may:
+
+- Provide observational context.
+- Support the price-action classifier as a validated input.
+- Act as a strategy-specific timing or risk-sizing filter after validation.
+- Be displayed in the dashboard and retained in decision audit records.
+
+### Prohibited roles
+
+Multi-timeframe trend must not:
+
+- Become a fifth regime axis.
+- Automatically block iron-condor entries.
+- Replace the canonical price-action classifier.
+- Override the institutional regime label.
+
+### Iron-condor timing filter
+
+`iron_condor_monitor` has a dedicated, versioned multi-timeframe timing filter:
+
+```text
+multi_timeframe_timing_v1
+```
+
+Initial mode:
+
+```yaml
+timing_filter:
+  enabled: true
+  mode: observation
+  min_trend_strength: 0.0005
+  required_timeframes:
+    - 15m
+    - 60m
+```
+
+In observation mode, the filter:
+
+- Records alignment and reasons.
+- Never blocks an entry.
+- Always returns `size_multiplier = 1.0`.
+
+In `risk_sizing` mode, misalignment may reduce size.
+
+In `hard_gate` mode, misalignment may block new entries.
+
+Weak or unavailable trend context is treated as `OBSERVE`, not `BLOCK`, even in hard-gate mode.
+
+The feature gate must not treat multi-timeframe misalignment as a blocking reason by default. The strategy-specific timing filter owns any future gating or sizing decision.
+
+## 10. Cross-asset context
 
 NIFTY options and cash stocks are distinct decision contexts.
 
@@ -263,7 +393,7 @@ NIFTY options regime primarily acts as a cash-stock risk adjustment.
 
 It becomes a hard gate only for defined tail-risk or event conditions. It must never replace stock-specific regime logic.
 
-## 9. Candle policy
+## 11. Candle policy
 
 The canonical intraday candle interval is:
 
@@ -287,7 +417,7 @@ Daily candles remain a separate canonical EOD series.
 - Every derived feature records source interval, derivation version, source data range, and point-in-time timestamp.
 - Derived candles must be reproducible from 1-minute source data.
 
-## 10. Medallion contract
+## 12. Medallion contract
 
 ```text
 Bronze
@@ -336,7 +466,7 @@ checksum or content hash
 
 A stale, incomplete, or unavailable Gold artifact must block new entries according to the configured freshness policy.
 
-## 11. Linux and cloud readiness
+## 13. Linux and cloud readiness
 
 The platform must run on Windows 11 today and migrate cleanly to Linux or a cloud machine later.
 
@@ -352,7 +482,7 @@ Required rules:
 - Use UTC internally; convert to IST only at market-session boundaries and presentation.
 - Ensure every long-running process can restart safely without corrupting data.
 
-## 12. Dashboard contract
+## 14. Dashboard contract
 
 The dashboard is implemented in Plotly Dash and runs as an independent read-only process.
 
@@ -378,7 +508,7 @@ Dash is chosen because it keeps the platform Python-only and avoids a separate R
 
 Use `dcc.Interval` for lightweight live panels. Use background callbacks for expensive historical, backtest, or research queries.
 
-## 13. Testing and rollout
+## 15. Testing and rollout
 
 Each stage has a minimum critical-path test set:
 
@@ -386,6 +516,7 @@ Each stage has a minimum critical-path test set:
 - Regime-label validation tests.
 - Data-integrity and point-in-time tests.
 - Decision-gate tests.
+- Timing-filter tests.
 - Paper-trading validation.
 - Audit/replay tests for governance-critical changes.
 - Multi-process ownership tests.
@@ -394,11 +525,11 @@ Paper trading is the primary acceptance mechanism. A stage may proceed only afte
 
 Tests must use isolated temporary storage and mocked providers. They must not write to live operational or paper-trading databases.
 
-## 14. Implementation stages
+## 16. Implementation stages
 
 ```text
-Stage 0: Freeze contracts
-Stage 1: Standardize regimes and stabilize NIFTY options
+Stage 0: Freeze contracts — COMPLETE
+Stage 1: Standardize regimes and stabilize NIFTY options — IN PROGRESS
 Stage 2: Medallion foundation
 Stage 3: Shared market context
 Stage 4: Cash-stock research context
@@ -408,27 +539,32 @@ Stage 6: Live readiness
 
 ### Stage 0 — Freeze contracts
 
-Deliverables:
-
-- Canonical regime enums and exact 108-label grammar.
-- Regime artifact schema.
-- Feature schema and feature-version contract.
-- Decision-record schema.
-- Strategy eligibility contract.
-- Configuration schema for evidence plugins and trading contexts.
-- Compatibility tests for regime-label parsing and serialization.
-
-### Stage 1 — Stabilize NIFTY options
+Status: complete.
 
 Deliverables:
 
-- Fix iron-condor eligibility to consume institutional `regime_label`.
-- Remove `BULL|NORMAL` from iron-condor eligibility comparison.
-- Preserve daily regime and multi-timeframe trend as separate evidence.
-- Make every evidence plugin runtime-configurable.
-- Add explicit plugin health/staleness status.
-- Add paper-loop decision audit records.
-- Add kill-switch and stale-data guardrails.
+- Implementation charter.
+- Evidence-plugin runtime modes.
+- Operational store paths and factory.
+- Store-ownership tests.
+- Dependency updates.
+- Iron-condor master manual.
+- Configuration repair.
+
+### Stage 1 — Standardize regimes and stabilize NIFTY options
+
+Status: in progress.
+
+Deliverables:
+
+- Canonical regime registry.
+- Playbook-aligned institutional regime classifier.
+- Exact iron-condor regime-label allowlist.
+- Realized-volatility/VRP validation contract.
+- Strategy-specific multi-timeframe timing filter.
+- Removal of implicit multi-timeframe hard gate.
+- Paper-loop audit fields for regime, VRP, timing filter, and evidence provenance.
+- Stale-data and kill-switch guardrails.
 
 ### Stage 2 — Medallion foundation
 
@@ -486,14 +622,15 @@ Deliverables:
 
 No live trading occurs until this stage is explicitly approved.
 
-## 15. Prohibited drift
+## 17. Prohibited drift
 
 The following are prohibited without a charter amendment:
 
 - Adding a new regime vocabulary.
 - Using `BULL|NORMAL` for iron-condor eligibility.
-- Treating multi-timeframe alignment as a regime.
+- Treating multi-timeframe trend as a regime.
 - Adding realized volatility as a fifth regime axis.
+- Appending RV, VRP, or trend to a regime label.
 - Allowing a cash-stock decision to consume an index-option regime as its own regime.
 - Letting a live decision synchronously depend on Bronze/Silver/Gold processing.
 - Enabling live trading without an explicit authorization stage.
@@ -502,8 +639,9 @@ The following are prohibited without a charter amendment:
 - Allowing multiple processes to write to the same DuckDB database.
 - Running tests against live operational or paper-trading databases.
 - Allowing the dashboard to directly mutate operational decision state.
+- Treating multi-timeframe misalignment as an implicit feature-gate rejection.
 
-## 16. Informational, not binding
+## 18. Informational, not binding
 
 The following items are guidance or future research topics, not immediate requirements:
 
@@ -520,7 +658,7 @@ The following items are guidance or future research topics, not immediate requir
 
 These require validation against actual Kite behavior, infrastructure, cost, and observed data quality before becoming binding requirements.
 
-## 17. Amendment process
+## 19. Amendment process
 
 Any change to this charter requires:
 
@@ -532,3 +670,22 @@ Any change to this charter requires:
 6. An updated changelog entry.
 
 No implementation may silently deviate from this charter.
+
+## 20. Changelog
+
+### 1.1.0 — 2026-11-22
+
+- Clarified realized-volatility contract.
+- Added mandatory VRP entry-validation requirement for iron condors.
+- Clarified that RV supports price-action classification but is not a regime axis.
+- Clarified multi-timeframe trend as strategy-specific evidence.
+- Added versioned `multi_timeframe_timing_v1` iron-condor timing filter.
+- Made multi-timeframe trend observation-only by default.
+- Removed implicit multi-timeframe feature-gate rejection as the default behavior.
+- Added canonical price-action states.
+- Marked Stage 0 complete and Stage 1 in progress.
+
+### 1.0.0 — 2026-11-22
+
+- Initial charter.
+- Locked paper-only safety, NIFTY-only scope, regime contract, evidence governance, store ownership, Medallion architecture, candle policy, dashboard choice, and implementation stages.

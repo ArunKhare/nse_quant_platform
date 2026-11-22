@@ -20,6 +20,7 @@ from typing import Any, cast
 from uuid import uuid4
 
 from nse_quant.analytics.features import build_features
+from nse_quant.core.evidence import EvidenceMode
 from nse_quant.core.models import (
     ChainSnapshot,
     GateResult,
@@ -42,7 +43,6 @@ from nse_quant.features.availability_checker import (
 from nse_quant.features.feature_gates import SpotFeatureGate
 from nse_quant.features.feature_service import SpotFeatureService
 from nse_quant.features.feature_store import FeatureStore
-from nse_quant.market_data.persisted_provider import PersistedChainSnapshotProvider
 from nse_quant.ops.data_quality import DataQualityChecker, DataQualityReport
 from nse_quant.ops.eligibility_alerts import EligibilityAlertManager
 from nse_quant.ops.kill_switch import KillSwitch
@@ -70,6 +70,7 @@ from nse_quant.research.regime_risk_policy import RegimeRiskLimits, build_regime
 from nse_quant.risk.risk_engine import RiskEngine
 from nse_quant.strategy.exit_engine import ExitEngine
 from nse_quant.strategy.iron_condor import IronCondorMonitor
+from nse_quant.strategy.timing_filters import MultiTimeframeTimingFilter
 
 logger = logging.getLogger(__name__)
 
@@ -86,6 +87,7 @@ class DecisionLoop:
         feature_gate: SpotFeatureGate | None = None,
         live_snapshot_path: Path | None = None,
         kill_switch: KillSwitch | None = None,
+        chain_snapshot_provider: Any | None = None,
     ) -> None:
         self.settings = settings if settings is not None else get_settings()
         self.store = store
@@ -206,11 +208,15 @@ class DecisionLoop:
         self._live_snapshot_path = live_snapshot_path
         self.eligibility_alerts = EligibilityAlertManager(self.decisions)
         self.kill_switch = kill_switch or KillSwitch()
-        self.provider = PersistedChainSnapshotProvider(
-            store=self.store,
-            underlying=settings.universe.underlying,
-            required_expiries=settings.analytics.expiries_per_snapshot,
-        )
+        # Chain-snapshot source. When an explicit chain_snapshot_provider is
+        # supplied (e.g. PersistedChainSnapshotProvider fed by the paper loop's
+        # background capture thread), snapshots are already persisted and are
+        # not re-written. Otherwise the injected provider is used directly and
+        # its snapshot is persisted to option_stream, as before 28b93f3.
+        # self.provider is never replaced, so spot-token resolution and other
+        # provider capabilities are preserved.
+        self.chain_snapshot_provider = chain_snapshot_provider
+        self._persist_fetched_snapshots = chain_snapshot_provider is None
 
     def run_once(self) -> dict[str, Any]:
         if self.kill_switch.is_active():
@@ -304,19 +310,20 @@ class DecisionLoop:
             }
 
         t0 = time.perf_counter()
-        snapshots = self.provider.get_chain_snapshots()
+        snapshots = self._fetch_chain_snapshots()
         logger.info("chain_snapshots_seconds=%.3f", time.perf_counter() - t0)
 
         if not snapshots:
             return {
                 "status": "no_complete_chain_snapshot",
                 "symbol": symbol,
-                "reasons": ["No complete persisted option-chain snapshots"],
+                "reasons": ["No complete option-chain snapshots available"],
                 "checks": [],
                 "evidence": {},
             }
 
         snapshot = snapshots[0]
+        persisted_rows = self._persist_snapshot(snapshot)
 
         expiry_count = len({quote.instrument.expiry for quote in snapshot.quotes})
 
@@ -331,6 +338,23 @@ class DecisionLoop:
 
         t0 = time.perf_counter()
         features, iv_history_count, evidence = self._build_features(snapshot, instrument_token=provider_token)
+        timing_filter_result = evidence.get("timing_filter")
+
+        if timing_filter_result is None:
+            timing_filter_result = {
+                "strategy_id": "unknown",
+                "filter_name": "multi_timeframe_timing",
+                "filter_version": "multi_timeframe_timing_v1",
+                "mode": "observation",
+                "status": "OBSERVE",
+                "alignment": None,
+                "size_multiplier": 1.0,
+                "reasons": ["timing_filter_result_missing"],
+                "details": {},
+            }
+
+            evidence["timing_filter"] = timing_filter_result
+
         logger.info("features_evidence_seconds=%.3f", time.perf_counter() - t0)
 
         # Diagnostics
@@ -403,6 +427,22 @@ class DecisionLoop:
                 },
             )
 
+        timing_mode = EvidenceMode(timing_filter_result["mode"])
+        timing_status = timing_filter_result["status"]
+        _timing_size_multiplier = float(timing_filter_result["size_multiplier"])
+        if timing_mode is EvidenceMode.HARD_GATE and timing_status == "BLOCK":
+            return self._finish_cycle(
+                status="timing_filter_rejected",
+                features=features,
+                data_quality=data_quality,
+                iv_history=iv_history,
+                extra={
+                    "timing_filter": timing_filter_result,
+                    "position_outcomes": position_outcomes,
+                    "persisted_option_rows": persisted_rows,
+                    "evidence": evidence,
+                },
+            )
         if self.settings.research.enforce_strategy_eligibility:
             market_regime = self.store.get_market_regime_as_of(
                 symbol=symbol,
@@ -672,14 +712,23 @@ class DecisionLoop:
 
         evidence_results = self.evidence_runner.run(context)
         evidence = {result.plugin: result.payload for result in evidence_results}
-        for result in evidence_results:
-            self.store.write_decision_evidence(
-                run_id=self.run_id,
-                ts=context.ts,
-                symbol=context.symbol,
-                plugin=result.plugin,
-                evidence=result.payload,
-            )
+
+        strategy_id = self._resolve_active_strategy_id()
+        timing_filter = self._resolve_timing_filter(strategy_id)
+
+        timing_result = timing_filter.evaluate(evidence.get("multi_timeframe_trend"))
+
+        evidence["timing_filter"] = {
+            "strategy_id": strategy_id,
+            "filter_name": timing_result.filter_name,
+            "filter_version": timing_result.filter_version,
+            "mode": timing_result.mode.value,
+            "status": timing_result.status.value,
+            "alignment": timing_result.alignment,
+            "size_multiplier": timing_result.size_multiplier,
+            "reasons": timing_result.reasons,
+            "details": timing_result.details,
+        }
 
         return features, len(iv_history), evidence
 
@@ -1120,7 +1169,7 @@ class DecisionLoop:
     ) -> dict[str, Any]:
 
         t0 = time.perf_counter()
-        snapshots = self.provider.get_chain_snapshots()
+        snapshots = self._fetch_chain_snapshots()
         logger.info("chain_snapshots_seconds=%.3f", time.perf_counter() - t0)
 
         if not snapshots:
@@ -1131,7 +1180,7 @@ class DecisionLoop:
             }
 
         snapshot = snapshots[0]
-        persisted_rows = 0
+        persisted_rows = self._persist_snapshot(snapshot)
 
         features, _iv_history_count, evidence = self._build_features(
             snapshot,
@@ -1153,6 +1202,25 @@ class DecisionLoop:
             "persisted_option_rows": persisted_rows,
             "evidence": evidence,
         }
+
+    def _fetch_chain_snapshots(self) -> list[ChainSnapshot]:
+        """Return chain snapshots from the configured snapshot source.
+
+        Uses chain_snapshot_provider when supplied; otherwise the injected
+        provider. Providers exposing only get_chain_snapshot() are wrapped.
+        """
+        source = self.chain_snapshot_provider or self.provider
+        many = getattr(source, "get_chain_snapshots", None)
+        if callable(many):
+            return list(cast(Callable[[], list[ChainSnapshot]], many)())
+        single = cast(Callable[[], ChainSnapshot], source.get_chain_snapshot)
+        return [single()]
+
+    def _persist_snapshot(self, snapshot: ChainSnapshot) -> int:
+        """Persist a directly fetched snapshot; persisted sources are not re-written."""
+        if not self._persist_fetched_snapshots:
+            return 0
+        return int(self.store.write_option_stream(self.run_id, snapshot))
 
     def _resolve_spot_instrument_token(self, symbol: str) -> int:
         if self._spot_instrument_token_resolver is None:
@@ -1336,3 +1404,36 @@ class DecisionLoop:
             "expected_move_points": features.expected_move_points,
             "implied_annualised_iv_from_expected_move": implied_iv,
         }
+
+    def _resolve_active_strategy_id(self) -> str:
+        allowed_strategy_ids = self.settings.safety.allowed_strategies
+
+        if not allowed_strategy_ids:
+            raise ValueError("No allowed strategies configured")
+
+        enabled_strategy_ids = [
+            strategy_id
+            for strategy_id in allowed_strategy_ids
+            if self.settings.get_strategy_profile(strategy_id).enabled
+        ]
+
+        if len(enabled_strategy_ids) != 1:
+            raise ValueError(
+                "Exactly one enabled strategy must be active; "
+                f"found {len(enabled_strategy_ids)}: {sorted(enabled_strategy_ids)}"
+            )
+
+        return enabled_strategy_ids[0]
+
+    def _resolve_timing_filter(self, strategy_id: str) -> MultiTimeframeTimingFilter:
+        profile = self.settings.get_strategy_profile(strategy_id)
+        timing_settings = getattr(profile, "timing_filter", None)
+
+        if timing_settings is None or not timing_settings.enabled:
+            return MultiTimeframeTimingFilter(mode=EvidenceMode.OBSERVATION)
+
+        return MultiTimeframeTimingFilter(
+            mode=timing_settings.mode,
+            min_trend_strength=timing_settings.min_trend_strength,
+            required_timeframes=tuple(timing_settings.required_timeframes),
+        )

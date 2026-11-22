@@ -221,17 +221,19 @@ def test_rejects_missing_explicit_cutover_request():
         ),
         (lambda value: value["release_ready"].update({"healed": True}), "AUTHORITY_EVIDENCE_HEALING_FORBIDDEN"),
         (lambda value: value["release_ready"].update({"deleted": True}), "AUTHORITY_EVIDENCE_DELETION_FORBIDDEN"),
-        lambda value: (
-            value["release_ready"].update({"native_gates_open": False}),
-            value.update(
-                {
-                    "release_readiness_verification_fingerprint": hashlib.sha256(
-                        _canonical(value["release_ready"])
-                    ).hexdigest()
-                }
+        (
+            lambda value: (
+                value["release_ready"].update({"native_gates_open": False}),
+                value.update(
+                    {
+                        "release_readiness_verification_fingerprint": hashlib.sha256(
+                            _canonical(value["release_ready"])
+                        ).hexdigest()
+                    }
+                ),
             ),
+            "AUTHORITY_EVIDENCE_NATIVE_GATES_NOT_OPEN",
         ),
-        "AUTHORITY_EVIDENCE_NATIVE_GATES_NOT_OPEN",
     ],
 )
 def test_rejects_forbidden_release_ready_inputs(mutation, error):

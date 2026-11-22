@@ -326,12 +326,43 @@ def snapshot_factory(expiry, instrument_factory):
             received_at=ts,
         )
 
+        # The decision loop requires settings.analytics.expiries_per_snapshot
+        # distinct expiries (2 in settings.test.yaml). Add a next-week expiry so
+        # replay snapshots satisfy the completeness gate without weakening it.
+        next_expiry = expiry + timedelta(days=7)
+        next_quotes = []
+        for token, option_type, price in (
+            (2001, OptionType.CE, call_price * 1.4),
+            (2002, OptionType.PE, put_price * 1.4),
+        ):
+            suffix = "CE" if option_type == OptionType.CE else "PE"
+            next_quotes.append(
+                OptionQuote(
+                    instrument_token=token,
+                    instrument=Instrument(
+                        tradingsymbol=f"NIFTY{next_expiry.strftime('%y%b').upper()}23000{suffix}NX",
+                        instrument_token=token,
+                        underlying="NIFTY",
+                        expiry=next_expiry,
+                        strike=23000,
+                        option_type=option_type,
+                        lot_size=65,
+                    ),
+                    ltp=price,
+                    bid=price - 0.5,
+                    ask=price + 0.5,
+                    volume=1000,
+                    oi=100000,
+                    received_at=ts,
+                )
+            )
+
         return ChainSnapshot(
             underlying="NIFTY",
             ts=ts,
             spot=spot,
             expiry=expiry,
-            quotes=[call, put],
+            quotes=[call, put, *next_quotes],
         )
 
     return build

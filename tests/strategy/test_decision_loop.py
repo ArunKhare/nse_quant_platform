@@ -24,17 +24,22 @@ class SyntheticProvider:
 
         quotes = []
 
-        for strike, option_type in [
-            (24600, OptionType.PE),
-            (24800, OptionType.PE),
-            (25200, OptionType.CE),
-            (25400, OptionType.CE),
+        # Two expiries satisfy settings.analytics.expiries_per_snapshot (2).
+        next_expiry = expiry + timedelta(days=7)
+        for leg_expiry, token_offset, strike, option_type in [
+            (expiry, 0, 24600, OptionType.PE),
+            (expiry, 0, 24800, OptionType.PE),
+            (expiry, 0, 25200, OptionType.CE),
+            (expiry, 0, 25400, OptionType.CE),
+            (next_expiry, 100000, 24800, OptionType.PE),
+            (next_expiry, 100000, 25200, OptionType.CE),
         ]:
+            token = strike + token_offset
             instrument = Instrument(
-                tradingsymbol=f"NIFTY{strike}{option_type.value}",
-                instrument_token=strike,
+                tradingsymbol=f"NIFTY{leg_expiry:%y%m%d}{strike}{option_type.value}",
+                instrument_token=token,
                 underlying="NIFTY",
-                expiry=expiry,
+                expiry=leg_expiry,
                 strike=strike,
                 option_type=option_type,
                 lot_size=75,
@@ -42,7 +47,7 @@ class SyntheticProvider:
 
             quotes.append(
                 OptionQuote(
-                    instrument_token=strike,
+                    instrument_token=token,
                     ltp=100.0,
                     bid=99.0,
                     ask=101.0,

@@ -13,6 +13,8 @@ import yaml
 from pydantic import BaseModel, Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from nse_quant.core.evidence import EvidenceMode
+
 CONFIG_DIR = Path("config")
 SETTINGS_YAML = CONFIG_DIR / "settings.yaml"
 Path(os.getenv("NSE_QUANT_SETTINGS", str(CONFIG_DIR / "settings.yaml")))
@@ -119,11 +121,22 @@ class StrategyProfileSettings(BaseModel):
     exits: StrategyExitSettings = Field(default_factory=StrategyExitSettings)
 
 
+class StrategyTimingFilterSettings(BaseModel):
+    enabled: bool = True
+    mode: EvidenceMode = EvidenceMode.OBSERVATION
+    min_trend_strength: float = Field(default=0.0005, ge=0.0)
+    required_timeframes: list[str] = Field(
+        default_factory=lambda: ["15m", "60m"],
+        min_length=1,
+    )
+
+
 class IronCondorProfileSettings(StrategyProfileSettings):
     strategy_type: str = "iron_condor"
     wing_distance_points: float = 200.0
     min_credit: float = 20.0
     min_days_to_expiry: int = 1
+    timing_filter: StrategyTimingFilterSettings = Field(default_factory=StrategyTimingFilterSettings)
 
 
 STRATEGY_PROFILE_TYPES: dict[str, type[StrategyProfileSettings]] = {

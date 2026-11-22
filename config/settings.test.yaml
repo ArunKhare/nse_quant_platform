@@ -160,20 +160,26 @@ strategies:
         - HIGH_IV_BACKWARDATION_FORWARD_REVERSE_SKEW_HIGH_VOL_CHOP
       blocked_regimes: []
       require_iv_rank_available: true
-
-  risk:
-    max_lots_per_order: 2
-    max_open_positions: 1
-    max_daily_loss: 25000
-    max_notional_exposure: 2000000
-    max_spread_pct: 0.06
-  exits:
-    profit_target_pct: 50
-    stop_loss_credit_multiple: 2.0
-    theta_decay_target_pct: 50
-    iv_collapse_pct: 20
-    data_quality_max_age_seconds: 30
-    expected_move_violation_buffer: 1.25
+    timing_filter:
+      enabled: true
+      mode: observation
+      min_trend_strength: 0.0005
+      required_timeframes:
+        - 15m
+        - 60m
+    risk:
+      max_lots_per_order: 2
+      max_open_positions: 1
+      max_daily_loss: 25000
+      max_notional_exposure: 2000000
+      max_spread_pct: 0.06
+    exits:
+      profit_target_pct: 50
+      stop_loss_credit_multiple: 2.0
+      theta_decay_target_pct: 50
+      iv_collapse_pct: 20
+      data_quality_max_age_seconds: 30
+      expected_move_violation_buffer: 1.25
 
 evidence:
   enabled: true
