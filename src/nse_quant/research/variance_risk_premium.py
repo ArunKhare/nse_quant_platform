@@ -45,11 +45,15 @@ def evaluate_variance_risk_premium(
 
     Both inputs must be finite, non-negative annualized volatility values. The
     result is unavailable, not failed, when either input is missing or invalid.
+    Passing requires VRP strictly above minimum_vrp; equality fails. No rounding
+    or approximate comparison is applied to the eligibility boundary.
     """
     reasons: list[str] = []
     details: dict[str, Any] = {
         "minimum_vrp": minimum_vrp,
         "formula": "IV^2 - E[RV^2]",
+        "threshold_comparison": ">",
+        "gate_version": "variance_risk_premium_gate_strict_v1",
     }
 
     iv, iv_reason = _validate_volatility(implied_volatility, "implied_volatility")
@@ -86,9 +90,13 @@ def evaluate_variance_risk_premium(
         }
     )
 
-    passed = variance_risk_premium >= minimum_vrp
+    passed = variance_risk_premium > minimum_vrp
     if not passed:
-        reasons.append("variance_risk_premium_below_minimum")
+        reasons.append(
+            "variance_risk_premium_at_minimum"
+            if variance_risk_premium == minimum_vrp
+            else "variance_risk_premium_below_minimum"
+        )
 
     return VarianceRiskPremiumResult(
         calculation_version=VRP_CALCULATION_VERSION,
@@ -131,8 +139,8 @@ def trailing_daily_realized_volatility(
 ) -> tuple[float | None, dict[str, Any]]:
     """Annualized close-to-close realized volatility from completed daily closes.
 
-    Uses the last ``window_days`` daily log returns (``window_days + 1`` closes),
-    sample standard deviation, annualized with sqrt(252). Returns ``(None, ...)``
+    Uses the last window_days daily log returns (window_days + 1 closes),
+    sample standard deviation, annualized with sqrt(252). Returns (None, ...)
     when there are too few valid closes.
     """
     if window_days < 2:
