@@ -32,7 +32,8 @@ def database(tmp_path, request):
     )
     catalog = connection.execute("SELECT current_database()").fetchone()[0]
     for schema, table in frontier.TABLES:
-        connection.execute(f"CREATE SCHEMA IF NOT EXISTS {frontier._quote(schema)}")
+        qualified_schema = ".".join(map(frontier._quote, (catalog, schema)))
+        connection.execute(f"CREATE SCHEMA IF NOT EXISTS {qualified_schema}")
         definitions = []
         for column in frontier.TABLES[(schema, table)]:
             kind = "VARCHAR"
@@ -148,9 +149,7 @@ def test_missing_schema_produces_review_not_global_health(tmp_path):
 
 def test_actual_readonly_database_observation(database):
     catalog = database.execute("SELECT current_database()").fetchone()[0]
-    path = next(
-        row[2] for row in database.execute("PRAGMA database_list").fetchall() if row[1] == catalog
-    )
+    path = next(row[2] for row in database.execute("PRAGMA database_list").fetchall() if row[1] == catalog)
     expected = frontier.observe_admission_frontier(database)
     database.close()
 
