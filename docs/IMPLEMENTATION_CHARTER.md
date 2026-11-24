@@ -1,9 +1,9 @@
 # NSE Quant Platform — Implementation Charter
 
 **Status:** Authoritative implementation contract  
-**Version:** 1.1.0  
+**Version:** 1.1.1  
 **Created:** 2026-11-22  
-**Last updated:** 2026-11-22  
+**Last updated:** 2026-11-24  
 **Owner:** Platform owner  
 
 This charter is the single source of truth for implementation decisions. It prevents architectural, regime, data, execution, and UI drift.
@@ -92,7 +92,7 @@ kite_stream
 paper_loop
 ├── Owns: decisions.duckdb
 ├── Owns: paper_orders.duckdb
-├── Reads: market_data.duckdb read-only
+├── Reads: published market-state snapshots or a validated read-only storage-service interface
 └── Writes: decisions, paper orders, audit events
 
 dashboard
@@ -124,9 +124,13 @@ The paper loop must not capture market data while `kite_stream` is active. Marke
 
 ### DuckDB rules
 
-- One DuckDB connection per process.
+- DuckDB connections and analytical sessions are process-local and explicitly owned; never inherit, serialize, or share them across processes.
+- A process may own separate connections for distinct stores or roles when their ownership, access mode, lifecycle, independent transactions, and combined resource budget are explicit. This does not authorize competing processes to open the same mutable database file.
+- Prefer one reusable connection per store/service role within a process; avoid per-query connection churn.
 - One writer per DuckDB database.
-- Readers open databases in `read_only=True` mode.
+- Direct-file readers use `read_only=True` only when compatible with file ownership. This flag does not permit an independent reader process to bypass another process's native read/write file lock.
+- While a mutable database is held by its writer process, other processes consume immutable published snapshots/Parquet or a validated storage-service interface. They do not directly open that live file.
+- A Quack service, when validated and enabled, is the sole direct owner of its database files. Client roles retain dataset-level write ownership; local client connection flags are not server-side authorization.
 - Never share a DuckDB connection across process boundaries.
 - Never open a database read/write while another process owns it for writing.
 - Close connections promptly after write transactions.
@@ -134,6 +138,14 @@ The paper loop must not capture market data while `kite_stream` is active. Marke
 - Use immutable Parquet for analytical access where appropriate.
 
 DuckDB Quack server-based access is optional. It must be validated on Windows and Linux before adoption. It may later be introduced as a storage adapter if concurrent analytical access becomes necessary.
+
+### Multi-terminal validation boundary
+
+The target remains a single-user platform with independent capture, paper-loop, dashboard, Medallion, and research processes. Connection-count wording must not force these roles into one process or make research block live capture/decisions.
+
+Quack remains an optional, explicitly validated adapter, not an automatically activated dependency. Before operational cutover, tests must exercise concurrent writer progress, independent paper/dashboard/research clients, writer ownership, rejected unauthorized writes, failure/cleanup behavior, and bounded resource configuration on supported Windows and Linux environments. A synthetic capability probe is not validation of the actual application entry points.
+
+Existing operational runners must be inspected and migrated explicitly. A store factory or installed extension alone is not evidence that an entry point uses it. Do not remove broker/risk controls or silently fall back to competing direct-file opens if a service is unavailable.
 
 ## 6. Regime contract
 
@@ -672,6 +684,14 @@ Any change to this charter requires:
 No implementation may silently deviate from this charter.
 
 ## 20. Changelog
+
+### 1.1.1 — 2026-11-24
+
+- Clarified process-local ownership rather than a global one-connection-per-process cap.
+- Preserved single-user, multi-terminal execution and explicit dataset writer ownership.
+- Clarified native DuckDB file locks versus immutable snapshots and validated Quack access.
+- Required server-side authorization and actual runner/concurrency validation before service cutover.
+- No change to paper-only permissions, strategy/regime authority, or Quack's validation requirement.
 
 ### 1.1.0 — 2026-11-22
 
