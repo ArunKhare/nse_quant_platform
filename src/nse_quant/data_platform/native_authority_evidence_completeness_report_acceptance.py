@@ -81,7 +81,7 @@ def accept_authority_evidence_completeness_report(
         "decision_eligibility_asserted": False,
     }
     return {
-        "accepted": True,
+        "accepted": accepted,
         "version": VERSION,
         "acceptance_fingerprint": hashlib.sha256(_canonical_bytes(accepted)).hexdigest(),
         "decision_eligibility_asserted": False,
