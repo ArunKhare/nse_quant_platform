@@ -4,6 +4,9 @@ import gc
 import logging
 import os
 import shutil
+import subprocess
+import time
+from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -71,7 +74,7 @@ def cap_duckdb_resources():
 
     def bounded_connect(*args, **kwargs):
         config = dict(kwargs.get("config") or {})
-        config.setdefault("memory_limit", "4GB")
+        config.setdefault("memory_limit", "2500MB")
         config.setdefault("threads", 2)
         kwargs["config"] = config
         return original_connect(*args, **kwargs)
@@ -81,27 +84,43 @@ def cap_duckdb_resources():
     duckdb.connect = original_connect
 
 
+@contextmanager
+def _seed_lock(lock_path: Path):
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    while True:
+        try:
+            os.mkdir(lock_path)
+            break
+        except FileExistsError:
+            time.sleep(0.2)
+    try:
+        yield
+    finally:
+        shutil.rmtree(lock_path, ignore_errors=True)
+
+
 @pytest.fixture(scope="session")
 def _seed_native_failure_lab(tmp_path_factory):
-    """Build NativeFailureLab ONCE at a fixed work_root path and snapshot it to backup_root."""
-
+    """Build NativeFailureLab ONCE per worker (serialized across workers) and snapshot."""
     work_root = tmp_path_factory.mktemp("native_failure_lab_work")
     backup_root = tmp_path_factory.mktemp("native_failure_lab_backup")
+    lock_path = tmp_path_factory.getbasetemp().parent / "native_failure_lab_seed.lock"
 
-    lab_instance = NativeFailureLab(work_root)
-    # Snapshot the clean 8 DuckDB files + artifacts while paths match work_root
+    with _seed_lock(lock_path):
+        lab_instance = NativeFailureLab(work_root)
+
     shutil.copytree(work_root, backup_root, dirs_exist_ok=True)
     return work_root, backup_root, lab_instance
 
 
 @pytest.fixture
 def lab(_seed_native_failure_lab):
-    """Restore the clean snapshot into the exact same work_root path in ~10ms per test."""
     work_root, backup_root, lab_instance = _seed_native_failure_lab
-
-    # Remove any tampered/extra files created by the previous test and restore clean state
     shutil.rmtree(work_root)
-    shutil.copytree(backup_root, work_root)
+    subprocess.run(
+        ["cp", "-a", "--reflink=auto", str(backup_root), str(work_root)],
+        check=True,
+    )
     return lab_instance
 
 
