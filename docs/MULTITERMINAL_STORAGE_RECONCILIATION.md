@@ -106,3 +106,34 @@ live-trading permission change. Before apply, the repository charter is unchange
 
 Stage 1 and S2 remain IN PROGRESS. No VIX history splicing, Gold admission,
 provisional-regime promotion, scheduling, capture activation or broker change.
+
+## Quack probe setup on Windows
+
+From the repository root, provision the DuckDB extensions once in the project
+environment. These are DuckDB extensions, not new Python dependencies; this
+setup does not require changes to `pyproject.toml` or `uv.lock`.
+
+```powershell
+uv run python -c "import duckdb; con = duckdb.connect(':memory:'); con.execute('INSTALL quack'); con.execute('INSTALL httpfs'); con.close()"
+```
+
+The probe does not install extensions at runtime. The spawned server worker
+loads `httpfs` on the same DuckDB connection before calling `quack_serve`.
+Run the probe with:
+
+```powershell
+uv run python -m nse_quant.persistence.quack_probe
+$LASTEXITCODE
+```
+
+A successful run reports `"status": "passed"` and exits `0`. The probe uses
+a temporary store and a loopback endpoint; it does not open operational stores.
+
+Validation recorded on 2026-11-24: Windows `windows_amd64`, DuckDB `2.0.0`,
+and `quack:127.0.0.1:<port>`. All three separate probe clients
+(`paper_reader`, `dashboard`, and `research`) passed and observed writer
+progress. The server finished at generation 29.
+
+This validates the synthetic transport probe only.
+`operational_wiring_validated` and `decision_eligibility_asserted` remain
+`false`. The opt-in service adapter and runner migration are separate changes.
