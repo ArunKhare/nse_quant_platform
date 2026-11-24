@@ -15,7 +15,13 @@ def registry_snapshot(tmp_path, request):
     connection.execute(f"ATTACH '{path}' AS {alias}")
     connection.execute(f"USE {alias}")
     for (schema, table), columns in reader.COLUMNS.items():
-        connection.execute(f"CREATE SCHEMA IF NOT EXISTS {reader._quote(schema)}")
+        row = connection.execute("SELECT current_database()").fetchone()
+        assert row is not None
+        catalog = row[0]
+
+        schema_path = f"{reader._quote(catalog)}.{reader._quote(schema)}"
+
+        connection.execute(f"CREATE SCHEMA IF NOT EXISTS {schema_path}")
         definitions = []
         for column in columns:
             kind = "VARCHAR"
@@ -98,11 +104,7 @@ def test_extra_table_and_column_are_not_ignored(registry_snapshot):
 
 def test_readonly_current_attached_catalog(registry_snapshot):
     current = registry_snapshot.execute("SELECT current_database()").fetchone()[0]
-    path = next(
-        row[2]
-        for row in registry_snapshot.execute("PRAGMA database_list").fetchall()
-        if row[1] == current
-    )
+    path = next(row[2] for row in registry_snapshot.execute("PRAGMA database_list").fetchall() if row[1] == current)
     expected = reader.snapshot(registry_snapshot)
     registry_snapshot.close()
     with duckdb.connect(":memory:") as conn:
@@ -125,8 +127,6 @@ def test_cli_no_io_default(tmp_path, monkeypatch, capsys):
         return original(module, *args, **kwargs)
 
     monkeypatch.setattr(builtins, "__import__", guarded)
-    assert (
-        main(["--identity-db", str(tmp_path / "missing.duckdb"), "--assertion-id", "a" * 64]) == 0
-    )
+    assert main(["--identity-db", str(tmp_path / "missing.duckdb"), "--assertion-id", "a" * 64]) == 0
     assert list(tmp_path.iterdir()) == []
     assert "PLANNED" in capsys.readouterr().out
