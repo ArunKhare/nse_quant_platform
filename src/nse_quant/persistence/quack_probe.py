@@ -52,6 +52,7 @@ def _server(root: str, uri: str, ready: Any, stop: Any) -> None:
         conn.execute(f"CREATE MACRO probe_authorize(sid, query) AS (query = '{query}')")
         conn.execute("SET GLOBAL quack_authorization_function='probe_authorize'")
         token = secrets.token_urlsafe(32)
+        conn.execute("LOAD httpfs")
         conn.execute("CALL quack_serve(?, token => ?)", [uri, token]).fetchall()
         started = True
         ready.put(dict(status="ready", token=token, pid=os.getpid()))
