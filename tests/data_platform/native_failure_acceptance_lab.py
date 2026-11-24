@@ -88,20 +88,38 @@ class NativeFailureLab:
             )
 
     def gold(self) -> Any:
-        with self.opened("bronze", "frames", "references", "assessments", "gold") as handles:
-            return read_quote_price_build(*handles, build_id=self.build_id)
+        with (
+            self.opened("bronze") as (bronze,),
+            self.opened("frames") as (frame_silver,),
+            self.opened("references") as (reference_silver,),
+            self.opened("assessments") as (assessments,),
+            self.opened("gold") as (gold,),
+        ):
+            return read_quote_price_build(
+                bronze=bronze,
+                frame_silver=frame_silver,
+                reference_silver=reference_silver,
+                assessments=assessments,
+                gold=gold,
+                build_id=self.build_id,
+            )
 
     def stage(self) -> Any:
-        with self.opened(
-            "bronze",
-            "frames",
-            "references",
-            "assessments",
-            "gold",
-            "staging",
-        ) as handles:
+        with (
+            self.opened("bronze") as (bronze,),
+            self.opened("frames") as (frame_silver,),
+            self.opened("references") as (reference_silver,),
+            self.opened("assessments") as (assessments,),
+            self.opened("gold") as (gold,),
+            self.opened("staging") as (staging,),
+        ):
             return read_staged_quote_bundle(
-                *handles,
+                bronze=bronze,
+                frame_silver=frame_silver,
+                reference_silver=reference_silver,
+                assessments=assessments,
+                gold=gold,
+                staging=staging,
                 bundle_id=self.bundle_id,
                 artifact_root=self.artifacts,
             )
@@ -155,7 +173,15 @@ class NativeFailureLab:
                 f"payload_format,origin_kind FROM {events} WHERE source='kite_websocket'"
             ).fetchone()
             assert row is not None
-            original = BronzeEvent(*row[:4], bytes(row[4]), *row[5:])
+            original = BronzeEvent(
+                source=str(row[0]),
+                capture_session_id=str(row[1]),
+                source_record_id=str(row[2]),
+                received_at=row[3],
+                payload=bytes(row[4]),
+                payload_format=str(row[5]),
+                origin_kind=str(row[6]),
+            )
             changed = replace(original, payload=original.payload[:-1] + b"\x00")
             assert original.payload != changed.payload
             ledger = AuditLedger(conn)
