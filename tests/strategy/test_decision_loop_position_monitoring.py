@@ -18,6 +18,7 @@ from nse_quant.market_data.replay_provider import (
     ReplayMarketDataProvider,
 )
 from nse_quant.persistence.repositories import PositionRepository
+from nse_quant.strategy.canonical_risk_context import canonical_risk_rejection
 
 
 def test_new_position_rejects_missing_leg_entry_premium(
@@ -196,24 +197,16 @@ def test_missing_regime_policy_blocks_new_entry(
     assert result["status"] == "regime_risk_rejected"
 
 
-def test_ready_policy_allows_matching_regime() -> None:
+def test_ready_policy_allows_matching_canonical_regime() -> None:
+    current_regime = "HIGH_IV_CONTANGO_NORMAL_SKEW_HIGH_VOL_CHOP"
     policy = {
-        "allowed_regimes": {"RANGE|HIGH"},
+        "allowed_regimes": [current_regime],
         "selection_status": "READY",
-        "test_end": None,
+        "risk_limits": {},
+        "regime_metrics": {},
     }
 
-    current_regime = "RANGE|HIGH"
-    allowed_regimes = policy["allowed_regimes"]
-    assert isinstance(allowed_regimes, set)
-
-    policy_allows = (
-        policy is not None
-        and policy["selection_status"] == "READY"
-        and current_regime in allowed_regimes
-    )
-
-    assert policy_allows is True
+    assert canonical_risk_rejection(current_regime, policy) is None
 
 
 def test_position_closes_on_iv_collapse(
@@ -275,11 +268,7 @@ def test_position_closes_on_iv_collapse(
     position_id = first["strategy_position_id"]
 
     result = loop.run_once()
-    outcomes = [
-        outcome
-        for outcome in result["position_outcomes"]
-        if outcome["strategy_position_id"] == position_id
-    ]
+    outcomes = [outcome for outcome in result["position_outcomes"] if outcome["strategy_position_id"] == position_id]
 
     assert len(outcomes) == 1
     assert outcomes[0]["status"] == "closed"
@@ -323,9 +312,7 @@ def test_exit_engine_runs_on_next_cycle_after_fill(
 
     next_cycle_evaluate.assert_called_once()
     closed = [
-        outcome
-        for outcome in second["position_outcomes"]
-        if outcome["strategy_position_id"] == strategy_position_id
+        outcome for outcome in second["position_outcomes"] if outcome["strategy_position_id"] == strategy_position_id
     ]
     assert closed == [
         {

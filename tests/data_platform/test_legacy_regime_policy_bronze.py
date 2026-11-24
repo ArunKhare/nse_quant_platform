@@ -34,7 +34,8 @@ def _table(path: Path, layout_id: str) -> None:
 
 def _source(path: Path, layout_id: str) -> None:
     _table(path, layout_id)
-    policy = RegimePolicy(frozenset({"RANGE"}), {"RANGE": {"trades": 10, "pnl": 100.0}}, "READY")
+    regime = "HIGH_IV_CONTANGO_NORMAL_SKEW_RANGE_HIGH"
+    policy = RegimePolicy(frozenset({regime}), {regime: {"trades": 10, "pnl": 100.0}}, "READY")
     assert policy.is_usable is True
     if layout_id == codec.CLOCK_BEFORE_RISK:
         legacy = DuckDBStore(path=path)
@@ -176,7 +177,8 @@ def test_named_column_writer_fits_fresh_declared_order(tmp_path: Path) -> None:
             "AND table_name='regime_policies' ORDER BY ordinal_position"
         ).fetchall()
         assert tuple(columns) == codec.checked_layout(codec.RISK_BEFORE_CLOCK)
-        policy = RegimePolicy(frozenset({"RANGE"}), {}, "READY")
+        regime = "HIGH_IV_CONTANGO_NORMAL_SKEW_RANGE_HIGH"
+        policy = RegimePolicy(frozenset({regime}), {}, "READY")
         legacy.save_regime_policy(
             policy_id="P",
             symbol="NIFTY",
@@ -196,6 +198,7 @@ def test_named_column_writer_fits_fresh_declared_order(tmp_path: Path) -> None:
         assert row is not None
         assert row[0] == "P"
         assert row[1] == "NIFTY"
+        assert row[6] == f'["{regime}"]'
         assert row[9] == '{"max_lots": 2}'
         assert row[10] is not None
     finally:

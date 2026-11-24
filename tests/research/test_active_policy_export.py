@@ -2,6 +2,8 @@ from datetime import UTC, datetime
 
 from scripts.export_active_policy import build_active_policy
 
+REGIME = "HIGH_IV_CONTANGO_NORMAL_SKEW_HIGH_VOL_CHOP"
+
 
 def test_missing_policy_is_not_actionable() -> None:
     result = build_active_policy(
@@ -18,11 +20,11 @@ def test_missing_policy_is_not_actionable() -> None:
 def test_ready_current_policy_is_actionable() -> None:
     policy = {
         "policy_id": "NIFTY:2026-07-22:2026-09-22",
-        "allowed_regimes": {"RANGE|HIGH"},
+        "allowed_regimes": {REGIME},
         "selection_status": "READY",
         "test_end": datetime(2026, 12, 31).date(),
         "risk_limits": {
-            "RANGE|HIGH": {
+            REGIME: {
                 "allowed": True,
                 "max_lots_per_order": 1,
             }
@@ -37,13 +39,13 @@ def test_ready_current_policy_is_actionable() -> None:
 
     assert result["actionable"] is True
     assert result["reason"] == "active"
-    assert result["allowed_regimes"] == ["RANGE|HIGH"]
+    assert result["allowed_regimes"] == [REGIME]
 
 
 def test_expired_ready_policy_is_not_actionable() -> None:
     policy = {
         "policy_id": "NIFTY:2026-01-01:2026-03-01",
-        "allowed_regimes": {"RANGE|HIGH"},
+        "allowed_regimes": {REGIME},
         "selection_status": "READY",
         "test_end": datetime(2026, 3, 1).date(),
         "risk_limits": {},

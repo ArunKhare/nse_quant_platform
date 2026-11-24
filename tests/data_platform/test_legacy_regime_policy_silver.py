@@ -24,9 +24,7 @@ REVISION = "a" * 40
 OPAQUE = '{ "eligible":true, "eligible":false, "authorized":true }'
 
 
-def _bronze(
-    tmp_path: Path, layout_id: str, maximum_status: str | None = None
-) -> tuple[Path, silver.PolicyBronzePins]:
+def _bronze(tmp_path: Path, layout_id: str, maximum_status: str | None = None) -> tuple[Path, silver.PolicyBronzePins]:
     legacy_path = tmp_path / "legacy.duckdb"
     bronze_path = tmp_path / "bronze.duckdb"
     writer = duckdb.connect(str(legacy_path))
@@ -39,7 +37,8 @@ def _bronze(
     if layout_id == codec.CLOCK_BEFORE_RISK:
         legacy = DuckDBStore(path=legacy_path)
         try:
-            policy = RegimePolicy(frozenset({"RANGE"}), {"RANGE": {"trades": 10}}, "READY")
+            regime = "HIGH_IV_CONTANGO_NORMAL_SKEW_RANGE_HIGH"
+            policy = RegimePolicy(frozenset({regime}), {regime: {"trades": 10}}, "READY")
             assert policy.is_usable is True
             args: dict[str, Any] = dict(
                 policy_id="policy-A",
@@ -98,9 +97,7 @@ def _bronze(
     try:
         AuditLedger(target).initialize()
         BronzeEventStore(target).initialize()
-        snapshot = bronze_api.capture_regime_policies(
-            source, source_label="fixture", layout_id=layout_id
-        )
+        snapshot = bronze_api.capture_regime_policies(source, source_label="fixture", layout_id=layout_id)
         receipt = bronze_api.preserve_regime_policies(
             source,
             target,
@@ -125,9 +122,7 @@ def _bronze(
     return bronze_path, pins
 
 
-def _chain(
-    tmp_path: Path, layout_id: str
-) -> tuple[Path, Path, silver.PolicyBronzePins, dict[str, Any]]:
+def _chain(tmp_path: Path, layout_id: str) -> tuple[Path, Path, silver.PolicyBronzePins, dict[str, Any]]:
     path, pins = _bronze(tmp_path, layout_id)
     silver_path = tmp_path / "silver.duckdb"  # Preserve actual catalog/schema collision.
     bronze = duckdb.connect(str(path), read_only=True)
@@ -214,9 +209,7 @@ def test_all_eleven_materialized_fields_reconciled(tmp_path: Path, field: str, k
         writer.close()
     reader = duckdb.connect(str(silver_path), read_only=True)
     try:
-        with pytest.raises(
-            codec.Rejected, match="POLICY_SILVER_FULL_RECORD_RECOMPUTATION_MISMATCH"
-        ):
+        with pytest.raises(codec.Rejected, match="POLICY_SILVER_FULL_RECORD_RECOMPUTATION_MISMATCH"):
             silver.read_regime_policy_silver(reader, **_args(receipt))
     finally:
         reader.close()
@@ -265,9 +258,7 @@ def test_original_recording_faults(tmp_path: Path, kind: str) -> None:
             writer.execute(f"UPDATE {sets} SET context=?", [b"x" * (silver.MAX_CONTEXT + 1)])
         elif kind in ("record-bound", "aggregate"):
             bound = codec.MAX_RECORD if kind == "record-bound" else codec.MAX_RECORDS
-            writer.execute(
-                f"UPDATE {table} SET record_bytes=? WHERE ordinal=0", [b"x" * (bound + 1)]
-            )
+            writer.execute(f"UPDATE {table} SET record_bytes=? WHERE ordinal=0", [b"x" * (bound + 1)])
         elif kind == "nullable-mask":
             writer.execute(
                 f"UPDATE {table} SET risk_limits=? WHERE policy_id='policy-B'",
@@ -449,9 +440,7 @@ def test_final_audit_failure_leaves_original_unreadable(tmp_path: Path, monkeypa
     reader = duckdb.connect(str(silver_path), read_only=True)
     try:
         with pytest.raises(codec.Rejected, match="ORIGINAL_POLICY_SILVER_AUDIT_NOT_VERIFIED"):
-            silver.read_regime_policy_silver(
-                reader, revision_id=revision, expected_recording_fingerprint="b" * 64
-            )
+            silver.read_regime_policy_silver(reader, revision_id=revision, expected_recording_fingerprint="b" * 64)
     finally:
         reader.close()
 
@@ -459,9 +448,7 @@ def test_final_audit_failure_leaves_original_unreadable(tmp_path: Path, monkeypa
 def test_alias_and_hex_predecode_guard(tmp_path: Path) -> None:
     target = duckdb.connect(str(tmp_path / "silver.duckdb"))
     alias = target.cursor()
-    pins = silver.PolicyBronzePins(
-        "fixture", codec.CLOCK_BEFORE_RISK, "a" * 64, "b" * 64, "c" * 64, "d" * 64
-    )
+    pins = silver.PolicyBronzePins("fixture", codec.CLOCK_BEFORE_RISK, "a" * 64, "b" * 64, "c" * 64, "d" * 64)
     try:
         silver.initialize_regime_policy_silver(target)
         with pytest.raises(codec.Rejected, match="EMPTY_POLICY_SILVER_INITIALIZATION_REQUIRED"):
@@ -479,11 +466,7 @@ def test_alias_and_hex_predecode_guard(tmp_path: Path) -> None:
     finally:
         alias.close()
         target.close()
-    raw = codec.canonical(
-        dict(
-            version=silver.VERSION, pins=asdict(pins), snapshot_hex="z" * (2 * codec.MAX_BYTES + 1)
-        )
-    )
+    raw = codec.canonical(dict(version=silver.VERSION, pins=asdict(pins), snapshot_hex="z" * (2 * codec.MAX_BYTES + 1)))
     with pytest.raises(codec.Rejected, match="SNAPSHOT_HEX_BOUND"):
         silver._derive(raw)
 
@@ -532,9 +515,7 @@ def test_original_definitions_jobs_and_orphans(tmp_path: Path, kind: str) -> Non
         target = duckdb.connect(str(silver_path))
         try:
             context = silver.observe_regime_policy_bronze(bronze, pins=pins)
-            with pytest.raises(
-                codec.Rejected, match="POLICY_SILVER_FIRST_WRITE_ORIGINAL_OBLIGATION"
-            ):
+            with pytest.raises(codec.Rejected, match="POLICY_SILVER_FIRST_WRITE_ORIGINAL_OBLIGATION"):
                 silver.persist_regime_policy_silver(
                     bronze,
                     target,

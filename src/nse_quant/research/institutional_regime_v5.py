@@ -15,7 +15,12 @@ from typing import Any
 
 from nse_quant.core.constants import IST
 from nse_quant.core.regime_registry import (
-    REGIME_REGISTRY_VERSION, REGIMES, IvState, PriceAction, Skew, TermStructure,
+    REGIME_REGISTRY_VERSION,
+    REGIMES,
+    IvState,
+    PriceAction,
+    Skew,
+    TermStructure,
 )
 
 VERSION = "institutional_regime_v5_provisional_1"
@@ -50,15 +55,13 @@ def _percentile(values: list[float], fraction: float) -> float:
     return ordered[lower] + (ordered[upper] - ordered[lower]) * (position - lower)
 
 
-def _history(
-    rows: tuple[DailyValue, ...], *, today: date, source: str, minimum: int, positive: bool
-) -> list[float]:
+def _history(rows: tuple[DailyValue, ...], *, today: date, source: str, minimum: int, positive: bool) -> list[float]:
     sessions = [row.session for row in rows]
     if sessions != sorted(set(sessions)):
         raise ValueError("daily_history_must_be_unique_and_ordered")
     if any(
-        row.session >= today or row.source != source or not math.isfinite(row.value)
-        or (positive and row.value <= 0) for row in rows
+        row.session >= today or row.source != source or not math.isfinite(row.value) or (positive and row.value <= 0)
+        for row in rows
     ):
         raise ValueError("invalid_daily_history_or_source")
     if len(rows) < minimum:
@@ -70,26 +73,29 @@ def _price(d: PriceDiagnostics) -> tuple[PriceAction, float]:
     values = asdict(d)
     if any(not math.isfinite(float(v)) for k, v in values.items() if k != "session"):
         raise ValueError("non_finite_price_diagnostics")
-    if not (0 <= d.adx14 <= 100 and 0 <= d.er20 <= 1 and 0 <= d.chop14 <= 100
-            and 0 <= d.atr_percentile <= 100 and 0 <= d.bandwidth_percentile <= 100
-            and 0 <= d.range_position <= 1):
+    if not (
+        0 <= d.adx14 <= 100
+        and 0 <= d.er20 <= 1
+        and 0 <= d.chop14 <= 100
+        and 0 <= d.atr_percentile <= 100
+        and 0 <= d.bandwidth_percentile <= 100
+        and 0 <= d.range_position <= 1
+    ):
         raise ValueError("invalid_price_diagnostics_range")
     if d.atr_percentile >= 70 and (d.adx14 < 20 or d.chop14 > 61.8) and d.er20 < 0.22:
         choppy = max((20 - d.adx14) / 20, (d.chop14 - 61.8) / 38.2)
-        return PriceAction.HIGH_VOL_CHOP, min(
-            (d.atr_percentile - 70) / 30, choppy, (0.22 - d.er20) / 0.22
-        )
+        return PriceAction.HIGH_VOL_CHOP, min((d.atr_percentile - 70) / 30, choppy, (0.22 - d.er20) / 0.22)
     if d.adx14 >= 25 and d.er20 >= 0.35:
-        direction = 1 if min(d.change20, d.sma20_slope, d.di_difference) > 0 else (
-            -1 if max(d.change20, d.sma20_slope, d.di_difference) < 0 else 0
+        direction = (
+            1
+            if min(d.change20, d.sma20_slope, d.di_difference) > 0
+            else (-1 if max(d.change20, d.sma20_slope, d.di_difference) < 0 else 0)
         )
         if direction:
             state = PriceAction.STRONG_BULL_TREND if direction > 0 else PriceAction.STRONG_BEAR_TREND
             return state, min((d.adx14 - 25) / 75, (d.er20 - 0.35) / 0.65)
     if d.bandwidth_percentile <= 10 and d.atr_percentile <= 30:
-        return PriceAction.COMPRESSION, min(
-            (10 - d.bandwidth_percentile) / 10, (30 - d.atr_percentile) / 30
-        )
+        return PriceAction.COMPRESSION, min((10 - d.bandwidth_percentile) / 10, (30 - d.atr_percentile) / 30)
     if d.adx14 < 25:
         state = PriceAction.RANGE_HIGH if d.range_position >= 0.5 else PriceAction.RANGE_LOW
         return state, min((25 - d.adx14) / 25, abs(d.range_position - 0.5) * 2)
@@ -97,12 +103,22 @@ def _price(d: PriceDiagnostics) -> tuple[PriceAction, float]:
 
 
 def classify(
-    *, as_of: datetime, surface_time: datetime, iv30: float, iv90: float,
-    iv30_source: str, rr25: float, rr25_source: str,
-    iv_history: tuple[DailyValue, ...], rr25_history: tuple[DailyValue, ...],
-    previous_close: PriceDiagnostics, latest_close: PriceDiagnostics,
-    previous_iv_state: IvState | None = None, previous_skew: Skew | None = None,
-    minimum_confidence: float = 0.0, max_surface_age_seconds: float = 90.0,
+    *,
+    as_of: datetime,
+    surface_time: datetime,
+    iv30: float,
+    iv90: float,
+    iv30_source: str,
+    rr25: float,
+    rr25_source: str,
+    iv_history: tuple[DailyValue, ...],
+    rr25_history: tuple[DailyValue, ...],
+    previous_close: PriceDiagnostics,
+    latest_close: PriceDiagnostics,
+    previous_iv_state: IvState | None = None,
+    previous_skew: Skew | None = None,
+    minimum_confidence: float = 0.0,
+    max_surface_age_seconds: float = 90.0,
 ) -> dict[str, Any]:
     """Classify prepared features, not raw candles or ATM put/call gaps.
 
@@ -114,15 +130,23 @@ def classify(
     remain unavailable rather than carrying forward an unconfirmed label.
     """
     result: dict[str, Any] = {
-        "available": False, "complete": False, "regime_label": None,
-        "classifier_version": VERSION, "regime_version": REGIME_REGISTRY_VERSION,
-        "as_of": as_of.isoformat(), "mode": "observation",
-        "decision_eligibility_asserted": False, "thresholds_provisional": True,
+        "available": False,
+        "complete": False,
+        "regime_label": None,
+        "classifier_version": VERSION,
+        "regime_version": REGIME_REGISTRY_VERSION,
+        "as_of": as_of.isoformat(),
+        "mode": "observation",
+        "decision_eligibility_asserted": False,
+        "thresholds_provisional": True,
         "input_provenance": {
-            "iv30_source": iv30_source, "iv90_source": "internal_cm",
-            "rr25_source": rr25_source, "rr25_convention": "black76_call25_minus_put25_30d",
+            "iv30_source": iv30_source,
+            "iv90_source": "internal_cm",
+            "rr25_source": rr25_source,
+            "rr25_convention": "black76_call25_minus_put25_30d",
             "surface_time": surface_time.isoformat(),
-            "previous_close": asdict(previous_close), "latest_close": asdict(latest_close),
+            "previous_close": asdict(previous_close),
+            "latest_close": asdict(latest_close),
             "iv_history": [asdict(row) for row in iv_history],
             "rr25_history": [asdict(row) for row in rr25_history],
         },
@@ -155,13 +179,20 @@ def classify(
         ivr = (iv30 - min(ivs)) / spread * 100 if spread > 0 else None
         iv_state = IvState.HIGH_IV if ivp >= (60 if previous_iv_state is IvState.HIGH_IV else 70) else IvState.LOW_IV
         slope = iv30 - iv90
-        term = TermStructure.CONTANGO if slope < -0.005 else (
-            TermStructure.BACKWARDATION if slope > 0.005 else TermStructure.FLAT_TERM
+        term = (
+            TermStructure.CONTANGO
+            if slope < -0.005
+            else (TermStructure.BACKWARDATION if slope > 0.005 else TermStructure.FLAT_TERM)
         )
-        skew = Skew.FORWARD_REVERSE_SKEW if rr25 > 0 else (
-            Skew.HIGH_PUT_SKEW if rr25 <= _percentile(rrs, 0.1)
-            or (previous_skew is Skew.HIGH_PUT_SKEW and rr25 <= _percentile(rrs, 0.5))
-            else Skew.NORMAL_SKEW
+        skew = (
+            Skew.FORWARD_REVERSE_SKEW
+            if rr25 > 0
+            else (
+                Skew.HIGH_PUT_SKEW
+                if rr25 <= _percentile(rrs, 0.1)
+                or (previous_skew is Skew.HIGH_PUT_SKEW and rr25 <= _percentile(rrs, 0.5))
+                else Skew.NORMAL_SKEW
+            )
         )
         old_candidate, old_confidence = _price(previous_close)
         candidate, confidence = _price(latest_close)
@@ -172,15 +203,28 @@ def classify(
             raise ValueError("price_action_confidence_below_floor")
         label = f"{iv_state}_{term}_{skew}_{candidate}"
         definition = REGIMES[label]
-        result.update({
-            "available": True, "complete": True, "regime_label": label,
-            "regime_id": definition.regime_id, "reason": None,
-            "regime_components": {"iv_state": iv_state.value, "term_structure": term.value,
-                                  "skew": skew.value, "price_action": candidate.value},
-            "price_action_confidence": confidence,
-            "diagnostics": {"ivp": ivp, "ivr": ivr, "ivp_ivr_divergence":
-                abs(ivp - ivr) > 30 if ivr is not None else None, "iv30_minus_iv90": slope},
-        })
+        result.update(
+            {
+                "available": True,
+                "complete": True,
+                "regime_label": label,
+                "regime_id": definition.regime_id,
+                "reason": None,
+                "regime_components": {
+                    "iv_state": iv_state.value,
+                    "term_structure": term.value,
+                    "skew": skew.value,
+                    "price_action": candidate.value,
+                },
+                "price_action_confidence": confidence,
+                "diagnostics": {
+                    "ivp": ivp,
+                    "ivr": ivr,
+                    "ivp_ivr_divergence": abs(ivp - ivr) > 30 if ivr is not None else None,
+                    "iv30_minus_iv90": slope,
+                },
+            }
+        )
     except ValueError as exc:
         result["reason"] = str(exc)
     return result

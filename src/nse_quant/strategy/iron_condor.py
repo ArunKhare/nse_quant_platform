@@ -9,7 +9,13 @@ from datetime import UTC
 from typing import Any
 
 from nse_quant.core.models import (
-    ChainSnapshot, GateResult, Leg, MarketFeatures, OptionType, OrderSide, TradeProposal,
+    ChainSnapshot,
+    GateResult,
+    Leg,
+    MarketFeatures,
+    OptionType,
+    OrderSide,
+    TradeProposal,
 )
 from nse_quant.core.settings import IronCondorProfileSettings, RiskSettings, get_settings
 from nse_quant.strategy.gates import GateEvaluator
@@ -33,66 +39,97 @@ class IronCondorMonitor:
         self.gates = GateEvaluator(self.settings, risk_limits=self.risk_settings)
 
     def evaluate(
-        self, snapshot: ChainSnapshot, features: MarketFeatures,
+        self,
+        snapshot: ChainSnapshot,
+        features: MarketFeatures,
         iv_history_count: int | None = None,
     ) -> tuple[TradeProposal | None, list[GateResult]]:
         if not snapshot.quotes:
             return None, []
         if features.expiry != snapshot.expiry or features.underlying != snapshot.underlying:
-            return None, [GateResult(
-                gate="selected_expiry_inputs", passed=False, reason="feature_snapshot_mismatch",
-                details={"snapshot_expiry": snapshot.expiry.isoformat(),
-                         "features_expiry": features.expiry.isoformat(),
-                         "snapshot_underlying": snapshot.underlying,
-                         "features_underlying": features.underlying},
-            )]
-        scoped_quotes = [quote for quote in snapshot.quotes
-                         if quote.instrument.expiry == snapshot.expiry
-                         and quote.instrument.underlying == snapshot.underlying]
+            return None, [
+                GateResult(
+                    gate="selected_expiry_inputs",
+                    passed=False,
+                    reason="feature_snapshot_mismatch",
+                    details={
+                        "snapshot_expiry": snapshot.expiry.isoformat(),
+                        "features_expiry": features.expiry.isoformat(),
+                        "snapshot_underlying": snapshot.underlying,
+                        "features_underlying": features.underlying,
+                    },
+                )
+            ]
+        scoped_quotes = [
+            quote
+            for quote in snapshot.quotes
+            if quote.instrument.expiry == snapshot.expiry and quote.instrument.underlying == snapshot.underlying
+        ]
         ignored_quote_count = len(snapshot.quotes) - len(scoped_quotes)
         if not scoped_quotes:
-            return None, [GateResult(
-                gate="selected_expiry_quotes", passed=False, reason="no_selected_expiry_quotes",
-                details={"expiry": snapshot.expiry.isoformat(),
-                         "quote_scope_version": QUOTE_SCOPE_VERSION,
-                         "ignored_quote_count": ignored_quote_count},
-            )]
+            return None, [
+                GateResult(
+                    gate="selected_expiry_quotes",
+                    passed=False,
+                    reason="no_selected_expiry_quotes",
+                    details={
+                        "expiry": snapshot.expiry.isoformat(),
+                        "quote_scope_version": QUOTE_SCOPE_VERSION,
+                        "ignored_quote_count": ignored_quote_count,
+                    },
+                )
+            ]
         snapshot = snapshot.model_copy(update={"quotes": scoped_quotes})
         snapshot_date = snapshot.ts.astimezone(UTC).date()
         if snapshot_date >= snapshot.expiry:
-            return None, [GateResult(
-                gate="expiry_available", passed=False, reason="same_day_expiry",
-                details={"snapshot_date": snapshot_date.isoformat(),
-                         "expiry": snapshot.expiry.isoformat()},
-            )]
+            return None, [
+                GateResult(
+                    gate="expiry_available",
+                    passed=False,
+                    reason="same_day_expiry",
+                    details={"snapshot_date": snapshot_date.isoformat(), "expiry": snapshot.expiry.isoformat()},
+                )
+            ]
         atm_strike = snapshot.atm_strike()
         wing = self.config.wing_distance_points
         short_put_strike = atm_strike - wing
         short_call_strike = atm_strike + wing
-        quote_lookup = {(quote.instrument.option_type.value, quote.instrument.strike): quote
-                        for quote in snapshot.quotes}
+        quote_lookup = {
+            (quote.instrument.option_type.value, quote.instrument.strike): quote for quote in snapshot.quotes
+        }
         long_put_quote = self._select_long_quote(
-            quote_lookup=quote_lookup, option_type=OptionType.PE,
-            target_strike=short_put_strike - wing, direction=-1,
+            quote_lookup=quote_lookup,
+            option_type=OptionType.PE,
+            target_strike=short_put_strike - wing,
+            direction=-1,
             max_spread_pct=self.risk_settings.max_spread_pct,
         )
         long_call_quote = self._select_long_quote(
-            quote_lookup=quote_lookup, option_type=OptionType.CE,
-            target_strike=short_call_strike + wing, direction=1,
+            quote_lookup=quote_lookup,
+            option_type=OptionType.CE,
+            target_strike=short_call_strike + wing,
+            direction=1,
             max_spread_pct=self.risk_settings.max_spread_pct,
         )
         if long_put_quote is None or long_call_quote is None:
             gates = self.gates.evaluate(
-                snapshot, features, [short_put_strike - wing, short_put_strike,
-                                     short_call_strike, short_call_strike + wing],
+                snapshot,
+                features,
+                [short_put_strike - wing, short_put_strike, short_call_strike, short_call_strike + wing],
                 iv_history_count=iv_history_count,
             )
-            gates.append(GateResult(
-                gate="long_wing_liquidity", passed=False, reason="no_liquid_long_wing",
-                details={"long_put_target": short_put_strike - wing,
-                         "long_call_target": short_call_strike + wing,
-                         "max_spread_pct": self.risk_settings.max_spread_pct},
-            ))
+            gates.append(
+                GateResult(
+                    gate="long_wing_liquidity",
+                    passed=False,
+                    reason="no_liquid_long_wing",
+                    details={
+                        "long_put_target": short_put_strike - wing,
+                        "long_call_target": short_call_strike + wing,
+                        "max_spread_pct": self.risk_settings.max_spread_pct,
+                    },
+                )
+            )
             return None, gates
         long_put_strike = long_put_quote.instrument.strike
         long_call_strike = long_call_quote.instrument.strike
@@ -107,40 +144,66 @@ class IronCondorMonitor:
             self._leg(quote_lookup, OptionType.CE, long_call_strike, OrderSide.BUY),
         ]
         if any(leg is None for leg in legs):
-            gates.append(GateResult(
-                gate="required_legs_available", passed=False, reason="missing_required_quote",
-                details={"required_strikes": required_strikes},
-            ))
+            gates.append(
+                GateResult(
+                    gate="required_legs_available",
+                    passed=False,
+                    reason="missing_required_quote",
+                    details={"required_strikes": required_strikes},
+                )
+            )
             return None, gates
         valid_legs = [leg for leg in legs if leg is not None]
         credit = self._net_credit(valid_legs)
         if credit < self.config.min_credit:
-            gates.append(GateResult(
-                gate="minimum_credit", passed=False, reason=f"credit={credit:.2f}",
-                details={"credit": credit, "min_credit": self.config.min_credit},
-            ))
+            gates.append(
+                GateResult(
+                    gate="minimum_credit",
+                    passed=False,
+                    reason=f"credit={credit:.2f}",
+                    details={"credit": credit, "min_credit": self.config.min_credit},
+                )
+            )
             return None, gates
         proposal = TradeProposal(
-            strategy=self.strategy_name, underlying=snapshot.underlying, expiry=snapshot.expiry,
-            thesis="Range-bound NIFTY assumption supported by IV rank, IV-RV spread, and available expected-move estimate.",
-            legs=valid_legs, entry_limit_price=credit, target_price=credit * 0.5,
-            stop_loss_price=credit * 2.0, expected_move_points=features.expected_move_points,
-            metadata={"atm_strike": atm_strike, "long_put_strike": long_put_strike,
-                      "short_put_strike": short_put_strike, "short_call_strike": short_call_strike,
-                      "long_call_strike": long_call_strike, "net_credit": credit,
-                      "quote_scope_version": QUOTE_SCOPE_VERSION,
-                      "selected_expiry": snapshot.expiry.isoformat(),
-                      "ignored_quote_count": ignored_quote_count},
+            strategy=self.strategy_name,
+            underlying=snapshot.underlying,
+            expiry=snapshot.expiry,
+            thesis="Range-bound NIFTY assumption supported by IV rank, IV-RV spread, and available \
+                expected-move estimate.",
+            legs=valid_legs,
+            entry_limit_price=credit,
+            target_price=credit * 0.5,
+            stop_loss_price=credit * 2.0,
+            expected_move_points=features.expected_move_points,
+            metadata={
+                "atm_strike": atm_strike,
+                "long_put_strike": long_put_strike,
+                "short_put_strike": short_put_strike,
+                "short_call_strike": short_call_strike,
+                "long_call_strike": long_call_strike,
+                "net_credit": credit,
+                "quote_scope_version": QUOTE_SCOPE_VERSION,
+                "selected_expiry": snapshot.expiry.isoformat(),
+                "ignored_quote_count": ignored_quote_count,
+            },
         )
-        gates.append(GateResult(
-            gate="minimum_credit", passed=True, reason=f"credit={credit:.2f}",
-            details={"credit": credit, "min_credit": self.config.min_credit},
-        ))
+        gates.append(
+            GateResult(
+                gate="minimum_credit",
+                passed=True,
+                reason=f"credit={credit:.2f}",
+                details={"credit": credit, "min_credit": self.config.min_credit},
+            )
+        )
         return proposal, gates
 
     def _leg(
-        self, quote_lookup: dict[tuple[str, float], Any], option_type: OptionType,
-        strike: float, side: OrderSide,
+        self,
+        quote_lookup: dict[tuple[str, float], Any],
+        option_type: OptionType,
+        strike: float,
+        side: OrderSide,
     ) -> Leg | None:
         quote = quote_lookup.get((option_type.value, strike))
         if quote is None:
@@ -163,8 +226,12 @@ class IronCondorMonitor:
         return credit
 
     def _select_long_quote(
-        self, quote_lookup: dict[tuple[str, float], Any], option_type: OptionType,
-        target_strike: float, direction: int, max_spread_pct: float,
+        self,
+        quote_lookup: dict[tuple[str, float], Any],
+        option_type: OptionType,
+        target_strike: float,
+        direction: int,
+        max_spread_pct: float,
     ) -> Any | None:
         strikes = sorted(strike for kind, strike in quote_lookup if kind == option_type.value)
         if direction < 0:

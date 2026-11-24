@@ -4,7 +4,9 @@ import pytest
 
 from nse_quant.market_data.chain import discover_chain_for_horizon, discover_chain_multi_expiry
 from nse_quant.market_data.expiry_selection import (
-    ExpirySelectionError, select_capture_expiries, select_monthly_entry_expiry,
+    ExpirySelectionError,
+    select_capture_expiries,
+    select_monthly_entry_expiry,
 )
 
 AS_OF = date(2025, 1, 1)
@@ -16,9 +18,7 @@ def expiry(dte: int) -> date:
 
 def test_capture_keeps_all_listings_through_first_strictly_beyond_90() -> None:
     dates = [expiry(day) for day in (120, 91, 90, 60, 30, 7, 0, -1, 30)]
-    assert select_capture_expiries(dates, as_of=AS_OF) == tuple(
-        expiry(day) for day in (0, 7, 30, 60, 90, 91)
-    )
+    assert select_capture_expiries(dates, as_of=AS_OF) == tuple(expiry(day) for day in (0, 7, 30, 60, 90, 91))
 
 
 @pytest.mark.parametrize("days", [[], [-1], [7, 30, 90]])
@@ -30,34 +30,30 @@ def test_missing_beyond_horizon_fails_closed(days: list[int]) -> None:
 @pytest.mark.parametrize("dte", [25, 40])
 def test_monthly_entry_boundaries_are_inclusive(dte: int) -> None:
     selected = expiry(dte)
-    assert select_monthly_entry_expiry(
-        [selected], monthly_expiries=[selected], as_of=AS_OF
-    ) == selected
+    assert select_monthly_entry_expiry([selected], monthly_expiries=[selected], as_of=AS_OF) == selected
 
 
 @pytest.mark.parametrize("dte", [24, 41])
 def test_monthly_entry_rejects_outside_window(dte: int) -> None:
     with pytest.raises(ExpirySelectionError, match="no_listed_monthly"):
-        select_monthly_entry_expiry(
-            [expiry(dte)], monthly_expiries=[expiry(dte)], as_of=AS_OF
-        )
+        select_monthly_entry_expiry([expiry(dte)], monthly_expiries=[expiry(dte)], as_of=AS_OF)
 
 
 def test_weekly_is_never_fallback_and_monthly_must_be_listed() -> None:
     with pytest.raises(ExpirySelectionError):
-        select_monthly_entry_expiry(
-            [expiry(30)], monthly_expiries=[expiry(35)], as_of=AS_OF
-        )
+        select_monthly_entry_expiry([expiry(30)], monthly_expiries=[expiry(35)], as_of=AS_OF)
     with pytest.raises(ExpirySelectionError):
         select_monthly_entry_expiry([expiry(30)], monthly_expiries=[], as_of=AS_OF)
 
 
 def test_explicit_holiday_adjusted_date_and_earliest_tiebreak() -> None:
     actual = date(2025, 1, 27)
-    assert select_monthly_entry_expiry(
-        [expiry(35), actual, expiry(30)],
-        monthly_expiries=[expiry(35), actual], as_of=AS_OF
-    ) == actual
+    assert (
+        select_monthly_entry_expiry(
+            [expiry(35), actual, expiry(30)], monthly_expiries=[expiry(35), actual], as_of=AS_OF
+        )
+        == actual
+    )
 
 
 def test_invalid_window_and_date_inputs_are_rejected() -> None:
@@ -73,11 +69,17 @@ def instruments() -> list[dict]:
     rows = []
     for index, day in enumerate((7, 30, 60, 91, 120)):
         for offset, kind in enumerate(("CE", "PE")):
-            rows.append(dict(
-                name="NIFTY", instrument_type=kind, expiry=expiry(day).isoformat(),
-                strike=25000, tradingsymbol=f"NIFTY-{day}-{kind}",
-                instrument_token=index * 2 + offset + 1, lot_size=75,
-            ))
+            rows.append(
+                dict(
+                    name="NIFTY",
+                    instrument_type=kind,
+                    expiry=expiry(day).isoformat(),
+                    strike=25000,
+                    tradingsymbol=f"NIFTY-{day}-{kind}",
+                    instrument_token=index * 2 + offset + 1,
+                    lot_size=75,
+                )
+            )
     return rows
 
 
