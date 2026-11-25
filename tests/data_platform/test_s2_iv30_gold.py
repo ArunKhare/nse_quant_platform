@@ -197,6 +197,36 @@ def test_duplicate_source_database_rejected(stores):
     assert gold.execute("SELECT COUNT(*) FROM information_schema.tables").fetchone()[0] == 0
 
 
+
+def test_feature_must_match_both_requested_source_pins(stores):
+    _, gold, _, current, persist = stores
+    current["raw"] = feature_bytes(
+        provenance={
+            "observation_id": REVISION,
+            "materialization_sha256": "9" * 64,
+            "revision_id": SILVER_REVISION,
+            "materialization_available_at": datetime.now(UTC).isoformat(),
+        }
+    )
+    with pytest.raises(ValueError, match="OBSERVATION_OR_MATERIALIZATION_PIN_MISMATCH"):
+        persist()
+    assert gold.execute("SELECT COUNT(*) FROM information_schema.tables").fetchone()[0] == 0
+
+
+def test_retrieval_recomputes_candidate_identity_from_feature(stores):
+    _, gold, path, _, persist = stores
+    receipt = persist()
+    gold.execute(
+        "UPDATE gold.s2_iv30_candidates SET input_revision_id=? WHERE build_id=?",
+        ["9" * 64, receipt["build_id"]],
+    )
+    gold.close()
+    with duckdb.connect(str(path), read_only=True) as reader, pytest.raises(
+        ValueError, match="CANDIDATE_CONTRACT_MISMATCH"
+    ):
+        api.retrieve_candidate(reader, build_id=receipt["build_id"], as_of=AS_OF)
+
+
 def test_definition_tampering_is_not_repaired(stores):
     _, gold, _, _, persist = stores
     persist()
