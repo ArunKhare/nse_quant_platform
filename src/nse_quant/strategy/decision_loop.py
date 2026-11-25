@@ -1683,7 +1683,7 @@ class DecisionLoop:
         calibration_margin_value = calibration.get("absolute_error_p90")
         calibration_margin = (
             float(calibration_margin_value)
-            if calibration.get("gate_margin_eligible") is True
+            if rv_details.get("calibration_gate_eligible") is True
             and isinstance(calibration_margin_value, (int, float))
             and not isinstance(calibration_margin_value, bool)
             else None
