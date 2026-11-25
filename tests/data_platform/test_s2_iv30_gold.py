@@ -12,18 +12,20 @@ from nse_quant.data_platform import s2_iv30_gold as api
 REVISION = "a" * 64
 MATERIALIZATION = "b" * 64
 SILVER_REVISION = "c" * 64
-AS_OF = "2026-11-25T10:00:00+00:00"
+AS_OF = (datetime.now(UTC) + timedelta(minutes=5)).isoformat()
 CODE_REVISION = "1" * 40
 
 
 def feature_bytes(**changes):
+    now = datetime.now(UTC)
+    source_time = now - timedelta(seconds=5)
     feature = {
         "version": api.FEATURE_VERSION,
         "feature_kind": "live_iv30_observation",
-        "as_of": "2026-11-25T09:59:55+00:00",
+        "as_of": now.isoformat(),
         "iv30": 0.15,
-        "source_time": "2026-11-25T09:59:50+00:00",
-        "received_at": "2026-11-25T09:59:51+00:00",
+        "source_time": source_time.isoformat(),
+        "received_at": (source_time + timedelta(seconds=1)).isoformat(),
         "age_seconds": 5.0,
         "max_age_seconds": 300.0,
         "value_percent": 15.0,
@@ -42,7 +44,7 @@ def feature_bytes(**changes):
             "observation_id": REVISION,
             "materialization_sha256": MATERIALIZATION,
             "revision_id": SILVER_REVISION,
-            "materialization_available_at": "2026-11-25T09:59:52+00:00",
+            "materialization_available_at": (source_time + timedelta(seconds=2)).isoformat(),
         },
     }
     feature.update(changes)
@@ -150,7 +152,7 @@ def test_candidate_not_available_before_recording_or_event_time(stores):
         api.retrieve_candidate(
             reader,
             build_id=receipt["build_id"],
-            as_of="2026-11-25T09:59:49+00:00",
+            as_of=(datetime.fromisoformat(AS_OF) - timedelta(minutes=5)).isoformat(),
         )
 
 
@@ -163,7 +165,7 @@ def test_candidate_not_available_before_recording_or_event_time(stores):
         ({"model_suitability_verified": True}, "PROFILE_OR_AUTHORITY"),
         ({"vrp_gate_passed": True}, "PROFILE_OR_AUTHORITY"),
         ({"iv30": float("nan")}, "FEATURE_NOT_CANONICAL"),
-        ({"source_time": "2026-11-25T10:00:01+00:00"}, "FUTURE_FEATURE_DEPENDENCY"),
+        ({"source_time": (datetime.fromisoformat(AS_OF) + timedelta(seconds=1)).isoformat()}, "FUTURE_OR_UNORDERED_FEATURE_DEPENDENCY"),
     ],
 )
 def test_invalid_feature_candidate_rejected_before_gold_write(stores, changes, reason):
