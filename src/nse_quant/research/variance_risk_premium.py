@@ -86,7 +86,8 @@ def evaluate_variance_risk_premium(
         and expected_realized_volatility_measure == HAR_RV_MEASURE
         and expected_realized_volatility_is_forecast is True
         and expected_realized_volatility_calibration_is_eligible is True
-        and expected_realized_volatility_calibration_margin is not None
+        and isinstance(expected_realized_volatility_calibration_margin, (int, float))
+        and not isinstance(expected_realized_volatility_calibration_margin, bool)
         and math.isfinite(expected_realized_volatility_calibration_margin)
         and expected_realized_volatility_calibration_margin >= 0.0
     )
