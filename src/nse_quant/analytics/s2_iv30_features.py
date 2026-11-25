@@ -126,7 +126,7 @@ def build_eod_feature(
     reasons = []
     if not enough:
         reasons.append("INSUFFICIENT_PRIOR_DAILY_HISTORY")
-    elif high == low:
+    elif ivr is None:
         reasons.append("DEGENERATE_IVR_RANGE")
     return _finish(
         dict(
