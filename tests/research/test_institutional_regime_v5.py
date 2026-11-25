@@ -20,7 +20,7 @@ def inputs() -> dict:
         as_of=datetime(2026, 11, 23, 5, tzinfo=UTC),
         surface_time=datetime(2026, 11, 23, 5, tzinfo=UTC),
         iv30=0.23, iv90=0.25, iv30_source="internal_cm",
-        eod_iv30=0.23, eod_iv_session=date(2026, 11, 20), eod_iv_history=ivs,
+        eod_iv_close=DailyValue(date(2026, 11, 20), 0.23, "india_vix_eod"), eod_iv_history=ivs,
         rr25=-0.03, rr25_source="surface_rr25",
         rr25_history=rrs, previous_close=previous,
         latest_close=replace(previous, session=date(2026, 11, 20)),
@@ -63,7 +63,7 @@ def test_six_price_action_states(changes: dict, expected: str) -> None:
     "change",
     [
         {"eod_iv_history": ()}, {"rr25_history": ()},
-        {"iv30_source": "india_vix"}, {"eod_iv30": float("nan")},
+        {"iv30_source": "india_vix"}, {"eod_iv_close": DailyValue(date(2026, 11, 20), float("nan"), "india_vix_eod")},
         {"iv90": 0}, {"previous_iv_state": "NORMAL_IV"},
         {"previous_skew": "HIGH_CALL_SKEW"}, {"minimum_confidence": 1.1},
         {"surface_time": datetime(2026, 11, 23, 6, tzinfo=UTC)},
@@ -97,7 +97,7 @@ def test_history_source_mixing_and_duplicate_days_are_rejected() -> None:
 
 def test_iv_and_skew_hysteresis() -> None:
     kwargs = inputs()
-    kwargs["eod_iv30"] = 0.178
+    kwargs["eod_iv_close"] = replace(kwargs["eod_iv_close"], value=0.178)
     assert classify(**kwargs)["regime_components"]["iv_state"] == "LOW_IV"
     kwargs["previous_iv_state"] = IvState.HIGH_IV
     assert classify(**kwargs)["regime_components"]["iv_state"] == "HIGH_IV"
@@ -110,12 +110,11 @@ def test_iv_and_skew_hysteresis() -> None:
 
 def test_eod_iv30_requires_recent_completed_close_and_rejects_live_series() -> None:
     kwargs = inputs()
-    kwargs["eod_iv_session"] = date(2026, 11, 23)
+    kwargs["eod_iv_close"] = replace(kwargs["eod_iv_close"], session=date(2026, 11, 23))
     assert classify(**kwargs)["reason"] == "completed_recent_eod_iv30_required"
     kwargs = inputs()
-    kwargs["eod_iv_session"] = date(2026, 11, 18)
+    kwargs["eod_iv_close"] = replace(kwargs["eod_iv_close"], session=date(2026, 11, 18))
     assert classify(**kwargs)["reason"] == "completed_recent_eod_iv30_required"
     kwargs = inputs()
-    history = kwargs["eod_iv_history"]
-    kwargs["eod_iv_history"] = history[:-1] + (replace(history[-1], source="india_vix_live"),)
-    assert classify(**kwargs)["reason"] == "invalid_daily_history_or_source"
+    kwargs["eod_iv_close"] = replace(kwargs["eod_iv_close"], source="india_vix_live")
+    assert classify(**kwargs)["reason"] == "completed_recent_eod_iv30_required"
