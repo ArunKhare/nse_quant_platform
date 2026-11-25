@@ -239,6 +239,15 @@ def test_definition_tampering_is_not_repaired(stores):
     ).fetchone() == (b"[]",)
 
 
+
+def test_unexpected_gold_table_blocks_reuse(stores):
+    _, gold, _, _, persist = stores
+    persist()
+    gold.execute("CREATE TABLE gold.unexpected_artifact (value INTEGER)")
+    with pytest.raises(ValueError, match="STORE_INVENTORY_MISMATCH"):
+        persist(initialize_store=False)
+
+
 def test_feature_tampering_blocks_retrieval(stores):
     _, gold, path, _, persist = stores
     receipt = persist()
