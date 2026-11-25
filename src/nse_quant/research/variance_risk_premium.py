@@ -13,16 +13,19 @@ import math
 from dataclasses import dataclass, field
 from typing import Any
 
+from nse_quant.research.har_realized_volatility import (
+    HAR_RV_HORIZON_DAYS,
+    HAR_RV_MEASURE,
+    HAR_RV_METHOD,
+    HAR_RV_VERSION,
+)
+
 VRP_CALCULATION_VERSION = "variance_risk_premium_v4"
 
 # The trailing estimator is retained for diagnostics only. It is not a
 # conditional forecast and must never satisfy the IC entry gate.
 EXPECTED_RV_METHOD = "trailing_close_close"
 EXPECTED_RV_VERSION = "trailing_close_close_daily_v1"
-HAR_RV_METHOD = "har_rv_5m_intraday_plus_overnight"
-HAR_RV_VERSION = "har_rv_30d_v1"
-HAR_RV_HORIZON_DAYS = 30
-HAR_RV_MEASURE = "sum_squared_5m_log_returns_plus_squared_overnight_return"
 TRADING_DAYS_PER_YEAR = 252
 
 
