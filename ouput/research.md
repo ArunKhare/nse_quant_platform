@@ -334,3 +334,77 @@ gold: the iv30 feature, with iv30_source = india_vix | internal_cm, so the switc
 Align the IC profile with the master manual: entry 25–40 DTE on monthly expiries, a 21 DTE time stop, and a 50% profit target. Widen expiry capture to cover 90D.
 
 Start S1 (revised for retirement) on feat/medallion-feature-store.
+
+## 6. S1/S2 implementation status — 25 Nov 2026
+
+This is a status addendum, not a charter amendment. It supersedes the historical
+"Start S1" instruction at the end of section 5.2 without rewriting the original
+research baseline, provisional thresholds or the section 5 retirement decision.
+Research substeps S1/S2 are not the charter's numbered implementation stages.
+
+### S1 — Complete (owner-reported label-test acceptance)
+
+The platform owner reported that all tests passed with the new canonical labels.
+Record S1 label standardization as complete on that basis. No independent test
+count, exact test command or local validation commit accompanied that report.
+This does not assert completion of every broader Stage 1 deliverable or paper
+validation. IMPLEMENTATION_CHARTER.md has not been changed by this addendum.
+
+### S2 — In progress (implementation present; acceptance not closed)
+
+Repository inspected: ArunKhare/nse_quant_platform, branch
+feat/medallion-feature-store, commit
+299523647d2810f0a433a5fb53772aebf665e59f.
+
+Implemented S2 increments recorded through that baseline:
+
+- Constant-maturity Black-76 IV30/IV90 and call-minus-put RR25 input components,
+  with explicit forward/calendar evidence and no extrapolation.
+- Horizon capture selection and a REST provider horizon-acquisition path.
+- India VIX acquisition/normalization, native Bronze/Silver retention and replay.
+- Surface evidence bundles and a reviewed observation journal, including retained
+  input-quality rejection, audited variants and conflict quarantine.
+- EOD-file history and native VIX minute-bar builders.
+- Audited series materialization, exact retries, independent read-only replay,
+  interrupted-write checks and explicit offline CLI orchestration.
+
+The next tranche supplied alongside this addendum adds pinned read-only IV30
+feature retrieval: EOD IVP/IVR research statistics, actual-quote-clock live VIX
+freshness checks and parent-materialization availability cutoffs. It keeps EOD
+and live inputs separate and does not mix india_vix with internal_cm history.
+Applying that code is not evidence that its native integration tests passed.
+
+Validation evidence is intentionally bounded:
+
+- Owner-reported S1 new-label test acceptance is recorded above.
+- Previous materialization tranche: 24 isolated tests passed using Python 3.12.14,
+  DuckDB 1.2.2 and pytest 8.3.5; not the full Windows checkout.
+- New feature tranche: 25 isolated arithmetic/policy/planning tests passed with
+  the pinned EOD parser; native reader integration tests are supplied separately
+  and are not reported as passed.
+- No new complete Windows/Python 3.14/DuckDB 2.0 run, full lint/type report,
+  paper-validation result or Quack operational integration pass has been supplied
+  with this status update. A commit message is not validation evidence.
+
+S2 closure remains pending:
+
+1. Execute native surface, native minute-materialization and feature-reader tests
+   in the actual checkout; record the command, commit and results.
+2. Confirm captured data—not just expiry selection—supplies usable 30D/90D and
+   25-delta brackets, matching forwards/rates, genuine quote clocks and retained
+   calendar provenance; retain rejected observations where quality fails.
+3. Validate acquisition/import orchestration and history coverage. Supplied-row
+   counts do not certify exchange-session completeness or source authenticity.
+4. Complete any explicitly required Gold admission/publication and downstream
+   integration without treating research evidence as decision-ready authority.
+5. Run relevant regression, lint/type and paper-validation selections and retain
+   the evidence before declaring S2 accepted.
+
+S3 (HAR-RV), S4 (v5 classifier validation), S5 (canonical risk/UI integration)
+and S6 (walk-forward calibration) are not marked complete by this addendum.
+The IC monthly-entry/time-stop/profit-target alignment remains a separate closure
+check unless separately demonstrated by configuration and tests.
+
+Paper-only controls, decision_eligibility_asserted=false, canonical four-component
+regimes and single-writer ownership remain unchanged. No runner cutover, live
+activation, implicit EOD-to-live fallback or automatic Gold promotion is authorized.
