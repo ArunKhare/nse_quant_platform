@@ -15,7 +15,7 @@ import logging
 import math
 import time
 from collections.abc import Callable
-from datetime import UTC, datetime, time as dt_time, timedelta
+from datetime import UTC, date, datetime, time as dt_time, timedelta
 from pathlib import Path
 from typing import Any, cast
 from uuid import uuid4
@@ -240,6 +240,12 @@ class DecisionLoop:
         # provider capabilities are preserved.
         self.chain_snapshot_provider = chain_snapshot_provider
         self._persist_fetched_snapshots = chain_snapshot_provider is None
+        # HAR-RV is based only on completed prior sessions; cache it for the
+        # trading date so the 15-second decision loop does not refit it each cycle.
+        self._har_rv_cache: dict[
+            tuple[int, date],
+            tuple[float | None, dict[str, Any], dict[str, Any]],
+        ] = {}
 
     def run_once(self) -> dict[str, Any]:
         if self.kill_switch.is_active():
@@ -1545,103 +1551,109 @@ class DecisionLoop:
         gate = profile.vrp_gate
         snapshot_ts = snapshot.ts if snapshot.ts.tzinfo else snapshot.ts.replace(tzinfo=UTC)
         session_start = datetime.combine(snapshot_ts.astimezone(IST).date(), dt_time.min, tzinfo=IST)
-        source_start = session_start - timedelta(days=550)
-        configured_holidays = set(self.settings.trading_calendar.closed_dates)
-        for year_holidays in NSE_HOLIDAYS.values():
-            configured_holidays.update(year_holidays)
-        calendar = NSETradingCalendar(closed_dates=configured_holidays)
-        candle_reader = getattr(self.store, "completed_one_minute_candles", None)
-        minute_candles = (
-            candle_reader(
-                instrument_token=instrument_token,
-                start=source_start,
-                before=session_start,
-                limit=210000,
+        cache_key = (instrument_token, session_start.date())
+        cached = self._har_rv_cache.get(cache_key)
+        if cached is not None:
+            expected_rv, rv_details, calibration = cached
+        else:
+            source_start = session_start - timedelta(days=550)
+            configured_holidays = set(self.settings.trading_calendar.closed_dates)
+            for year_holidays in NSE_HOLIDAYS.values():
+                configured_holidays.update(year_holidays)
+            calendar = NSETradingCalendar(closed_dates=configured_holidays)
+            candle_reader = getattr(self.store, "completed_one_minute_candles", None)
+            minute_candles = (
+                candle_reader(
+                    instrument_token=instrument_token,
+                    start=source_start,
+                    before=session_start,
+                    limit=210000,
+                )
+                if callable(candle_reader)
+                else []
             )
-            if callable(candle_reader)
-            else []
-        )
-        source_digest = hashlib.sha256()
-        for candle_ts, candle_open, candle_close in minute_candles:
-            source_digest.update(
-                (
-                    f"{candle_ts.isoformat()}|{float(candle_open).hex()}|"
-                    f"{float(candle_close).hex()}\\n"
-                ).encode("utf-8")
-            )
-        rv_details: dict[str, Any] = {
-            "method": HAR_RV_METHOD,
-            "version": HAR_RV_VERSION,
-            "horizon_days": HAR_RV_HORIZON_DAYS,
-            "measure": HAR_RV_MEASURE,
-            "is_forecast": True,
-            "gate_eligible": False,
-            "diagnostic_only": True,
-            "source_table": "spot_candles",
-            "source_interval": "1m",
-            "derived_interval": "5m",
-            "instrument_token": instrument_token,
-            "source_start": source_start.isoformat(),
-            "source_before": session_start.isoformat(),
-            "source_minute_rows": len(minute_candles),
-            "source_first_minute_ts": minute_candles[0][0].isoformat() if minute_candles else None,
-            "source_last_minute_ts": minute_candles[-1][0].isoformat() if minute_candles else None,
-            "source_data_sha256": source_digest.hexdigest(),
-            "expected_minute_rows_per_session": 375,
-            "five_minute_observations_per_session": 75,
-        }
-        expected_rv: float | None = None
-        calibration: dict[str, Any] = {
-            "reason": "har_rv_observations_unavailable",
-            "diagnostic_only": True,
-            "gate_margin_eligible": False,
-        }
-        try:
-            observations = build_daily_rv_observations(
-                minute_candles,
-                calendar=calendar,
-                as_of=snapshot_ts,
-            )
-            daily_variances = [item.realized_variance for item in observations]
-            expected_rv, forecast_details = forecast_har_rv_30d(daily_variances)
-            calibration = calibrate_har_rv_forecast_errors(daily_variances)
-            rv_details.update(forecast_details)
-            calibration_margin_value = calibration.get("absolute_error_p90")
-            calibration_eligible = (
-                calibration.get("gate_margin_eligible") is True
-                and isinstance(calibration_margin_value, (int, float))
-                and math.isfinite(float(calibration_margin_value))
-                and float(calibration_margin_value) >= 0.0
-            )
-            rv_details["calibration_gate_eligible"] = calibration_eligible
-            rv_details["gate_eligible"] = expected_rv is not None and calibration_eligible
-            rv_details["diagnostic_only"] = not rv_details["gate_eligible"]
-            rv_details["complete_sessions"] = len(observations)
-            rv_details["first_session_date"] = (
-                observations[0].session_date.isoformat() if observations else None
-            )
-            rv_details["last_session_date"] = (
-                observations[-1].session_date.isoformat() if observations else None
-            )
-            rv_details["last_session_close_ts"] = (
-                observations[-1].last_minute_ts.isoformat() if observations else None
-            )
-            rv_details["calibration"] = calibration
-            last_session_age = (
-                (session_start.date() - observations[-1].session_date).days
-                if observations
-                else None
-            )
-            rv_details["last_complete_session_age_days"] = last_session_age
-            rv_details["max_daily_close_age_days"] = gate.max_daily_close_age_days
-            if last_session_age is None or last_session_age > gate.max_daily_close_age_days:
-                expected_rv = None
-                rv_details["gate_eligible"] = False
-                rv_details["diagnostic_only"] = True
-                rv_details["reason"] = "stale_or_missing_complete_intraday_sessions"
-        except (ValueError, TypeError) as exc:
-            observations = ()
-            rv_details["reason"] = f"intraday_rv_input_rejected:{exc}"
+            source_digest = hashlib.sha256()
+            for candle_ts, candle_open, candle_close in minute_candles:
+                source_digest.update(
+                    (
+                        f"{candle_ts.isoformat()}|{float(candle_open).hex()}|"
+                        f"{float(candle_close).hex()}\\n"
+                    ).encode("utf-8")
+                )
+            rv_details: dict[str, Any] = {
+                "method": HAR_RV_METHOD,
+                "version": HAR_RV_VERSION,
+                "horizon_days": HAR_RV_HORIZON_DAYS,
+                "measure": HAR_RV_MEASURE,
+                "is_forecast": True,
+                "gate_eligible": False,
+                "diagnostic_only": True,
+                "source_table": "spot_candles",
+                "source_interval": "1m",
+                "derived_interval": "5m",
+                "instrument_token": instrument_token,
+                "source_start": source_start.isoformat(),
+                "source_before": session_start.isoformat(),
+                "source_minute_rows": len(minute_candles),
+                "source_first_minute_ts": minute_candles[0][0].isoformat() if minute_candles else None,
+                "source_last_minute_ts": minute_candles[-1][0].isoformat() if minute_candles else None,
+                "source_data_sha256": source_digest.hexdigest(),
+                "expected_minute_rows_per_session": 375,
+                "five_minute_observations_per_session": 75,
+            }
+            expected_rv: float | None = None
+            calibration: dict[str, Any] = {
+                "reason": "har_rv_observations_unavailable",
+                "diagnostic_only": True,
+                "gate_margin_eligible": False,
+            }
+            try:
+                observations = build_daily_rv_observations(
+                    minute_candles,
+                    calendar=calendar,
+                    as_of=snapshot_ts,
+                )
+                daily_variances = [item.realized_variance for item in observations]
+                expected_rv, forecast_details = forecast_har_rv_30d(daily_variances)
+                calibration = calibrate_har_rv_forecast_errors(daily_variances)
+                rv_details.update(forecast_details)
+                calibration_margin_value = calibration.get("absolute_error_p90")
+                calibration_eligible = (
+                    calibration.get("gate_margin_eligible") is True
+                    and isinstance(calibration_margin_value, (int, float))
+                    and math.isfinite(float(calibration_margin_value))
+                    and float(calibration_margin_value) >= 0.0
+                )
+                rv_details["calibration_gate_eligible"] = calibration_eligible
+                rv_details["gate_eligible"] = expected_rv is not None and calibration_eligible
+                rv_details["diagnostic_only"] = not rv_details["gate_eligible"]
+                rv_details["complete_sessions"] = len(observations)
+                rv_details["first_session_date"] = (
+                    observations[0].session_date.isoformat() if observations else None
+                )
+                rv_details["last_session_date"] = (
+                    observations[-1].session_date.isoformat() if observations else None
+                )
+                rv_details["last_session_close_ts"] = (
+                    observations[-1].last_minute_ts.isoformat() if observations else None
+                )
+                rv_details["calibration"] = calibration
+                last_session_age = (
+                    (session_start.date() - observations[-1].session_date).days
+                    if observations
+                    else None
+                )
+                rv_details["last_complete_session_age_days"] = last_session_age
+                rv_details["max_daily_close_age_days"] = gate.max_daily_close_age_days
+                if last_session_age is None or last_session_age > gate.max_daily_close_age_days:
+                    expected_rv = None
+                    rv_details["gate_eligible"] = False
+                    rv_details["diagnostic_only"] = True
+                    rv_details["reason"] = "stale_or_missing_complete_intraday_sessions"
+            except (ValueError, TypeError) as exc:
+                observations = ()
+                rv_details["reason"] = f"intraday_rv_input_rejected:{exc}"
+            self._har_rv_cache[cache_key] = (expected_rv, rv_details, calibration)
 
         # Preserve the former close-to-close series strictly as an auditable
         # fallback diagnostic. It is never supplied to the VRP evaluator.
