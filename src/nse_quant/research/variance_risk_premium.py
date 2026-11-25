@@ -48,6 +48,8 @@ def evaluate_variance_risk_premium(
     expected_realized_volatility_horizon_days: int | None = None,
     expected_realized_volatility_measure: str = "",
     expected_realized_volatility_is_forecast: bool = False,
+    implied_volatility_source: str = "unspecified",
+    implied_volatility_is_30d_constant_maturity: bool = False,
 ) -> VarianceRiskPremiumResult:
     """Evaluate VRP using annualized volatility inputs.
 
@@ -69,6 +71,8 @@ def evaluate_variance_risk_premium(
         "expected_realized_volatility_horizon_days": expected_realized_volatility_horizon_days,
         "expected_realized_volatility_measure": expected_realized_volatility_measure,
         "expected_realized_volatility_is_forecast": expected_realized_volatility_is_forecast,
+        "implied_volatility_source": implied_volatility_source,
+        "implied_volatility_is_30d_constant_maturity": implied_volatility_is_30d_constant_maturity,
     }
     estimator_eligible = (
         expected_realized_volatility_method == HAR_RV_METHOD
@@ -78,6 +82,12 @@ def evaluate_variance_risk_premium(
         and expected_realized_volatility_is_forecast is True
     )
     details["estimator_gate_eligible"] = estimator_eligible
+    iv_eligible = (
+        isinstance(implied_volatility_source, str)
+        and bool(implied_volatility_source)
+        and implied_volatility_is_30d_constant_maturity is True
+    )
+    details["implied_volatility_gate_eligible"] = iv_eligible
 
     iv, iv_reason = _validate_volatility(implied_volatility, "implied_volatility")
     rv, rv_reason = _validate_volatility(
@@ -114,9 +124,11 @@ def evaluate_variance_risk_premium(
     )
 
     vrp_positive = variance_risk_premium > minimum_vrp
-    passed = estimator_eligible and vrp_positive
+    passed = estimator_eligible and iv_eligible and vrp_positive
     if not estimator_eligible:
         reasons.append("expected_rv_estimator_not_gate_eligible")
+    if not iv_eligible:
+        reasons.append("implied_volatility_not_30d_constant_maturity")
     if not vrp_positive:
         reasons.append(
             "variance_risk_premium_at_minimum"
