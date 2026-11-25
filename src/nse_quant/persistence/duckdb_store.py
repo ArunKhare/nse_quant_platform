@@ -946,6 +946,36 @@ class DuckDBStore:
 
         return [(row[0], float(row[1])) for row in reversed(rows)]
 
+    def completed_one_minute_candles(
+        self,
+        *,
+        instrument_token: int,
+        start: datetime,
+        before: datetime,
+        limit: int = 200000,
+    ) -> list[tuple[datetime, float, float]]:
+        """Read bounded, point-in-time 1m OHLC rows for research RV derivation."""
+        if start.tzinfo is None or before.tzinfo is None or before <= start:
+            raise ValueError("aware_intraday_candle_range_required")
+        if limit < 1 or limit > 500000:
+            raise ValueError("intraday_candle_limit_out_of_bounds")
+        rows = self.conn.execute(
+            """
+            SELECT ts, open, close
+            FROM spot_candles
+            WHERE instrument_token = ?
+              AND interval = '1m'
+              AND ts >= ?
+              AND ts < ?
+              AND isfinite(open) AND open > 0
+              AND isfinite(close) AND close > 0
+            ORDER BY ts
+            LIMIT ?
+            """,
+            [instrument_token, start, before, limit],
+        ).fetchall()
+        return [(row[0], float(row[1]), float(row[2])) for row in rows]
+
     def read_spot_candles(
         self,
         symbol: str,
