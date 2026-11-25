@@ -87,3 +87,41 @@ Surface evidence recording is NOT implemented here. Persisted option batches do
 not by themselves supply a retained forward/rate/expiry-close/calendar evidence
 bundle. Hash/reference strings alone do not establish exact Black-76 replay.
 Full-cycle paper validation and wider S1–S6 acceptance remain outstanding.
+
+
+## 2026-11-25 — observational IV30 Gold candidate boundary
+
+Implemented in `src/nse_quant/data_platform/s2_iv30_gold.py` as
+`s2-india-vix-iv30-gold-candidates@1`.
+
+- The writer accepts exact observation/materialization pins and read-only,
+  file-backed Bronze, VIX Silver and S2 materialization connections plus a
+  separately owned, file-backed Gold writer.
+- It freshly calls the native S2 live-feature reader; caller-supplied feature
+  values are not accepted. The resulting India VIX observation is checked for
+  canonical bytes, source identity, finite positive decimal IV, source/receive/
+  feature clock ordering, freshness, selected source-revision pins and exact
+  materialization provenance.
+- The Gold build is content-addressed and immutable. Exact retry retains one
+  candidate and appends an audit attempt. A changed feature creates a distinct
+  candidate. The versioned dataset contract and definition are checked; drift
+  is rejected, never repaired.
+- Retrieval requires an exact build pin, a read-only Gold connection, the
+  original successful audit lifecycle, matching feature hash and an as-of time
+  no earlier than both event and recording time.
+- This is a candidate/retrieval boundary only. `published_at` remains NULL;
+  `publication_asserted`, `decision_eligibility_asserted` and
+  `model_suitability_verified` remain false. It does not wire the candidate
+  into `DecisionLoop`, change the VRP evaluator, or authorize operational
+  acquisition, publication, paper-loop cutover, or trading.
+- India VIX is retained as an observational 30-day volatility proxy. This
+  increment does not establish that it is a suitable replacement for a
+  constant-maturity option-surface IV in the VRP model. That model-suitability
+  assessment and the separate decision-path integration remain open.
+
+Focused validation commands (run locally; not claimed as executed here):
+
+    uv run pytest -q tests/data_platform/test_s2_iv30_gold.py tests/data_platform/test_s2_iv30_feature_reader_native.py tests/analytics/test_s2_iv30_features.py
+    uv run ruff check src/nse_quant/data_platform/s2_iv30_gold.py tests/data_platform/test_s2_iv30_gold.py
+    uv run mypy src/nse_quant/data_platform/s2_iv30_gold.py
+
