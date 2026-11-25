@@ -1775,6 +1775,8 @@ class DecisionLoop:
                 "implied_volatility_gate_eligible": vrp.get("implied_volatility_gate_eligible"),
                 "estimator_details": vrp.get("details"),
                 "minimum_vrp": vrp.get("minimum_vrp"),
+                "configured_minimum_vrp": vrp.get("configured_minimum_vrp"),
+                "forecast_error_margin": vrp.get("forecast_error_margin"),
                 "gate_passed": vrp.get("gate_passed"),
                 "reasons": vrp.get("reasons"),
             },
