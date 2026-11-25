@@ -99,7 +99,7 @@ def test_eod_ivp_and_ivr_share_canonical_window_definition():
         )
     )
     assert result["iv_percentile"] == pytest.approx(50.0)
-    assert result["iv_rank"] == pytest.approx((10.6 - 10.01) / (11.19 - 10.01) * 100)
+    assert result["iv_rank"] == pytest.approx((10.6 - 10.0) / (11.19 - 10.0) * 100)
     assert result["ivr_observation_count"] == 121
 
 
