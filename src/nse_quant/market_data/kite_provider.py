@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import UTC, date, datetime
 from typing import Any
+from uuid import uuid4
 
 import pandas as pd
 
@@ -194,6 +195,7 @@ class KiteMarketDataProvider:
             horizon_days=horizon_days,
             strikes_per_side=self.settings.universe.strikes_per_side,
         )
+        acquisition_id = uuid4().hex
         snapshots: list[ChainSnapshot] = []
         for expiry, option_instruments in chains:
             raw = self.kite.quote([f"NFO:{instrument.tradingsymbol}" for instrument in option_instruments])
@@ -220,6 +222,7 @@ class KiteMarketDataProvider:
                     option_instruments,
                     ticks,
                     now=received_at,
+                    acquisition_id=acquisition_id,
                 )
             )
         return snapshots
