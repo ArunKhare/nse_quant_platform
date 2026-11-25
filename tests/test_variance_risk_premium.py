@@ -136,7 +136,7 @@ def test_tiny_negative_vrp_does_not_pass() -> None:
     assert result.passed is False
 
 
-def test_strict_gate_policy_is_auditable_without_changing_formula_version() -> None:
+def test_strict_har_only_gate_policy_is_auditable() -> None:
     result = evaluate_variance_risk_premium(
         implied_volatility=0.20, expected_realized_volatility=0.20
     )
@@ -197,6 +197,9 @@ def test_trailing_daily_rv_matches_manual_calculation() -> None:
     expected = math.sqrt(sum((r - mean) ** 2 for r in returns) / (len(returns) - 1)) * math.sqrt(252)
     assert rv == pytest.approx(expected)
     assert details["version"] == EXPECTED_RV_VERSION
+    assert details["method"] == "trailing_close_close"
+    assert details["gate_eligible"] is False
+    assert details["diagnostic_only"] is True
     assert details["closes_required"] == 6
 
 
