@@ -119,6 +119,7 @@ def _validate_feature(raw: bytes, *, as_of: str) -> dict[str, Any]:
         or feature.get("decision_eligibility_asserted") is not False
         or feature.get("model_suitability_verified") is not False
         or feature.get("vrp_gate_passed") is not False
+        or feature.get("quality_state") != "valid_observation"
     ):
         raise ValueError("S2_GOLD_FEATURE_PROFILE_OR_AUTHORITY_MISMATCH")
     value = feature.get("iv30")
@@ -145,6 +146,7 @@ def _validate_feature(raw: bytes, *, as_of: str) -> dict[str, Any]:
         or not math.isfinite(age_limit)
         or age_limit <= 0
         or age > age_limit
+        or not math.isclose(float(age), (feature_time - source_time).total_seconds(), rel_tol=1e-9, abs_tol=1e-6)
         or isinstance(percent, bool)
         or not isinstance(percent, (int, float))
         or not math.isfinite(percent)
