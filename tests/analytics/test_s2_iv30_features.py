@@ -91,6 +91,18 @@ def test_eod_percentile_rank_and_no_live_or_regime_authority():
     assert result["regime_label"] is None
 
 
+def test_eod_ivp_and_ivr_share_canonical_window_definition():
+    raw = eod_history(value=10.6)
+    result = json.loads(
+        api.build_eod_feature(
+            raw, expected_history_sha256=api.sha(raw), provenance=provenance(), as_of=AT, trade_date=DAY
+        )
+    )
+    assert result["iv_percentile"] == pytest.approx(50.0)
+    assert result["iv_rank"] == pytest.approx((10.6 - 10.01) / (11.19 - 10.01) * 100)
+    assert result["ivr_observation_count"] == 121
+
+
 def test_insufficient_history_returns_no_percentile_or_rank():
     result = eod(119)
     assert result["quality_state"] == "insufficient_history"
