@@ -93,6 +93,7 @@ class OptionQuote(Quote):
 
 class ChainSnapshot(BaseModel):
     run_id: str = Field(default_factory=lambda: uuid4().hex)
+    acquisition_id: str | None = None
     ts: datetime = Field(default_factory=lambda: datetime.now(UTC))
     underlying: str
     spot: float
