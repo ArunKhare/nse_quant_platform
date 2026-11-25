@@ -230,3 +230,17 @@ def test_near_expiry_atm_iv_cannot_satisfy_vrp_gate() -> None:
     assert result.details["implied_volatility_gate_eligible"] is False
     assert result.passed is False
     assert "implied_volatility_not_30d_constant_maturity" in result.reasons
+
+
+
+@pytest.mark.parametrize("margin", [math.nan, math.inf, -0.01, True])
+def test_invalid_forecast_error_margin_cannot_make_har_gate_eligible(margin) -> None:
+    result = evaluate_variance_risk_premium(
+        implied_volatility=0.30,
+        expected_realized_volatility=0.10,
+        **(har_forecast_identity() | {
+            "expected_realized_volatility_calibration_margin": margin,
+        }),
+    )
+    assert result.passed is False
+    assert result.details["estimator_gate_eligible"] is False
