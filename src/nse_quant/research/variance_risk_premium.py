@@ -13,13 +13,16 @@ import math
 from dataclasses import dataclass, field
 from typing import Any
 
-VRP_CALCULATION_VERSION = "variance_risk_premium_v1"
+VRP_CALCULATION_VERSION = "variance_risk_premium_v2"
 
-# E[RV^2] forecast used by the iron-condor VRP gate. A trailing realized
-# variance from completed daily closes is the baseline (random-walk) forecast;
-# any better forecaster must ship under a new version string.
-EXPECTED_RV_METHOD = "trailing_close_to_close_daily"
-EXPECTED_RV_VERSION = "expected_rv_trailing_daily_v1"
+# The trailing estimator is retained for diagnostics only. It is not a
+# conditional forecast and must never satisfy the IC entry gate.
+EXPECTED_RV_METHOD = "trailing_close_close"
+EXPECTED_RV_VERSION = "trailing_close_close_daily_v1"
+HAR_RV_METHOD = "har_rv_5m_intraday_plus_overnight"
+HAR_RV_VERSION = "har_rv_30d_v1"
+HAR_RV_HORIZON_DAYS = 30
+HAR_RV_MEASURE = "sum_squared_5m_log_returns_plus_squared_overnight_return"
 TRADING_DAYS_PER_YEAR = 252
 
 
@@ -40,21 +43,41 @@ def evaluate_variance_risk_premium(
     implied_volatility: float | None,
     expected_realized_volatility: float | None,
     minimum_vrp: float = 0.0,
+    expected_realized_volatility_method: str = EXPECTED_RV_METHOD,
+    expected_realized_volatility_version: str = EXPECTED_RV_VERSION,
+    expected_realized_volatility_horizon_days: int = HAR_RV_HORIZON_DAYS,
+    expected_realized_volatility_measure: str = "",
+    expected_realized_volatility_is_forecast: bool = False,
 ) -> VarianceRiskPremiumResult:
     """Evaluate VRP using annualized volatility inputs.
 
-    Both inputs must be finite, non-negative annualized volatility values. The
-    result is unavailable, not failed, when either input is missing or invalid.
-    Passing requires VRP strictly above minimum_vrp; equality fails. No rounding
-    or approximate comparison is applied to the eligibility boundary.
+    Both inputs must be finite, non-negative annualized volatility values.
+    Numeric trailing-RV results remain available for diagnostics, but cannot
+    pass the gate. Passing requires an explicitly identified 30-day HAR-RV
+    forecast built from 5-minute intraday returns plus the overnight return,
+    and VRP strictly above minimum_vrp. Estimator metadata is provenance supplied
+    by the caller; this function does not fit or validate a HAR model.
     """
     reasons: list[str] = []
     details: dict[str, Any] = {
         "minimum_vrp": minimum_vrp,
         "formula": "IV^2 - E[RV^2]",
         "threshold_comparison": ">",
-        "gate_version": "variance_risk_premium_gate_strict_v1",
+        "gate_version": "variance_risk_premium_gate_har_only_v2",
+        "expected_realized_volatility_method": expected_realized_volatility_method,
+        "expected_realized_volatility_version": expected_realized_volatility_version,
+        "expected_realized_volatility_horizon_days": expected_realized_volatility_horizon_days,
+        "expected_realized_volatility_measure": expected_realized_volatility_measure,
+        "expected_realized_volatility_is_forecast": expected_realized_volatility_is_forecast,
     }
+    estimator_eligible = (
+        expected_realized_volatility_method == HAR_RV_METHOD
+        and expected_realized_volatility_version == HAR_RV_VERSION
+        and expected_realized_volatility_horizon_days == HAR_RV_HORIZON_DAYS
+        and expected_realized_volatility_measure == HAR_RV_MEASURE
+        and expected_realized_volatility_is_forecast is True
+    )
+    details["estimator_gate_eligible"] = estimator_eligible
 
     iv, iv_reason = _validate_volatility(implied_volatility, "implied_volatility")
     rv, rv_reason = _validate_volatility(
@@ -90,8 +113,11 @@ def evaluate_variance_risk_premium(
         }
     )
 
-    passed = variance_risk_premium > minimum_vrp
-    if not passed:
+    vrp_positive = variance_risk_premium > minimum_vrp
+    passed = estimator_eligible and vrp_positive
+    if not estimator_eligible:
+        reasons.append("expected_rv_estimator_not_gate_eligible")
+    if not vrp_positive:
         reasons.append(
             "variance_risk_premium_at_minimum"
             if variance_risk_premium == minimum_vrp
@@ -149,6 +175,8 @@ def trailing_daily_realized_volatility(
     details: dict[str, Any] = {
         "method": EXPECTED_RV_METHOD,
         "version": EXPECTED_RV_VERSION,
+        "gate_eligible": False,
+        "diagnostic_only": True,
         "window_days": window_days,
         "annualization_days": TRADING_DAYS_PER_YEAR,
         "closes_available": len(valid),
