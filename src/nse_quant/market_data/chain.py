@@ -84,7 +84,14 @@ def build_snapshot(
             trade_ts=tick.get("trade_ts"),
             received_at=tick.get("received_at", now),
         ))
-    return ChainSnapshot(underlying=underlying, spot=spot, expiry=expiry, quotes=quotes, ts=now)
+    return ChainSnapshot(
+        underlying=underlying,
+        spot=spot,
+        expiry=expiry,
+        quotes=quotes,
+        ts=now,
+        acquisition_id=acquisition_id,
+    )
 
 
 def discover_chain_multi_expiry(
