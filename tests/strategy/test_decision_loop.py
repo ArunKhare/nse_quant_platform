@@ -225,6 +225,7 @@ def test_decision_loop_uses_calibrated_har_forecast_and_keeps_atm_iv_fail_closed
         lambda *_args, **_kwargs: {
             "absolute_error_p90": 0.003,
             "samples": 60,
+            "version": "har_rv_30d_calibration_v1",
             "reason": None,
             "gate_margin_eligible": True,
             "diagnostic_only": False,
