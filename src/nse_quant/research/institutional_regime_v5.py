@@ -109,8 +109,7 @@ def classify(
     iv30: float,
     iv90: float,
     iv30_source: str,
-    eod_iv30: float,
-    eod_iv_session: date,
+    eod_iv_close: DailyValue,
     eod_iv_history: tuple[DailyValue, ...],
     rr25: float,
     rr25_source: str,
@@ -145,8 +144,7 @@ def classify(
             "iv30_source": iv30_source,
             "iv90_source": "internal_cm",
             "eod_iv30_source": "india_vix_eod",
-            "eod_iv30": eod_iv30,
-            "eod_iv_session": eod_iv_session.isoformat(),
+            "eod_iv_close": asdict(eod_iv_close),
             "rr25_source": rr25_source,
             "rr25_convention": "black76_call25_minus_put25_30d",
             "surface_time": surface_time.isoformat(),
@@ -169,8 +167,8 @@ def classify(
         if iv30_source != "internal_cm" or not rr25_source:
             raise ValueError("unsupported_feature_source")
         if (
-            not all(math.isfinite(x) for x in (iv30, iv90, eod_iv30, rr25))
-            or min(iv30, iv90, eod_iv30) <= 0
+            not all(math.isfinite(x) for x in (iv30, iv90, eod_iv_close.value, rr25))
+            or min(iv30, iv90, eod_iv_close.value) <= 0
         ):
             raise ValueError("invalid_surface_values")
         if previous_iv_state is not None and not isinstance(previous_iv_state, IvState):
@@ -183,18 +181,18 @@ def classify(
         eod_ivs = _history(
             eod_iv_history, today=today, source="india_vix_eod", minimum=120, positive=True
         )
-        eod_age = (today - eod_iv_session).days
+        eod_age = (today - eod_iv_close.session).days
         if (
-            not eod_iv_history
-            or eod_iv_history[-1].session >= eod_iv_session
+            eod_iv_close.source != "india_vix_eod"
             or not 1 <= eod_age <= 4
+            or (eod_iv_history and eod_iv_history[-1].session >= eod_iv_close.session)
         ):
             raise ValueError("completed_recent_eod_iv30_required")
         rrs = _history(rr25_history, today=today, source=rr25_source, minimum=40, positive=False)
-        ivp = sum(value < eod_iv30 for value in eod_ivs) / len(eod_ivs) * 100
-        rank_window = [*eod_ivs[-251:], eod_iv30]
+        ivp = sum(value < eod_iv_close.value for value in eod_ivs) / len(eod_ivs) * 100
+        rank_window = [*eod_ivs[-251:], eod_iv_close.value]
         spread = max(rank_window) - min(rank_window)
-        ivr = (eod_iv30 - min(rank_window)) / spread * 100 if spread > 0 else None
+        ivr = (eod_iv_close.value - min(rank_window)) / spread * 100 if spread > 0 else None
         iv_state = IvState.HIGH_IV if ivp >= (60 if previous_iv_state is IvState.HIGH_IV else 70) else IvState.LOW_IV
         slope = iv30 - iv90
         term = (
@@ -240,7 +238,7 @@ def classify(
                     "ivr": ivr,
                     "ivp_ivr_divergence": abs(ivp - ivr) > 30 if ivr is not None else None,
                     "iv30_minus_iv90": slope,
-                    "eod_iv30": eod_iv30,
+                    "eod_iv30": eod_iv_close.value,
                 },
             }
         )
