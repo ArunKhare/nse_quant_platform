@@ -1659,10 +1659,12 @@ class DecisionLoop:
             "used_for_gate": False,
         }
 
+        calibration_margin_value = calibration.get("absolute_error_p90")
         calibration_margin = (
-            float(calibration["absolute_error_p90"])
+            float(calibration_margin_value)
             if calibration.get("gate_margin_eligible") is True
-            and isinstance(calibration.get("absolute_error_p90"), (int, float))
+            and isinstance(calibration_margin_value, (int, float))
+            and not isinstance(calibration_margin_value, bool)
             else None
         )
         effective_minimum_vrp = gate.minimum_vrp + (calibration_margin or 0.0)
