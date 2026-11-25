@@ -14,6 +14,8 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from nse_quant.research.har_realized_volatility import (
+    CALIBRATION_MINIMUM_SAMPLES,
+    HAR_RV_CALIBRATION_VERSION,
     HAR_RV_HORIZON_DAYS,
     HAR_RV_MEASURE,
     HAR_RV_METHOD,
@@ -53,6 +55,8 @@ def evaluate_variance_risk_premium(
     expected_realized_volatility_measure: str = "",
     expected_realized_volatility_is_forecast: bool = False,
     expected_realized_volatility_calibration_is_eligible: bool = False,
+    expected_realized_volatility_calibration_version: str = "",
+    expected_realized_volatility_calibration_samples: int = 0,
     expected_realized_volatility_calibration_margin: float | None = None,
     implied_volatility_source: str = "unspecified",
     implied_volatility_is_30d_constant_maturity: bool = False,
@@ -79,6 +83,8 @@ def evaluate_variance_risk_premium(
         "expected_realized_volatility_measure": expected_realized_volatility_measure,
         "expected_realized_volatility_is_forecast": expected_realized_volatility_is_forecast,
         "expected_realized_volatility_calibration_is_eligible": expected_realized_volatility_calibration_is_eligible,
+        "expected_realized_volatility_calibration_version": expected_realized_volatility_calibration_version,
+        "expected_realized_volatility_calibration_samples": expected_realized_volatility_calibration_samples,
         "expected_realized_volatility_calibration_margin": expected_realized_volatility_calibration_margin,
         "implied_volatility_source": implied_volatility_source,
         "implied_volatility_is_30d_constant_maturity": implied_volatility_is_30d_constant_maturity,
@@ -106,6 +112,10 @@ def evaluate_variance_risk_premium(
         and expected_realized_volatility_measure == HAR_RV_MEASURE
         and expected_realized_volatility_is_forecast is True
         and expected_realized_volatility_calibration_is_eligible is True
+        and expected_realized_volatility_calibration_version == HAR_RV_CALIBRATION_VERSION
+        and isinstance(expected_realized_volatility_calibration_samples, int)
+        and not isinstance(expected_realized_volatility_calibration_samples, bool)
+        and expected_realized_volatility_calibration_samples >= CALIBRATION_MINIMUM_SAMPLES
         and isinstance(expected_realized_volatility_calibration_margin, (int, float))
         and not isinstance(expected_realized_volatility_calibration_margin, bool)
         and math.isfinite(expected_realized_volatility_calibration_margin)
