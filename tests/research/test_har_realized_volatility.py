@@ -101,7 +101,7 @@ def test_har_rv_requires_full_training_window() -> None:
     assert details["reason"] == "insufficient_har_rv_history"
 
 
-def test_har_rv_walk_forward_calibration_reports_error_margin_but_not_gate_authority() -> None:
+def test_har_rv_walk_forward_calibration_produces_gate_margin() -> None:
     result = calibrate_har_rv_forecast_errors(_synthetic_daily_variances(360))
     assert result["samples"] >= 30
     assert result["reason"] is None
