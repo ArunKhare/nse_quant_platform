@@ -118,6 +118,7 @@ def test_exact_retry_reuses_immutable_candidate_but_audits_attempt(stores):
     assert gold.execute(
         "SELECT COUNT(*) FROM medallion_audit.job_events WHERE state='SUCCEEDED'"
     ).fetchone()[0] == 2
+    assert gold.execute("SELECT COUNT(*) FROM gold.s2_iv30_candidate_attempts").fetchone()[0] == 2
 
 
 def test_feature_change_creates_new_candidate_revision(stores):
@@ -274,9 +275,12 @@ def test_failed_original_audit_is_not_accepted_or_healed(stores, monkeypatch):
         "SELECT state FROM medallion_audit.job_events WHERE job_id=? ORDER BY event_index DESC LIMIT 1",
         [job_id],
     ).fetchone() == ("RUNNING",)
+    monkeypatch.setattr(api.AuditLedger, "transition", original)
+    retry = persist(initialize_store=False)
+    assert retry["inserted"] is False
     gold.close()
     with duckdb.connect(str(path), read_only=True) as reader, pytest.raises(
-        ValueError, match="SUCCESSFUL_ORIGINAL_AUDIT_REQUIRED"
+        ValueError, match="AUDIT_ATTEMPT_NOT_TERMINAL"
     ):
         api.retrieve_candidate(
             reader,
