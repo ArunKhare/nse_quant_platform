@@ -201,14 +201,9 @@ def test_duplicate_source_database_rejected(stores):
 
 def test_feature_must_match_both_requested_source_pins(stores):
     _, gold, _, current, persist = stores
-    current["raw"] = feature_bytes(
-        provenance={
-            "observation_id": REVISION,
-            "materialization_sha256": "9" * 64,
-            "revision_id": SILVER_REVISION,
-            "materialization_available_at": datetime.now(UTC).isoformat(),
-        }
-    )
+    altered = json.loads(feature_bytes())
+    altered["provenance"]["materialization_sha256"] = "9" * 64
+    current["raw"] = json.dumps(altered, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
     with pytest.raises(ValueError, match="OBSERVATION_OR_MATERIALIZATION_PIN_MISMATCH"):
         persist()
     assert gold.execute("SELECT COUNT(*) FROM information_schema.tables").fetchone()[0] == 0
