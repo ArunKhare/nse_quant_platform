@@ -241,6 +241,7 @@ def test_decision_loop_uses_calibrated_har_forecast_and_keeps_atm_iv_fail_closed
     loop = object.__new__(DecisionLoop)
     loop.settings = settings
     loop.store = StoreStub()
+    loop._har_rv_cache = {}
     features = SimpleNamespace(atm_iv=0.20, ts=snapshot_ts)
     snapshot = SimpleNamespace(ts=snapshot_ts)
 
