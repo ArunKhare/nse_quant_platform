@@ -66,6 +66,7 @@ def build_snapshot(
     instruments: list[Instrument],
     ticks: dict[int, dict[str, Any]],
     now: datetime | None = None,
+    acquisition_id: str | None = None,
 ) -> ChainSnapshot:
     now = now or datetime.now(UTC)
     quotes = []
