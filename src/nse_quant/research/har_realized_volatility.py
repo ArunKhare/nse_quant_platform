@@ -235,7 +235,7 @@ def calibrate_har_rv_forecast_errors(
     horizon_sessions: int = HAR_FORECAST_SESSIONS,
     minimum_samples: int = CALIBRATION_MINIMUM_SAMPLES,
 ) -> dict[str, object]:
-    """Walk-forward absolute forecast-error calibration; margin remains diagnostic."""
+    """Walk-forward error calibration; expose a gate margin only after 30 origins."""
     errors: list[float] = []
     latest_origin = len(daily_realized_variances) - horizon_sessions
     earliest_origin = training_window + HAR_MONTH_DAYS
