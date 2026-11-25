@@ -10,6 +10,7 @@ market data -> analytics -> feature snapshot -> open-position monitoring
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import math
 import time
@@ -67,14 +68,14 @@ from nse_quant.research.evidence_plugins.option_positioning import OptionPositio
 from nse_quant.research.evidence_plugins.registry import EvidencePluginRunner
 from nse_quant.research.evidence_plugins.technical_indicators import TechnicalIndicatorsPlugin
 from nse_quant.research.evidence_plugins.volume_flow import VolumeFlowPlugin
-from nse_quant.research.regime_policy import RegimePolicy
-from nse_quant.research.regime_policy_evaluation import resolve_effective_regimes
-from nse_quant.research.regime_risk_policy import RegimeRiskLimits, build_regime_risk_limits
 from nse_quant.research.har_realized_volatility import (
     build_daily_rv_observations,
     calibrate_har_rv_forecast_errors,
     forecast_har_rv_30d,
 )
+from nse_quant.research.regime_policy import RegimePolicy
+from nse_quant.research.regime_policy_evaluation import resolve_effective_regimes
+from nse_quant.research.regime_risk_policy import RegimeRiskLimits, build_regime_risk_limits
 from nse_quant.research.variance_risk_premium import (
     HAR_RV_HORIZON_DAYS,
     HAR_RV_MEASURE,
@@ -1558,6 +1559,14 @@ class DecisionLoop:
             if callable(candle_reader)
             else []
         )
+        source_digest = hashlib.sha256()
+        for candle_ts, candle_open, candle_close in minute_candles:
+            source_digest.update(
+                (
+                    f"{candle_ts.isoformat()}|{float(candle_open).hex()}|"
+                    f"{float(candle_close).hex()}\\n"
+                ).encode("utf-8")
+            )
         rv_details: dict[str, Any] = {
             "method": HAR_RV_METHOD,
             "version": HAR_RV_VERSION,
@@ -1573,6 +1582,11 @@ class DecisionLoop:
             "source_start": source_start.isoformat(),
             "source_before": session_start.isoformat(),
             "source_minute_rows": len(minute_candles),
+            "source_first_minute_ts": minute_candles[0][0].isoformat() if minute_candles else None,
+            "source_last_minute_ts": minute_candles[-1][0].isoformat() if minute_candles else None,
+            "source_data_sha256": source_digest.hexdigest(),
+            "expected_minute_rows_per_session": 375,
+            "five_minute_observations_per_session": 75,
         }
         expected_rv: float | None = None
         calibration: dict[str, Any] = {
