@@ -126,7 +126,10 @@ def classify(
     Caller supplies consecutive completed trading-session diagnostics (ADX
     Wilder14, ER20, CHOP14, ATR252 percentile, BandWidth120 percentile and
     range60 position). RR25 uses 30D Black-76 call25 IV minus put25 IV.
-    Historical sources must match the current series. IVs use decimals.
+    IVP compares the selected completed India VIX EOD close with prior EOD
+    closes; IVR includes that selected close in its rolling window. Structural
+    term classification uses internal constant-maturity IV30/IV90 only. Live
+    India VIX is deliberately not accepted by this classifier. IVs use decimals.
     Two matching daily candidates confirm a price state; transitional states
     remain unavailable rather than carrying forward an unconfirmed label.
     """
@@ -166,6 +169,8 @@ def classify(
             raise ValueError("invalid_confidence_floor")
         if iv30_source != "internal_cm" or not rr25_source:
             raise ValueError("unsupported_feature_source")
+        if not isinstance(eod_iv_close, DailyValue):
+            raise ValueError("typed_eod_iv30_close_required")
         if (
             not all(math.isfinite(x) for x in (iv30, iv90, eod_iv_close.value, rr25))
             or min(iv30, iv90, eod_iv_close.value) <= 0
