@@ -14,6 +14,8 @@ from nse_quant.market_data.replay_provider import (
     ReplayMarketDataProvider,
 )
 from nse_quant.persistence.duckdb_store import DuckDBStore
+from nse_quant.research.har_realized_volatility import DailyRVObservation
+from nse_quant.strategy import decision_loop as decision_loop_module
 from nse_quant.strategy.decision_loop import DecisionLoop
 
 
@@ -174,3 +176,89 @@ def test_active_kill_switch_blocks_order_submission(
     assert result["status"] == "kill_switch_active"
     assert result["kill_switch_active"] is True
     submit.assert_not_called()
+
+
+
+def test_decision_loop_uses_calibrated_har_forecast_and_keeps_atm_iv_fail_closed(
+    monkeypatch,
+) -> None:
+    settings = get_settings()
+    snapshot_ts = datetime(2026, 11, 25, 10, 0, tzinfo=UTC)
+    session_day = snapshot_ts.date() - timedelta(days=1)
+    observations = tuple(
+        DailyRVObservation(
+            session_date=session_day - timedelta(days=offset),
+            overnight_return=0.001,
+            intraday_variance=0.0002,
+            realized_variance=0.000201,
+            source_minute_rows=375,
+            first_minute_ts=datetime.combine(
+                session_day - timedelta(days=offset),
+                datetime.min.time(),
+                tzinfo=UTC,
+            ),
+            last_minute_ts=datetime.combine(
+                session_day - timedelta(days=offset),
+                datetime.min.time(),
+                tzinfo=UTC,
+            ),
+        )
+        for offset in range(350)
+    )
+
+    monkeypatch.setattr(
+        decision_loop_module,
+        "build_daily_rv_observations",
+        lambda *_args, **_kwargs: observations,
+    )
+    monkeypatch.setattr(
+        decision_loop_module,
+        "forecast_har_rv_30d",
+        lambda *_args, **_kwargs: (
+            0.15,
+            {"method": "har_rv_5m_intraday_plus_overnight", "reason": None},
+        ),
+    )
+    monkeypatch.setattr(
+        decision_loop_module,
+        "calibrate_har_rv_forecast_errors",
+        lambda *_args, **_kwargs: {
+            "absolute_error_p90": 0.003,
+            "samples": 60,
+            "reason": None,
+            "gate_margin_eligible": True,
+            "diagnostic_only": False,
+        },
+    )
+
+    class StoreStub:
+        def completed_one_minute_candles(self, **_kwargs):
+            return []
+
+        def completed_daily_closes(self, **_kwargs):
+            return []
+
+    loop = object.__new__(DecisionLoop)
+    loop.settings = settings
+    loop.store = StoreStub()
+    features = SimpleNamespace(atm_iv=0.20, ts=snapshot_ts)
+    snapshot = SimpleNamespace(ts=snapshot_ts)
+
+    result = loop._evaluate_vrp(
+        strategy_id="iron_condor_monitor",
+        features=features,
+        snapshot=snapshot,
+        instrument_token=256265,
+    )
+
+    assert result["expected_realized_volatility"] == 0.15
+    assert result["forecast_error_margin"] == 0.003
+    assert result["minimum_vrp"] == settings.get_strategy_profile(
+        "iron_condor_monitor"
+    ).vrp_gate.minimum_vrp + 0.003
+    assert result["estimator_gate_eligible"] is True
+    assert result["implied_volatility_gate_eligible"] is False
+    assert result["gate_passed"] is False
+    rv_input = result["expected_realized_volatility_input"]
+    assert rv_input["gate_eligible"] is True
+    assert rv_input["trailing_close_to_close_fallback"]["used_for_gate"] is False
