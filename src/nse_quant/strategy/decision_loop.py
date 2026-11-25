@@ -1621,6 +1621,7 @@ class DecisionLoop:
                 calibration_margin_value = calibration.get("absolute_error_p90")
                 calibration_eligible = (
                     calibration.get("gate_margin_eligible") is True
+                    and calibration.get("version") == HAR_RV_CALIBRATION_VERSION
                     and isinstance(calibration_margin_value, (int, float))
                     and not isinstance(calibration_margin_value, bool)
                     and math.isfinite(float(calibration_margin_value))
@@ -1693,7 +1694,7 @@ class DecisionLoop:
                 "expected_realized_volatility_measure": HAR_RV_MEASURE,
                 "expected_realized_volatility_is_forecast": True,
                 "expected_realized_volatility_calibration_is_eligible": True,
-                "expected_realized_volatility_calibration_version": HAR_RV_CALIBRATION_VERSION,
+                "expected_realized_volatility_calibration_version": str(calibration["version"]),
                 "expected_realized_volatility_calibration_samples": int(calibration["samples"]),
                 "expected_realized_volatility_calibration_margin": calibration_margin,
             }
