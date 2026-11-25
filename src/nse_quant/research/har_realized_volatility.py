@@ -105,6 +105,8 @@ def build_daily_rv_observations(
             log_return = math.log(close_price / previous_price)
             intraday_variance += log_return * log_return
             previous_price = close_price
+        if not math.isfinite(intraday_variance):
+            raise ValueError("non_finite_intraday_realized_variance")
         complete[day] = (
             first_open, minute_rows[-1][1], intraday_variance, expected[0], expected[-1]
         )
@@ -120,6 +122,8 @@ def build_daily_rv_observations(
             continue
         first_open, _session_close, intraday_variance, first_ts, last_ts = complete[day]
         overnight_return = math.log(first_open / prior[1])
+        if not math.isfinite(overnight_return):
+            raise ValueError("non_finite_overnight_return")
         observations.append(
             DailyRVObservation(
                 session_date=day,
@@ -236,6 +240,20 @@ def calibrate_har_rv_forecast_errors(
     minimum_samples: int = CALIBRATION_MINIMUM_SAMPLES,
 ) -> dict[str, object]:
     """Walk-forward error calibration; expose a gate margin only after 30 origins."""
+    if any(not math.isfinite(value) or value < 0.0 for value in daily_realized_variances):
+        return {
+            "method": "rolling_origin_absolute_annualized_variance_error",
+            "version": HAR_RV_CALIBRATION_VERSION,
+            "minimum_samples": minimum_samples,
+            "samples": 0,
+            "horizon_sessions": horizon_sessions,
+            "error_quantile": 0.90,
+            "gate_margin_eligible": False,
+            "diagnostic_only": True,
+            "reason": "invalid_daily_realized_variance",
+            "absolute_error_p90": None,
+            "mean_absolute_error": None,
+        }
     errors: list[float] = []
     latest_origin = len(daily_realized_variances) - horizon_sessions
     earliest_origin = training_window + HAR_MONTH_DAYS
