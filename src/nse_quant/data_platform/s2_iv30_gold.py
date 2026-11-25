@@ -27,6 +27,7 @@ MAX_FEATURE_BYTES = 6 * 1024 * 1024
 MAX_HISTORY = 1000
 TABLE = "s2_iv30_candidates"
 DEFINITIONS = "s2_iv30_candidate_definitions"
+ATTEMPTS = "s2_iv30_candidate_attempts"
 CONTRACT = DatasetContract(
     "gold.s2_iv30_candidates",
     "1",
@@ -206,6 +207,11 @@ def initialize(gold: Any, *, actor_id: str, code_revision: str) -> None:
             "published_at TIMESTAMPTZ, recorded_at TIMESTAMPTZ NOT NULL, "
             "first_job_id VARCHAR NOT NULL, UNIQUE(input_revision_id, build_id))"
         )
+        gold.execute(
+            f"CREATE TABLE {_name(gold, ATTEMPTS)} ("
+            "job_id VARCHAR PRIMARY KEY, build_id VARCHAR NOT NULL, "
+            "recorded_at TIMESTAMPTZ NOT NULL, UNIQUE(build_id, job_id))"
+        )
         gold.execute("COMMIT")
     except BaseException:
         gold.execute("ROLLBACK")
@@ -355,6 +361,10 @@ def persist_live_candidate(
                     ],
                 )
                 inserted = True
+            gold.execute(
+                f"INSERT INTO {_name(gold, ATTEMPTS)} VALUES (?,?,?)",
+                [job, build_id, datetime.now(UTC)],
+            )
             gold.execute("COMMIT")
         except BaseException:
             gold.execute("ROLLBACK")
@@ -422,17 +432,55 @@ def retrieve_candidate(
         or record[6] != _instant(feature["source_time"])
     ):
         raise ValueError("S2_GOLD_CANDIDATE_CONTRACT_MISMATCH")
-    events = _name(gold, "job_events", "medallion_audit")
-    audit = gold.execute(
-        f"SELECT event_index,state,reason_code FROM {events} "
-        "WHERE job_id=? ORDER BY event_index LIMIT 4",
-        [record[9]],
+    attempts = _name(gold, ATTEMPTS)
+    attempt_rows = gold.execute(
+        f"SELECT job_id,recorded_at FROM {attempts} WHERE build_id=? ORDER BY job_id LIMIT ?",
+        [build_id, MAX_HISTORY + 1],
     ).fetchall()
-    if [(item[0], item[1], item[2]) for item in audit] != [
-        (1, "PLANNED", None),
-        (2, "RUNNING", None),
-        (3, "SUCCEEDED", None),
-    ]:
+    if not 1 <= len(attempt_rows) <= MAX_HISTORY or record[9] not in {item[0] for item in attempt_rows}:
+        raise ValueError("S2_GOLD_ATTEMPT_HISTORY_INCOMPLETE")
+    jobs = _name(gold, "jobs", "medallion_audit")
+    events = _name(gold, "job_events", "medallion_audit")
+    expected_config = sha(canonical([VERSION, FEATURE_VERSION, sha(canonical(DEFINITION))]))
+    first_audit_succeeded = False
+    for job_id, attempt_recorded_at in attempt_rows:
+        job_rows = gold.execute(
+            f"SELECT command_name,scope_ref,config_hash,actor_id,code_revision,created_at,parent_job_id "
+            f"FROM {jobs} WHERE job_id=? LIMIT 2",
+            [job_id],
+        ).fetchall()
+        if len(job_rows) != 1:
+            raise ValueError("S2_GOLD_AUDIT_JOB_MISSING")
+        job = job_rows[0]
+        if (
+            job[0] != COMMAND
+            or job[1] != "sha256:" + record[0]
+            or job[2] != expected_config
+            or not isinstance(job[3], str)
+            or not job[3].strip()
+            or not isinstance(job[4], str)
+            or re.fullmatch(r"[a-f0-9]{40}", job[4]) is None
+            or job[6] is not None
+        ):
+            raise ValueError("S2_GOLD_AUDIT_JOB_IDENTITY_MISMATCH")
+        history = gold.execute(
+            f"SELECT event_index,state,recorded_at,reason_code FROM {events} "
+            "WHERE job_id=? ORDER BY event_index LIMIT 4",
+            [job_id],
+        ).fetchall()
+        states = [(item[0], item[1], item[3]) for item in history]
+        if states not in (
+            [(1, "PLANNED", None), (2, "RUNNING", None), (3, "SUCCEEDED", None)],
+            [(1, "PLANNED", None), (2, "RUNNING", None), (3, "FAILED", "EXECUTION_ERROR")],
+            [(1, "PLANNED", None), (2, "RUNNING", None), (3, "CANCELLED", "INTERRUPTED")],
+        ):
+            raise ValueError("S2_GOLD_AUDIT_ATTEMPT_NOT_TERMINAL")
+        audit_times = [job[5], *(item[2] for item in history), attempt_recorded_at]
+        if any(item is None for item in audit_times) or audit_times != sorted(audit_times):
+            raise ValueError("S2_GOLD_AUDIT_TIME_ORDER")
+        if job_id == record[9]:
+            first_audit_succeeded = states[-1][1] == "SUCCEEDED"
+    if not first_audit_succeeded:
         raise ValueError("S2_GOLD_SUCCESSFUL_ORIGINAL_AUDIT_REQUIRED")
     return {
         "status": "CANDIDATE_RETRIEVED_NOT_PUBLISHED",
