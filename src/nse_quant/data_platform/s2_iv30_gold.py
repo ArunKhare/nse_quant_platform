@@ -221,8 +221,8 @@ def initialize(gold: Any, *, actor_id: str, code_revision: str) -> None:
 
 def _verify_store(gold: Any, *, require_definition: bool = False) -> None:
     expected_inventory = {
-        ("gold", SCHEMA_VERSION_TABLE)
-        for SCHEMA_VERSION_TABLE in ("schema_versions", DEFINITIONS, TABLE, ATTEMPTS)
+        ("gold", table_name)
+        for table_name in ("schema_versions", DEFINITIONS, TABLE, ATTEMPTS)
     } | {
         ("medallion_audit", name)
         for name in ("schema_versions", "dataset_contracts", "jobs", "job_events")
