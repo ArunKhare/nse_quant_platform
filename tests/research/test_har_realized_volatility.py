@@ -33,15 +33,15 @@ def test_daily_rv_requires_complete_sessions_and_does_not_bridge_missing_day() -
     candles = (
         _session_candles(days[0], 100.0)
         + _session_candles(days[1], 101.0)
-        + _session_candles(days[2], 102.0)
-        # Entire 26-Nov session intentionally absent.
+        + _session_candles(days[3], 103.0)
+        # Entire 25-Nov session intentionally absent.
     )
     result = build_daily_rv_observations(
         candles,
         calendar=NSETradingCalendar(),
         as_of=datetime(2026, 11, 26, 17, 0, tzinfo=IST),
     )
-    assert [item.session_date for item in result] == days[1:3]
+    assert [item.session_date for item in result] == days[1:2]
     assert all(item.source_minute_rows == 375 for item in result)
     assert result[0].overnight_return == pytest.approx(math.log(101.0 / (100.0 * (1 + 374 * 0.00001))))
     assert result[0].intraday_variance > 0
