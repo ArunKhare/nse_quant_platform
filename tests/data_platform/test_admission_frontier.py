@@ -30,7 +30,9 @@ def database(tmp_path, request):
         tmp_path / "capture.duckdb",
         request.param,
     )
-    catalog = connection.execute("SELECT current_database()").fetchone()[0]
+    row = connection.execute("SELECT current_database()").fetchone()
+    assert row is not None
+    catalog = row[0]
     for schema, table in frontier.TABLES:
         qualified_schema = ".".join(map(frontier._quote, (catalog, schema)))
         connection.execute(f"CREATE SCHEMA IF NOT EXISTS {qualified_schema}")
@@ -55,7 +57,9 @@ def database(tmp_path, request):
 
 
 def qualified(connection, schema, table):
-    catalog = connection.execute("SELECT current_database()").fetchone()[0]
+    row = connection.execute("SELECT current_database()").fetchone()
+    assert row is not None
+    catalog = row[0]
     return ".".join(map(frontier._quote, (catalog, schema, table)))
 
 
