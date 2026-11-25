@@ -1622,6 +1622,9 @@ class DecisionLoop:
                 calibration_eligible = (
                     calibration.get("gate_margin_eligible") is True
                     and calibration.get("version") == HAR_RV_CALIBRATION_VERSION
+                    and isinstance(calibration.get("samples"), int)
+                    and not isinstance(calibration.get("samples"), bool)
+                    and calibration.get("samples", 0) >= 30
                     and isinstance(calibration_margin_value, (int, float))
                     and not isinstance(calibration_margin_value, bool)
                     and math.isfinite(float(calibration_margin_value))
