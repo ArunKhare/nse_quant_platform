@@ -90,7 +90,7 @@ def stores(tmp_path, monkeypatch):
 
 
 def test_persists_audited_candidate_without_publication(stores):
-    _, gold, _, _, persist = stores
+    _, gold, _, current, persist = stores
     receipt = persist()
     assert receipt["status"] == "candidate"
     assert receipt["published"] is False
@@ -99,7 +99,7 @@ def test_persists_audited_candidate_without_publication(stores):
         "SELECT status,reason_code,published_at,feature_sha256 FROM gold.s2_iv30_candidates"
     ).fetchone()
     assert row[:3] == ("candidate", "OBSERVATIONAL_IV30_CANDIDATE", None)
-    assert row[3] == api.sha(feature_bytes())
+    assert row[3] == api.sha(current["raw"])
     assert gold.execute(
         "SELECT state FROM medallion_audit.job_events WHERE job_id=? ORDER BY event_index DESC LIMIT 1",
         [receipt["job_id"]],
@@ -165,8 +165,11 @@ def test_candidate_not_available_before_recording_or_event_time(stores):
         ({"decision_eligibility_asserted": True}, "PROFILE_OR_AUTHORITY"),
         ({"model_suitability_verified": True}, "PROFILE_OR_AUTHORITY"),
         ({"vrp_gate_passed": True}, "PROFILE_OR_AUTHORITY"),
-        ({"iv30": float("nan")}, "FEATURE_NOT_CANONICAL"),
-        ({"source_time": (datetime.fromisoformat(AS_OF) + timedelta(seconds=1)).isoformat()}, "FUTURE_OR_UNORDERED_FEATURE_DEPENDENCY"),
+        ({"iv30": -0.01}, "FINITE_POSITIVE_IV30"),
+        (
+            {"source_time": (datetime.fromisoformat(AS_OF) + timedelta(seconds=1)).isoformat()},
+            "FUTURE_OR_UNORDERED_FEATURE_DEPENDENCY",
+        ),
     ],
 )
 def test_invalid_feature_candidate_rejected_before_gold_write(stores, changes, reason):
