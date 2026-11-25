@@ -10,6 +10,8 @@ from datetime import UTC, date, datetime
 from typing import Any
 from zoneinfo import ZoneInfo
 
+from nse_quant.core.iv_statistics import iv_percentile_and_rank
+
 VERSION = "s2-observational-iv30-features@1"
 LIVE_VERSION = "kite_india_vix_observation_v1"
 IST = ZoneInfo("Asia/Kolkata")
@@ -113,11 +115,14 @@ def build_eod_feature(
         raise ValueError("S2_EXACT_AVAILABLE_EOD_REQUIRED")
     value = _positive(selected[0]["iv30"])
     prior = [row for row in available if row["trade_date"] < trade_date][-lookback:]
-    enough = len(prior) >= minimum_history
-    ivp = 100 * sum(row["iv30"] < value for row in prior) / len(prior) if enough else None
-    rank_rows = [*prior, selected[0]][-lookback:]
-    low, high = min(row["iv30"] for row in rank_rows), max(row["iv30"] for row in rank_rows)
-    ivr = 100 * (value - low) / (high - low) if enough and high > low else None
+    ivp, ivr, ivr_observation_count = iv_percentile_and_rank(
+        [row["iv30"] for row in prior],
+        value,
+        lookback=lookback,
+        minimum_history=minimum_history,
+    )
+    rank_rows = [*prior[-(lookback - 1) :], selected[0]] if lookback > 1 else [selected[0]]
+    enough = ivp is not None
     reasons = []
     if not enough:
         reasons.append("INSUFFICIENT_PRIOR_DAILY_HISTORY")
@@ -139,7 +144,7 @@ def build_eod_feature(
             prior_range=[prior[0]["trade_date"], prior[-1]["trade_date"]] if prior else None,
             iv_percentile=ivp,
             iv_rank=ivr,
-            ivr_observation_count=len(rank_rows),
+            ivr_observation_count=ivr_observation_count,
             ivr_range=[rank_rows[0]["trade_date"], rank_rows[-1]["trade_date"]],
             rank_definition="prior-strict-less-IVP;inclusive-current-rolling-IVR@1",
             quality_state="valid_observation" if enough else "insufficient_history",
