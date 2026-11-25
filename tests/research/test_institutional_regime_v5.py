@@ -95,6 +95,15 @@ def test_history_source_mixing_and_duplicate_days_are_rejected() -> None:
     assert not classify(**kwargs)["complete"]
 
 
+def test_classifier_uses_canonical_inclusive_current_ivr_window() -> None:
+    kwargs = inputs()
+    kwargs["eod_iv_close"] = replace(kwargs["eod_iv_close"], value=0.16)
+    result = classify(**kwargs)
+    assert result["complete"], result
+    assert result["diagnostics"]["ivp"] == pytest.approx(50.0)
+    assert result["diagnostics"]["ivr"] == pytest.approx(50.0)
+
+
 def test_iv_and_skew_hysteresis() -> None:
     kwargs = inputs()
     kwargs["eod_iv_close"] = replace(kwargs["eod_iv_close"], value=0.178)
