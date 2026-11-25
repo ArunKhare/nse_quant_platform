@@ -447,7 +447,7 @@ Implementation status: code added; local acceptance pending.
 - Added rolling-origin 21-session forecast-error calibration, reporting the 90th-percentile absolute annualized-variance error when at least 30 out-of-sample origins are available. When eligible, that p90 error is added to the configured minimum VRP as a variance-unit safety margin. If calibration is unavailable, HAR-RV is not gate-eligible.
 - Decision-loop evidence now uses HAR-RV only. The former trailing close-to-close estimator is retained as an explicitly unused diagnostic fallback.
 - The VRP gate now separately validates the HAR-RV estimator identity, calibration eligibility/margin, and implied-volatility input identity. The current near-expiry ATM IV is not 30-day constant maturity, so the gate remains fail-closed even when a valid HAR-RV forecast is available. D8 India VIX EOD / internal constant-maturity IV integration remains a separate required step.
-- The live loop reads only completed historical 1-minute candles from its existing operational store; it does not run Medallion transformations or synchronously build Silver/Gold artifacts.
+- The live loop reads only completed historical 1-minute candles from its existing operational store and caches the prior-session forecast/calibration by instrument and trading date, avoiding a 550-day query and HAR refit on every 15-second cycle. It does not run Medallion transformations or synchronously build Silver/Gold artifacts.
 
 Validation required on the operator's Windows environment:
 - `uv run pytest -q tests/research/test_har_realized_volatility.py tests/test_variance_risk_premium.py tests/strategy/test_decision_loop.py`
