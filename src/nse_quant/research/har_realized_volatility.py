@@ -29,7 +29,6 @@ MINUTES_PER_SESSION = 375
 HAR_WEEK_DAYS = 5
 HAR_MONTH_DAYS = 22
 HAR_TRAINING_WINDOW = 252
-HAR_MINIMUM_OBSERVATIONS = HAR_TRAINING_WINDOW + HAR_MONTH_DAYS
 HAR_FORECAST_SESSIONS = 21
 CALIBRATION_MINIMUM_SAMPLES = 30
 CALIBRATION_MAXIMUM_ORIGINS = 60
@@ -144,7 +143,7 @@ def _har_design(values: Sequence[float], target_index: int) -> tuple[float, floa
     )
 
 
-def _fit_har(values: Sequence[float], *, training_window: int) -> tuple[np.ndarray, dict[str, float]]:
+def _fit_har(values: Sequence[float], *, training_window: int) -> tuple[np.ndarray, dict[str, object]]:
     if len(values) < training_window + HAR_MONTH_DAYS:
         raise ValueError("insufficient_har_rv_history")
     if any(not math.isfinite(value) or value < 0.0 for value in values):
