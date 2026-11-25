@@ -22,8 +22,9 @@ def har_forecast_identity() -> dict:
         "expected_realized_volatility_measure": HAR_RV_MEASURE,
         "expected_realized_volatility_is_forecast": True,
         "expected_realized_volatility_calibration_is_eligible": True,
-        "expected_realized_volatility_calibration_margin": 0.001,
+        "expected_realized_volatility_calibration_margin": 0.0,
         "implied_volatility_source": "india_vix_eod",
+        "configured_minimum_vrp": 0.0,
         "implied_volatility_is_30d_constant_maturity": True,
     }
 
@@ -86,7 +87,10 @@ def test_incomplete_or_mismatched_har_identity_cannot_pass(identity: dict) -> No
     )
     assert result.available is True
     assert result.passed is False
-    assert "expected_rv_estimator_not_gate_eligible" in result.reasons
+    if identity.get("implied_volatility_is_30d_constant_maturity") is False:
+        assert "implied_volatility_not_30d_constant_maturity" in result.reasons
+    else:
+        assert "expected_rv_estimator_not_gate_eligible" in result.reasons
 
 
 def test_negative_vrp_fails() -> None:
@@ -142,7 +146,7 @@ def test_tiny_negative_vrp_does_not_pass() -> None:
     assert result.passed is False
 
 
-def test_strict_har_only_gate_policy_is_auditable() -> None:
+def test_calibrated_har_and_iv30_gate_policy_is_auditable() -> None:
     result = evaluate_variance_risk_premium(
         implied_volatility=0.20, expected_realized_volatility=0.20
     )
@@ -244,3 +248,28 @@ def test_invalid_forecast_error_margin_cannot_make_har_gate_eligible(margin) -> 
     )
     assert result.passed is False
     assert result.details["estimator_gate_eligible"] is False
+
+
+
+def test_calibrated_forecast_error_margin_must_be_included_in_gate_threshold() -> None:
+    identity = har_forecast_identity() | {
+        "expected_realized_volatility_calibration_margin": 0.001,
+        "configured_minimum_vrp": 0.0,
+    }
+    below_margin = evaluate_variance_risk_premium(
+        implied_volatility=0.20,
+        expected_realized_volatility=0.15,
+        minimum_vrp=0.0009,
+        **identity,
+    )
+    assert below_margin.passed is False
+    assert below_margin.details["calibration_margin_applied"] is False
+
+    at_margin = evaluate_variance_risk_premium(
+        implied_volatility=0.20,
+        expected_realized_volatility=0.15,
+        minimum_vrp=0.001,
+        **identity,
+    )
+    assert at_margin.passed is True
+    assert at_margin.details["calibration_margin_applied"] is True
