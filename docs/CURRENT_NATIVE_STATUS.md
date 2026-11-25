@@ -180,3 +180,19 @@ cover them. Do not auto-stage, clean, discard or delete runtime logs.
 
 
 `docs\PLATFORM_DISCUSSION_DECISION_RECORD.md`
+
+## 2026-11-25 — S2 IV30 Gold candidate tranche
+
+Implemented the audited, immutable observational India VIX IV30 Gold candidate
+boundary in `src/nse_quant/data_platform/s2_iv30_gold.py`, with focused tests in
+`tests/data_platform/test_s2_iv30_gold.py`. The writer recomputes the feature
+from exact retained Bronze/VIX Silver/S2 materialization pins; the reader requires
+an exact build pin, as-of availability, feature hash integrity and successful
+original audit. Candidate persistence is not publication.
+
+This closes only the bounded candidate persistence/retrieval implementation
+step. It does NOT establish India VIX model suitability as the charter's
+30-day constant-maturity option IV, wire the feature into `DecisionLoop`, alter
+the VRP gate, grant decision eligibility, authorize live acquisition, or lift
+existing publication and operational cutover holds. All such authority flags
+remain false. Local QA for this tranche is pending user execution.
