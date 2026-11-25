@@ -23,7 +23,7 @@ from nse_quant.core.regime_registry import (
     TermStructure,
 )
 
-VERSION = "institutional_regime_v5_provisional_1"
+VERSION = "institutional_regime_v5_provisional_2"
 
 
 @dataclass(frozen=True)
@@ -110,6 +110,7 @@ def classify(
     iv90: float,
     iv30_source: str,
     eod_iv30: float,
+    eod_iv_session: date,
     eod_iv_history: tuple[DailyValue, ...],
     rr25: float,
     rr25_source: str,
@@ -145,6 +146,7 @@ def classify(
             "iv90_source": "internal_cm",
             "eod_iv30_source": "india_vix_eod",
             "eod_iv30": eod_iv30,
+            "eod_iv_session": eod_iv_session.isoformat(),
             "rr25_source": rr25_source,
             "rr25_convention": "black76_call25_minus_put25_30d",
             "surface_time": surface_time.isoformat(),
@@ -181,6 +183,13 @@ def classify(
         eod_ivs = _history(
             eod_iv_history, today=today, source="india_vix_eod", minimum=120, positive=True
         )
+        eod_age = (today - eod_iv_session).days
+        if (
+            not eod_iv_history
+            or eod_iv_history[-1].session >= eod_iv_session
+            or not 1 <= eod_age <= 4
+        ):
+            raise ValueError("completed_recent_eod_iv30_required")
         rrs = _history(rr25_history, today=today, source=rr25_source, minimum=40, positive=False)
         ivp = sum(value < eod_iv30 for value in eod_ivs) / len(eod_ivs) * 100
         rank_window = [*eod_ivs[-251:], eod_iv30]
