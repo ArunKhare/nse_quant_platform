@@ -220,6 +220,40 @@ def initialize(gold: Any, *, actor_id: str, code_revision: str) -> None:
 
 
 def _verify_store(gold: Any, *, require_definition: bool = False) -> None:
+    expected_inventory = {
+        ("gold", SCHEMA_VERSION_TABLE)
+        for SCHEMA_VERSION_TABLE in ("schema_versions", DEFINITIONS, TABLE, ATTEMPTS)
+    } | {
+        ("medallion_audit", name)
+        for name in ("schema_versions", "dataset_contracts", "jobs", "job_events")
+    }
+    inventory = {
+        (row[0], row[1])
+        for row in gold.execute(
+            "SELECT table_schema,table_name FROM information_schema.tables "
+            "WHERE table_catalog=current_database() LIMIT 20"
+        ).fetchall()
+    }
+    if inventory != expected_inventory:
+        raise ValueError("S2_GOLD_STORE_INVENTORY_MISMATCH")
+    expected_columns = {
+        "schema_versions": ("version",),
+        DEFINITIONS: ("version", "definition", "definition_sha256", "recorded_at", "first_job_id"),
+        TABLE: (
+            "build_id", "input_revision_id", "feature_version", "status", "reason_code",
+            "feature_sha256", "feature_json", "event_ts", "published_at", "recorded_at", "first_job_id",
+        ),
+        ATTEMPTS: ("job_id", "build_id", "recorded_at"),
+    }
+    for table_name, columns in expected_columns.items():
+        actual = gold.execute(
+            "SELECT column_name FROM information_schema.columns "
+            "WHERE table_catalog=current_database() AND table_schema='gold' "
+            "AND table_name=? ORDER BY ordinal_position LIMIT 20",
+            [table_name],
+        ).fetchall()
+        if tuple(item[0] for item in actual) != columns:
+            raise ValueError("S2_GOLD_COLUMN_DRIFT")
     if gold.execute(f"SELECT version FROM {_name(gold, 'schema_versions')} LIMIT 2").fetchall() != [
         (SCHEMA_VERSION,)
     ]:
