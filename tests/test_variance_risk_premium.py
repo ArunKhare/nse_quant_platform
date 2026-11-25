@@ -4,16 +4,31 @@ import pytest
 
 from nse_quant.research.variance_risk_premium import (
     EXPECTED_RV_VERSION,
+    HAR_RV_HORIZON_DAYS,
+    HAR_RV_MEASURE,
+    HAR_RV_METHOD,
+    HAR_RV_VERSION,
     VRP_CALCULATION_VERSION,
     evaluate_variance_risk_premium,
     trailing_daily_realized_volatility,
 )
 
 
-def test_positive_vrp_passes() -> None:
+def har_forecast_identity() -> dict:
+    return {
+        "expected_realized_volatility_method": HAR_RV_METHOD,
+        "expected_realized_volatility_version": HAR_RV_VERSION,
+        "expected_realized_volatility_horizon_days": HAR_RV_HORIZON_DAYS,
+        "expected_realized_volatility_measure": HAR_RV_MEASURE,
+        "expected_realized_volatility_is_forecast": True,
+    }
+
+
+def test_positive_vrp_passes_with_declared_har_forecast() -> None:
     result = evaluate_variance_risk_premium(
         implied_volatility=0.20,
         expected_realized_volatility=0.15,
+        **har_forecast_identity(),
     )
     assert result.available is True
     assert result.passed is True
@@ -31,7 +46,41 @@ def test_zero_vrp_fails_at_default_minimum(volatility: float) -> None:
     assert result.available is True
     assert result.passed is False
     assert result.variance_risk_premium == 0.0
-    assert result.reasons == ["variance_risk_premium_at_minimum"]
+    assert "variance_risk_premium_at_minimum" in result.reasons
+    assert "expected_rv_estimator_not_gate_eligible" in result.reasons
+
+
+def test_positive_vrp_from_trailing_fallback_is_diagnostic_only() -> None:
+    result = evaluate_variance_risk_premium(
+        implied_volatility=0.30,
+        expected_realized_volatility=0.10,
+    )
+    assert result.available is True
+    assert result.variance_risk_premium == pytest.approx(0.08)
+    assert result.passed is False
+    assert result.details["estimator_gate_eligible"] is False
+    assert "expected_rv_estimator_not_gate_eligible" in result.reasons
+
+
+@pytest.mark.parametrize(
+    "identity",
+    [
+        {"expected_realized_volatility_version": "wrong-version"},
+        {"expected_realized_volatility_horizon_days": 20},
+        {"expected_realized_volatility_measure": "close_to_close"},
+        {"expected_realized_volatility_is_forecast": False},
+        {"expected_realized_volatility_method": "unknown"},
+    ],
+)
+def test_incomplete_or_mismatched_har_identity_cannot_pass(identity: dict) -> None:
+    result = evaluate_variance_risk_premium(
+        implied_volatility=0.30,
+        expected_realized_volatility=0.10,
+        **(har_forecast_identity() | identity),
+    )
+    assert result.available is True
+    assert result.passed is False
+    assert "expected_rv_estimator_not_gate_eligible" in result.reasons
 
 
 def test_negative_vrp_fails() -> None:
@@ -58,6 +107,7 @@ def test_positive_minimum_boundary_is_strict(minimum, passed, reason) -> None:
         implied_volatility=0.25,
         expected_realized_volatility=0.0,
         minimum_vrp=minimum,
+        **har_forecast_identity(),
     )
     assert result.available is True
     assert result.variance_risk_premium == 0.0625
@@ -69,6 +119,7 @@ def test_tiny_positive_vrp_is_not_rounded_to_zero() -> None:
     result = evaluate_variance_risk_premium(
         implied_volatility=math.nextafter(0.25, math.inf),
         expected_realized_volatility=0.25,
+        **har_forecast_identity(),
     )
     assert result.available is True
     assert result.variance_risk_premium > 0.0
@@ -89,9 +140,10 @@ def test_strict_gate_policy_is_auditable_without_changing_formula_version() -> N
     result = evaluate_variance_risk_premium(
         implied_volatility=0.20, expected_realized_volatility=0.20
     )
-    assert result.calculation_version == "variance_risk_premium_v1"
+    assert result.calculation_version == "variance_risk_premium_v2"
     assert result.details["threshold_comparison"] == ">"
-    assert result.details["gate_version"] == "variance_risk_premium_gate_strict_v1"
+    assert result.details["gate_version"] == "variance_risk_premium_gate_har_only_v2"
+    assert result.details["estimator_gate_eligible"] is False
     assert result.details["minimum_vrp"] == 0.0
 
 
