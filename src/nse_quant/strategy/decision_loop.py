@@ -14,7 +14,7 @@ import logging
 import math
 import time
 from collections.abc import Callable
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime, time as dt_time, timedelta
 from pathlib import Path
 from typing import Any, cast
 from uuid import uuid4
@@ -1717,6 +1717,7 @@ class DecisionLoop:
                 "expected_realized_volatility": vrp.get("expected_realized_volatility"),
                 "expected_realized_volatility_input": vrp.get("expected_realized_volatility_input"),
                 "estimator_gate_eligible": vrp.get("estimator_gate_eligible"),
+                "implied_volatility_gate_eligible": vrp.get("implied_volatility_gate_eligible"),
                 "estimator_details": vrp.get("details"),
                 "minimum_vrp": vrp.get("minimum_vrp"),
                 "gate_passed": vrp.get("gate_passed"),
