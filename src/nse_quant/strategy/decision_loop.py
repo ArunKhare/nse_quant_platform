@@ -1509,9 +1509,11 @@ class DecisionLoop:
     ) -> dict[str, Any]:
         """Evaluate the iron-condor VRP gate with full input provenance.
 
-        IV input: ``features.atm_iv`` (near-expiry ATM IV, annualized decimal).
-        E[RV^2] input: trailing close-to-close RV from completed daily candles
-        strictly before the current IST session (point-in-time). The 1-minute
+        The current IV input remains near-expiry ATM IV (not yet the charter's
+        30-day India VIX/internal constant-maturity input). E[RV^2] is currently
+        a trailing close-to-close diagnostic from completed daily candles.
+        That fallback is explicitly ineligible for the hard gate until a
+        validated 30-day HAR-RV forecast is integrated. The 1-minute
         ``features.realized_vol`` is never used here.
         """
         profile = self.settings.get_strategy_profile(strategy_id)
@@ -1563,6 +1565,7 @@ class DecisionLoop:
             "calculation_version": result.calculation_version,
             "available": result.available,
             "passed": result.passed,
+            "estimator_gate_eligible": result.details.get("estimator_gate_eligible", False),
             "gate_passed": result.available and result.passed,
             "gate_mode": EvidenceMode.HARD_GATE.value,
             "minimum_vrp": gate.minimum_vrp,
