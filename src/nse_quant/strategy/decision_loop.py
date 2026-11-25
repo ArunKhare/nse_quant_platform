@@ -70,6 +70,7 @@ from nse_quant.research.evidence_plugins.registry import EvidencePluginRunner
 from nse_quant.research.evidence_plugins.technical_indicators import TechnicalIndicatorsPlugin
 from nse_quant.research.evidence_plugins.volume_flow import VolumeFlowPlugin
 from nse_quant.research.har_realized_volatility import (
+    CALIBRATION_MINIMUM_SAMPLES,
     HAR_RV_CALIBRATION_VERSION,
     build_daily_rv_observations,
     calibrate_har_rv_forecast_errors,
@@ -1624,7 +1625,7 @@ class DecisionLoop:
                     and calibration.get("version") == HAR_RV_CALIBRATION_VERSION
                     and isinstance(calibration.get("samples"), int)
                     and not isinstance(calibration.get("samples"), bool)
-                    and calibration.get("samples", 0) >= 30
+                    and calibration.get("samples", 0) >= CALIBRATION_MINIMUM_SAMPLES
                     and isinstance(calibration_margin_value, (int, float))
                     and not isinstance(calibration_margin_value, bool)
                     and math.isfinite(float(calibration_margin_value))
