@@ -266,8 +266,11 @@ def persist_live_candidate(
         max_age_seconds=max_age_seconds,
     )
     feature = _validate_feature(feature_raw, as_of=cutoff.isoformat())
-    if feature["provenance"]["observation_id"] != observation_id:
-        raise ValueError("S2_GOLD_OBSERVATION_PIN_MISMATCH")
+    if (
+        feature["provenance"]["observation_id"] != observation_id
+        or feature["provenance"]["materialization_sha256"] != expected_sha256
+    ):
+        raise ValueError("S2_GOLD_OBSERVATION_OR_MATERIALIZATION_PIN_MISMATCH")
     if initialize_store:
         initialize(gold, actor_id=actor_id, code_revision=code_revision)
     _verify_store(gold)
@@ -399,10 +402,24 @@ def retrieve_candidate(
     if sha(raw) != record[4]:
         raise ValueError("S2_GOLD_FEATURE_HASH_MISMATCH")
     feature = _validate_feature(raw, as_of=cutoff.isoformat())
+    expected_input_revision_id = sha(
+        canonical(
+            [
+                VERSION,
+                feature["provenance"]["observation_id"],
+                feature["provenance"]["materialization_sha256"],
+                feature["provenance"]["revision_id"],
+                record[4],
+            ]
+        )
+    )
+    expected_build_id = sha(canonical([VERSION, expected_input_revision_id, record[4]]))
     if (
-        record[1:4] != (FEATURE_VERSION, "candidate", "OBSERVATIONAL_IV30_CANDIDATE")
+        record[0] != expected_input_revision_id
+        or build_id != expected_build_id
+        or record[1:4] != (FEATURE_VERSION, "candidate", "OBSERVATIONAL_IV30_CANDIDATE")
         or record[7] is not None
-        or feature["provenance"]["revision_id"] is None
+        or record[6] != _instant(feature["source_time"])
     ):
         raise ValueError("S2_GOLD_CANDIDATE_CONTRACT_MISMATCH")
     events = _name(gold, "job_events", "medallion_audit")
