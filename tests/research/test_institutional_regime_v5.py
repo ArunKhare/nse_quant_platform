@@ -11,7 +11,7 @@ def inputs() -> dict:
     first = date(2025, 1, 1)
     sessions = [first + timedelta(days=i) for i in range(180)
                 if (first + timedelta(days=i)).weekday() < 5][:120]
-    ivs = tuple(DailyValue(day, 0.10 + i * 0.001, "internal_cm")
+    ivs = tuple(DailyValue(day, 0.10 + i * 0.001, "india_vix_eod")
                 for i, day in enumerate(sessions))
     rrs = tuple(DailyValue(day, -0.05 + i * 0.0002, "surface_rr25")
                 for i, day in enumerate(sessions))
@@ -20,8 +20,9 @@ def inputs() -> dict:
         as_of=datetime(2026, 11, 23, 5, tzinfo=UTC),
         surface_time=datetime(2026, 11, 23, 5, tzinfo=UTC),
         iv30=0.23, iv90=0.25, iv30_source="internal_cm",
+        eod_iv30=0.23, eod_iv_history=ivs,
         rr25=-0.03, rr25_source="surface_rr25",
-        iv_history=ivs, rr25_history=rrs, previous_close=previous,
+        rr25_history=rrs, previous_close=previous,
         latest_close=replace(previous, session=date(2026, 11, 20)),
     )
 
@@ -61,8 +62,8 @@ def test_six_price_action_states(changes: dict, expected: str) -> None:
 @pytest.mark.parametrize(
     "change",
     [
-        {"iv_history": ()}, {"rr25_history": ()},
-        {"iv30_source": "atm_average_live"}, {"iv30": float("nan")},
+        {"eod_iv_history": ()}, {"rr25_history": ()},
+        {"iv30_source": "india_vix"}, {"eod_iv30": float("nan")},
         {"iv90": 0}, {"previous_iv_state": "NORMAL_IV"},
         {"previous_skew": "HIGH_CALL_SKEW"}, {"minimum_confidence": 1.1},
         {"surface_time": datetime(2026, 11, 23, 6, tzinfo=UTC)},
@@ -88,15 +89,15 @@ def test_partial_session_and_unconfirmed_transition_are_rejected() -> None:
 def test_history_source_mixing_and_duplicate_days_are_rejected() -> None:
     kwargs = inputs()
     history = kwargs["iv_history"]
-    kwargs["iv_history"] = history[:-1] + (replace(history[-1], source="india_vix"),)
+    kwargs["eod_iv_history"] = history[:-1] + (replace(history[-1], source="live_india_vix"),)
     assert not classify(**kwargs)["complete"]
-    kwargs["iv_history"] = history + (history[-1],)
+    kwargs["eod_iv_history"] = history + (history[-1],)
     assert not classify(**kwargs)["complete"]
 
 
 def test_iv_and_skew_hysteresis() -> None:
     kwargs = inputs()
-    kwargs["iv30"] = 0.178
+    kwargs["eod_iv30"] = 0.178
     assert classify(**kwargs)["regime_components"]["iv_state"] == "LOW_IV"
     kwargs["previous_iv_state"] = IvState.HIGH_IV
     assert classify(**kwargs)["regime_components"]["iv_state"] == "HIGH_IV"
