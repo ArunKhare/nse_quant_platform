@@ -70,6 +70,7 @@ from nse_quant.research.evidence_plugins.registry import EvidencePluginRunner
 from nse_quant.research.evidence_plugins.technical_indicators import TechnicalIndicatorsPlugin
 from nse_quant.research.evidence_plugins.volume_flow import VolumeFlowPlugin
 from nse_quant.research.har_realized_volatility import (
+    HAR_RV_CALIBRATION_VERSION,
     build_daily_rv_observations,
     calibrate_har_rv_forecast_errors,
     forecast_har_rv_30d,
@@ -1692,6 +1693,8 @@ class DecisionLoop:
                 "expected_realized_volatility_measure": HAR_RV_MEASURE,
                 "expected_realized_volatility_is_forecast": True,
                 "expected_realized_volatility_calibration_is_eligible": True,
+                "expected_realized_volatility_calibration_version": HAR_RV_CALIBRATION_VERSION,
+                "expected_realized_volatility_calibration_samples": int(calibration["samples"]),
                 "expected_realized_volatility_calibration_margin": calibration_margin,
             }
         result = evaluate_variance_risk_premium(
