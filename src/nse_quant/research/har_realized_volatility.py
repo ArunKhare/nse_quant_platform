@@ -268,5 +268,6 @@ def calibrate_har_rv_forecast_errors(
     result.update({
         "reason": None, "absolute_error_p90": float(np.quantile(errors, 0.90)),
         "mean_absolute_error": float(np.mean(errors)),
+        "gate_margin_eligible": True,
     })
     return result
