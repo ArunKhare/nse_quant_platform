@@ -1,134 +1,47 @@
-# NSE Quant Decision Platform
+# Two-track candidate: stabilization fixes and S2 regression coverage
 
-A Python-based quantitative decision platform for NSE index options, cash stocks,
-and stock options. The platform follows a medallion-style data architecture:
-received artifacts -> immutable Bronze -> typed source-linked Silver -> versioned
-Gold -> published bundles -> native decisions and exact replay.
+Status: supplied candidate only. Not applied to the user's checkout. Python syntax checked only.
+No pytest, DuckDB, mypy, lint, Quack, native recording, Bronze replay or paper validation performed.
 
-## Status
+Source baseline: inspected remote feat/medallion-feature-store tip
+92716f07e1c4e4dfb70c25a56d68735fc009e53f, and Project Files excerpts.
+Remote revision is NOT a claim about local HEAD. The acceptance/fixture fixes
+are guarded against changed source; S2 APIs must still be checked locally.
 
-- Core NIFTY paper decision loop is implemented and user-QA-confirmed.
-- Research depth (warehouse, IV/RV research, replay backtests, QuantStats,
-  experiments) is implemented.
-- Controlled execution (Kite order placement, reconciliation, margin, partial
-  fills, rule-based exits) remains roadmap work.
-- All additive research modules are observational only and do not grant decision
-  eligibility or execution authority.
-- Live trading, production publication, and decision-loop cutover remain held.
+## Apply locally
 
-Native Gate 6 increments now include persisted audited decision-run coverage
-reconciliation Silver, an end-to-end native iron-condor decision-run pipeline,
-authoritative identity/time validation, coverage evidence-link validation,
-decision-loop integration, evidence-completeness validation, and end-to-end
-acceptance tests.
+1. Record `git rev-parse HEAD` and `git status --short`.
+2. Extract into a temporary directory; review every file.
+3. From repository root run `uv run python <extracted-directory>/apply_stabilization.py`.
+4. Copy the three new test files to their matching tests/ paths; do not overwrite
+   an existing file with the same name without review.
+5. Review `git diff` and run the commands below.
 
-Recent native-platform increments also include:
-
-- Availability and economic-validity evidence validation.
-- Gold decision publication candidate validation.
-- Eligible admission contract evaluation.
-- Lifecycle-recovery observations.
-- Operational acceptance harness.
-- Controlled execution gateway with paper-only default behavior.
-- Multi-underlying expansion validation for NIFTY and BANKNIFTY.
-- Native authority-evidence completeness-report audit-trail policy and replay.
-- Native authority-evidence completeness-report audit-trail final audit and replay.
-- Native authority-evidence completeness-report audit-trail enforcement and replay.
-- Native authority-evidence completeness-report audit-trail persistence and replay.
-- Native authority-evidence completeness-report audit-trail retention and expiry governance.
-- Native authority-evidence completeness-report audit-trail archival and closure governance.
-- Native authority-evidence completeness-report audit-trail query and export governance.
-- Native authority-evidence completeness-report audit-trail import, round-trip, acceptance, and reconciliation governance.
-- Native authority-evidence completeness-report audit-trail end-to-end lifecycle acceptance.
-
-Authority-evidence audit-trail import, round-trip, acceptance, and
-reconciliation governance imports exported audit trails exactly, performs
-non-destructive round-trip replay, and governs acceptance and reconciliation.
-It preserves the complete fingerprint chain and lifecycle without healing,
-deletion, eligibility grants, or execution authority.
-
-These increments remain observational. They do not close any native status gate,
-grant decision eligibility, authorize live trading, or authorize healing,
-backfill, adoption, or execution. `POINT_IN_TIME_DECISION` remains rejected.
-
-See `docs/CURRENT_NATIVE_STATUS.md` for the authoritative current status,
-remaining gates, and operational holds.
-
-## Architecture
-
-- `src/nse_quant/` — application and research code.
-- `src/nse_quant/data_platform/` — medallion data-platform modules (Bronze,
-  Silver, Gold, publication, admission, refusal, lifecycle).
-- `src/nse_quant/research/` — pure additive research evaluators and signal
-  generators (cash-stock swing, corporate actions, stock-option liquidity,
-  event risk, defined-risk strategies, execution quality, launch readiness).
-- `src/nse_quant/persistence/` — DuckDB persistence layer.
-- `tests/` — pytest test suite (data platform, research, and more).
-- `docs/` — per-module contracts, status addenda, and roadmap documents.
-- `config/` — YAML settings (base and test).
-
-## Key research modules
-
-| Module | Purpose | Safety |
-|---|---|---|
-| `cash_stock_swing` | SMA/breakout/RVOL/ATR swing signal generator | Research only, no execution authority |
-| `corporate_actions_calendar` | Dividends, splits, bonuses, buybacks, earnings blackout | Research registry only |
-| `stock_option_liquidity` | Spread/depth/OI/volume tradability evaluator | Observational only |
-| `stock_option_event_risk` | Earnings blackout, size reduction, short-vol block | Observational only |
-| `stock_option_defined_risk` | Bull call / bear put / iron condor / iron fly validator | Observational only |
-| `stock_option_execution_quality` | Quote age, spread, depth, risk-reward, slippage, time-to-event | Observational only |
-| `stock_option_launch_readiness` | Combines liquidity + event risk + structure + execution quality | Observational only |
-
-Every research module returns `decision_eligibility_asserted=False`.
-
-## Setup
-
-Requires Python >= 3.12 and `uv`.
-
-```powershell
-uv sync
-uv run pytest tests -q
+```
+uv run python -m pytest -o addopts= -q tests/data_platform/test_underlying_assertion_snapshot.py tests/data_platform/test_native_authority_evidence_completeness_report_acceptance.py tests/data_platform/test_authority_acceptance_envelope_regression.py
+uv run python -m pytest -o addopts= -q tests/analytics/test_s2_surface_contract_regressions.py tests/market_data/test_s2_vix_provenance_regressions.py
 ```
 
-## QA commands
+Run the project's normal lint/type checks on the changed files afterward.
+Keep the Quack opt-in test separate; this bundle does not modify its implementation.
+Do not commit logs containing credentials or readiness tokens.
 
-```powershell
-uv run pytest tests/data_platform -q
-uv run pytest tests -q
-uv run ruff check .
-uv run mypy .
-git diff --check
-```
+## What this changes
 
-## Safety boundary
+- Fixture CREATE SCHEMA uses catalog.schema while retaining the collision case.
+- Acceptance returns the already-computed accepted dictionary, not True.
+- New regression binds the acceptance fingerprint to the returned envelope.
+- S2 tests exercise total-variance interpolation, no extrapolation, RR25 sign,
+  missing forward/wing rejection, freshness, VIX units, raw/reference hash binding,
+  instrument mismatch and observational controls using synthetic fixtures only.
 
-- Persistent kill switch.
-- Paper-only mode.
-- Dry-run behavior.
-- Market-hours enforcement.
-- Data-quality gates.
-- Liquidity gates.
-- Per-strategy risk limits.
-- Portfolio-level exposure limits.
-- EOD review and warehouse exports.
+## Not completed by this bundle
 
-A new strategy must never bypass these controls.
-
-## Documentation
-
-- `docs/CURRENT_NATIVE_STATUS.md` — authoritative current status, gates, holds.
-- `docs/ROADMAP.md` — milestone roadmap.
-- `docs/TRADING_UNIVERSE_ROADMAP.md` — instrument-family expansion plan.
-- `docs/FUTURE_IMPLEMENTATION.md` — future configuration designs.
-- Per-module docs in `docs/` for each research evaluator and data-platform family.
-- `docs/CURRENT_NATIVE_STATUS_GATE6.md` — Gate 6 reconciliation, decision-loop,
-  identity/time, evidence-link, evidence-completeness, and acceptance-test
-  addendum.
-- `docs/CURRENT_NATIVE_STATUS_2026-11-17_ADDENDUM.md` — 2026-11-17 native
-  decision-run, Gold publication, admission, lifecycle recovery, operational
-  acceptance, controlled execution gateway, and multi-underlying expansion
-  addendum.
-- `docs\PLATFORM_DISCUSSION_DECISION_RECORD.md` - detailed, source-grounded record of
-  our architecture and implementation discussion, including the legacy loop,
-  Medallion path, P0–P5 status, configuration design, analytics/research overlap,
-  dashboard scope, safety boundaries, and operational holds.
+This is not complete Stage 1/S2. Remaining work requires the actual local source
+and database integration tests: durable rejected-observation archival; pinned
+Bronze plus retained forward/rate/calendar byte recording; exact read-only replay;
+conflict and audited-variant semantics; atomic rollback/orphan/final-audit tests;
+expiry capture integration; EOD history/source-switch provenance; paper validation.
+Do not treat hypothetical spot/vol stress surfaces as constant-maturity surface evidence.
+Do not apply earlier candidate ZIPs without source comparison.
+No runner rewiring, live authorization, eligibility promotion or stage advancement.
