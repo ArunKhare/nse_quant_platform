@@ -475,8 +475,13 @@ def retrieve_candidate(
             [(1, "PLANNED", None), (2, "RUNNING", None), (3, "CANCELLED", "INTERRUPTED")],
         ):
             raise ValueError("S2_GOLD_AUDIT_ATTEMPT_NOT_TERMINAL")
-        audit_times = [job[5], *(item[2] for item in history), attempt_recorded_at]
-        if any(item is None for item in audit_times) or audit_times != sorted(audit_times):
+        audit_times = [job[5], *(item[2] for item in history)]
+        if (
+            any(item is None for item in audit_times)
+            or audit_times != sorted(audit_times)
+            or attempt_recorded_at < job[5]
+            or attempt_recorded_at > history[-1][2]
+        ):
             raise ValueError("S2_GOLD_AUDIT_TIME_ORDER")
         if job_id == record[9]:
             first_audit_succeeded = states[-1][1] == "SUCCEEDED"
