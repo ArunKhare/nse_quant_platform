@@ -36,6 +36,7 @@ def feature_bytes(**changes):
         "instrument_reference_sha256": "f" * 64,
         "iv30_source": "india_vix",
         "mode": "observation",
+        "quality_state": "valid_observation",
         "publication_asserted": False,
         "decision_eligibility_asserted": False,
         "model_suitability_verified": False,
