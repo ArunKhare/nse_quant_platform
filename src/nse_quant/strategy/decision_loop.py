@@ -14,8 +14,7 @@ import logging
 import math
 import time
 from collections.abc import Callable
-from datetime import UTC, datetime
-from datetime import time as dt_time
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, cast
 from uuid import uuid4
@@ -38,6 +37,7 @@ from nse_quant.core.models import (
 )
 from nse_quant.core.regime_registry import REGIME_REGISTRY_VERSION, is_canonical_regime_label
 from nse_quant.core.settings import IronCondorProfileSettings, Settings, get_settings
+from nse_quant.core.trading_calendar import NSETradingCalendar
 from nse_quant.execution.broker import PaperBroker
 from nse_quant.features.availability import FeatureAvailability
 from nse_quant.features.availability_checker import (
@@ -70,7 +70,16 @@ from nse_quant.research.evidence_plugins.volume_flow import VolumeFlowPlugin
 from nse_quant.research.regime_policy import RegimePolicy
 from nse_quant.research.regime_policy_evaluation import resolve_effective_regimes
 from nse_quant.research.regime_risk_policy import RegimeRiskLimits, build_regime_risk_limits
+from nse_quant.research.har_realized_volatility import (
+    build_daily_rv_observations,
+    calibrate_har_rv_forecast_errors,
+    forecast_har_rv_30d,
+)
 from nse_quant.research.variance_risk_premium import (
+    HAR_RV_HORIZON_DAYS,
+    HAR_RV_MEASURE,
+    HAR_RV_METHOD,
+    HAR_RV_VERSION,
     VRP_CALCULATION_VERSION,
     evaluate_variance_risk_premium,
     trailing_daily_realized_volatility,
@@ -471,7 +480,11 @@ class DecisionLoop:
                         else (
                             "variance_risk_premium_estimator_not_gate_eligible"
                             if not vrp_result.get("estimator_gate_eligible")
-                            else "variance_risk_premium_below_minimum"
+                            else (
+                                "variance_risk_premium_iv_not_gate_eligible"
+                                if not vrp_result.get("implied_volatility_gate_eligible")
+                                else "variance_risk_premium_below_minimum"
+                            )
                         )
                     ),
                     "position_outcomes": position_outcomes,
@@ -1511,14 +1524,12 @@ class DecisionLoop:
         snapshot: ChainSnapshot,
         instrument_token: int,
     ) -> dict[str, Any]:
-        """Evaluate the iron-condor VRP gate with full input provenance.
+        """Evaluate VRP using a point-in-time HAR-RV forecast.
 
-        The current IV input remains near-expiry ATM IV (not yet the charter's
-        30-day India VIX/internal constant-maturity input). E[RV^2] is currently
-        a trailing close-to-close diagnostic from completed daily candles.
-        That fallback is explicitly ineligible for the hard gate until a
-        validated 30-day HAR-RV forecast is integrated. The 1-minute
-        ``features.realized_vol`` is never used here.
+        HAR-RV is fitted to complete 5-minute intraday realized variance plus
+        the prior-session-close to current-session-open overnight return.
+        Near-expiry ATM IV remains diagnostic only: the charter requires a
+        30-day constant-maturity IV series before the gate can pass.
         """
         profile = self.settings.get_strategy_profile(strategy_id)
         if not isinstance(profile, IronCondorProfileSettings):
@@ -1532,36 +1543,116 @@ class DecisionLoop:
         gate = profile.vrp_gate
         snapshot_ts = snapshot.ts if snapshot.ts.tzinfo else snapshot.ts.replace(tzinfo=UTC)
         session_start = datetime.combine(snapshot_ts.astimezone(IST).date(), dt_time.min, tzinfo=IST)
+        source_start = session_start - timedelta(days=550)
+        calendar = NSETradingCalendar(
+            closed_dates=set(self.settings.trading_calendar.closed_dates),
+        )
+        candle_reader = getattr(self.store, "completed_one_minute_candles", None)
+        minute_candles = (
+            candle_reader(
+                instrument_token=instrument_token,
+                start=source_start,
+                before=session_start,
+                limit=210000,
+            )
+            if callable(candle_reader)
+            else []
+        )
+        rv_details: dict[str, Any] = {
+            "method": HAR_RV_METHOD,
+            "version": HAR_RV_VERSION,
+            "horizon_days": HAR_RV_HORIZON_DAYS,
+            "measure": HAR_RV_MEASURE,
+            "is_forecast": True,
+            "gate_eligible": False,
+            "diagnostic_only": True,
+            "source_table": "spot_candles",
+            "source_interval": "1m",
+            "derived_interval": "5m",
+            "instrument_token": instrument_token,
+            "source_start": source_start.isoformat(),
+            "source_before": session_start.isoformat(),
+            "source_minute_rows": len(minute_candles),
+        }
+        expected_rv: float | None = None
+        calibration: dict[str, Any] = {
+            "reason": "har_rv_observations_unavailable",
+            "diagnostic_only": True,
+            "gate_margin_eligible": False,
+        }
+        try:
+            observations = build_daily_rv_observations(
+                minute_candles,
+                calendar=calendar,
+                as_of=snapshot_ts,
+            )
+            daily_variances = [item.realized_variance for item in observations]
+            expected_rv, forecast_details = forecast_har_rv_30d(daily_variances)
+            calibration = calibrate_har_rv_forecast_errors(daily_variances)
+            rv_details.update(forecast_details)
+            rv_details["gate_eligible"] = expected_rv is not None
+            rv_details["diagnostic_only"] = expected_rv is None
+            rv_details["complete_sessions"] = len(observations)
+            rv_details["first_session_date"] = (
+                observations[0].session_date.isoformat() if observations else None
+            )
+            rv_details["last_session_date"] = (
+                observations[-1].session_date.isoformat() if observations else None
+            )
+            rv_details["last_session_close_ts"] = (
+                observations[-1].last_minute_ts.isoformat() if observations else None
+            )
+            rv_details["calibration"] = calibration
+            last_session_age = (
+                (session_start.date() - observations[-1].session_date).days
+                if observations
+                else None
+            )
+            rv_details["last_complete_session_age_days"] = last_session_age
+            rv_details["max_daily_close_age_days"] = gate.max_daily_close_age_days
+            if last_session_age is None or last_session_age > gate.max_daily_close_age_days:
+                expected_rv = None
+                rv_details["gate_eligible"] = False
+                rv_details["diagnostic_only"] = True
+                rv_details["reason"] = "stale_or_missing_complete_intraday_sessions"
+        except (ValueError, TypeError) as exc:
+            observations = ()
+            rv_details["reason"] = f"intraday_rv_input_rejected:{exc}"
+
+        # Preserve the former close-to-close series strictly as an auditable
+        # fallback diagnostic. It is never supplied to the VRP evaluator.
         daily = self.store.completed_daily_closes(
             instrument_token=instrument_token,
             before=session_start,
             limit=gate.rv_window_days + 1,
         )
-        expected_rv, rv_details = trailing_daily_realized_volatility(
+        trailing_rv, trailing_details = trailing_daily_realized_volatility(
             [close for _ts, close in daily],
             window_days=gate.rv_window_days,
         )
-        last_close_age_days = (session_start.date() - daily[-1][0].astimezone(IST).date()).days if daily else None
-        rv_details["last_close_age_days"] = last_close_age_days
-        rv_details["max_daily_close_age_days"] = gate.max_daily_close_age_days
-        if last_close_age_days is not None and last_close_age_days > gate.max_daily_close_age_days:
-            expected_rv = None
-            rv_details["reason"] = "stale_daily_closes"
-        rv_details.update(
-            {
-                "source_table": "spot_candles",
-                "interval": "day",
-                "instrument_token": instrument_token,
-                "before": session_start.isoformat(),
-                "first_close_ts": daily[0][0].isoformat() if daily else None,
-                "last_close_ts": daily[-1][0].isoformat() if daily else None,
-            }
-        )
+        trailing_details["last_close_ts"] = daily[-1][0].isoformat() if daily else None
+        rv_details["trailing_close_to_close_fallback"] = {
+            **trailing_details,
+            "value": trailing_rv,
+            "used_for_gate": False,
+        }
 
+        har_identity: dict[str, Any] = {}
+        if expected_rv is not None:
+            har_identity = {
+                "expected_realized_volatility_method": HAR_RV_METHOD,
+                "expected_realized_volatility_version": HAR_RV_VERSION,
+                "expected_realized_volatility_horizon_days": HAR_RV_HORIZON_DAYS,
+                "expected_realized_volatility_measure": HAR_RV_MEASURE,
+                "expected_realized_volatility_is_forecast": True,
+            }
         result = evaluate_variance_risk_premium(
             implied_volatility=features.atm_iv,
             expected_realized_volatility=expected_rv,
             minimum_vrp=gate.minimum_vrp,
+            implied_volatility_source="features.atm_iv",
+            implied_volatility_is_30d_constant_maturity=False,
+            **har_identity,
         )
         return {
             "applicable": True,
@@ -1570,6 +1661,9 @@ class DecisionLoop:
             "available": result.available,
             "passed": result.passed,
             "estimator_gate_eligible": result.details.get("estimator_gate_eligible", False),
+            "implied_volatility_gate_eligible": result.details.get(
+                "implied_volatility_gate_eligible", False
+            ),
             "gate_passed": result.available and result.passed,
             "gate_mode": EvidenceMode.HARD_GATE.value,
             "minimum_vrp": gate.minimum_vrp,
@@ -1578,7 +1672,6 @@ class DecisionLoop:
                 "source": "features.atm_iv",
                 "basis": "near_expiry_atm",
                 "constant_maturity_30d": False,
-                "expiry": features.expiry.isoformat() if features.expiry else None,
                 "as_of": features.ts.isoformat(),
             },
             "expected_realized_volatility": expected_rv,
