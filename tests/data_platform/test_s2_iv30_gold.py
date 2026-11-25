@@ -26,6 +26,12 @@ def feature_bytes(**changes):
         "received_at": "2026-11-25T09:59:51+00:00",
         "age_seconds": 5.0,
         "max_age_seconds": 300.0,
+        "value_percent": 15.0,
+        "selected_revision_id": "d" * 64,
+        "source_revisions": ["d" * 64],
+        "instrument_token": 123,
+        "raw_payload_sha256": "e" * 64,
+        "instrument_reference_sha256": "f" * 64,
         "iv30_source": "india_vix",
         "mode": "observation",
         "publication_asserted": False,
@@ -40,6 +46,8 @@ def feature_bytes(**changes):
         },
     }
     feature.update(changes)
+    if "iv30" in changes and "value_percent" not in changes:
+        feature["value_percent"] = float(changes["iv30"]) * 100
     return json.dumps(feature, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
 
 
@@ -142,7 +150,7 @@ def test_candidate_not_available_before_recording_or_event_time(stores):
         api.retrieve_candidate(
             reader,
             build_id=receipt["build_id"],
-            as_of=(datetime.fromisoformat(AS_OF) - timedelta(seconds=1)).isoformat(),
+            as_of="2026-11-25T09:59:49+00:00",
         )
 
 
@@ -166,14 +174,14 @@ def test_invalid_feature_candidate_rejected_before_gold_write(stores, changes, r
     assert gold.execute("SELECT COUNT(*) FROM information_schema.tables").fetchone()[0] == 0
 
 
-def test_same_file_source_and_gold_rejected(stores):
+def test_duplicate_source_database_rejected(stores):
     sources, gold, _, _, _ = stores
     with pytest.raises(ValueError, match="SEPARATE_READONLY_SOURCES"):
         api.persist_live_candidate(
             sources[0],
-            sources[1],
-            sources[2],
             sources[0],
+            sources[2],
+            gold,
             observation_id=REVISION,
             expected_sha256=MATERIALIZATION,
             as_of=AS_OF,
@@ -220,6 +228,9 @@ def test_failed_original_audit_is_not_accepted_or_healed(stores, monkeypatch):
     monkeypatch.setattr(api.AuditLedger, "transition", fail_success)
     with pytest.raises(RuntimeError, match="final audit failure"):
         persist()
+    build_id = gold.execute(
+        "SELECT build_id FROM gold.s2_iv30_candidates"
+    ).fetchone()[0]
     job_id = gold.execute(
         "SELECT first_job_id FROM gold.s2_iv30_candidates"
     ).fetchone()[0]
@@ -233,6 +244,6 @@ def test_failed_original_audit_is_not_accepted_or_healed(stores, monkeypatch):
     ):
         api.retrieve_candidate(
             reader,
-            build_id=gold.execute("SELECT build_id FROM gold.s2_iv30_candidates").fetchone()[0],
+            build_id=build_id,
             as_of=AS_OF,
         )
