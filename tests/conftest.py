@@ -41,6 +41,8 @@ from tests.data_platform.native_failure_acceptance_lab import NativeFailureLab
 
 def pytest_configure(config):
     """Give each terminal run its own timestamped folder and per-worker log files."""
+    if config.getoption("s2_evidence_output", default=None) is not None:
+        return
     worker_id = os.environ.get("PYTEST_XDIST_WORKER", "master")
 
     if worker_id == "master":
