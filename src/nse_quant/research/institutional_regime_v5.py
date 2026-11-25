@@ -14,6 +14,7 @@ from datetime import date, datetime
 from typing import Any
 
 from nse_quant.core.constants import IST
+from nse_quant.core.iv_statistics import iv_percentile_and_rank
 from nse_quant.core.regime_registry import (
     REGIME_REGISTRY_VERSION,
     REGIMES,
@@ -194,10 +195,7 @@ def classify(
         ):
             raise ValueError("completed_recent_eod_iv30_required")
         rrs = _history(rr25_history, today=today, source=rr25_source, minimum=40, positive=False)
-        ivp = sum(value < eod_iv_close.value for value in eod_ivs) / len(eod_ivs) * 100
-        rank_window = [*eod_ivs[-251:], eod_iv_close.value]
-        spread = max(rank_window) - min(rank_window)
-        ivr = (eod_iv_close.value - min(rank_window)) / spread * 100 if spread > 0 else None
+        ivp, ivr, _ = iv_percentile_and_rank(eod_ivs, eod_iv_close.value)
         iv_state = IvState.HIGH_IV if ivp >= (60 if previous_iv_state is IvState.HIGH_IV else 70) else IvState.LOW_IV
         slope = iv30 - iv90
         term = (
