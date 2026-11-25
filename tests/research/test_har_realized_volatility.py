@@ -7,6 +7,7 @@ import pytest
 
 from nse_quant.core.constants import IST
 from nse_quant.core.trading_calendar import NSETradingCalendar
+from nse_quant.persistence.duckdb_store import DuckDBStore
 from nse_quant.research.har_realized_volatility import (
     HAR_RV_HORIZON_DAYS,
     HAR_RV_MEASURE,
@@ -116,3 +117,52 @@ def test_har_rv_calibration_fails_closed_with_too_few_origins() -> None:
     assert result["samples"] < 30
     assert result["absolute_error_p90"] is None
     assert result["gate_margin_eligible"] is False
+
+
+
+def test_store_reader_returns_only_bounded_point_in_time_one_minute_candles(tmp_path) -> None:
+    store = DuckDBStore(tmp_path / "har-rv.duckdb")
+    try:
+        base = datetime(2026, 11, 23, 9, 15, tzinfo=IST)
+        store.write_spot_candles(
+            candles=[
+                {
+                    "date": base,
+                    "open": 100.0,
+                    "high": 100.0,
+                    "low": 100.0,
+                    "close": 100.0,
+                    "volume": 1,
+                },
+                {
+                    "date": base + timedelta(minutes=1),
+                    "open": 101.0,
+                    "high": 101.0,
+                    "low": 101.0,
+                    "close": 101.0,
+                    "volume": 1,
+                },
+                {
+                    "date": base + timedelta(minutes=2),
+                    "open": 102.0,
+                    "high": 102.0,
+                    "low": 102.0,
+                    "close": 102.0,
+                    "volume": 1,
+                },
+            ],
+            symbol="NIFTY",
+            instrument_token=256265,
+            interval="1m",
+        )
+        rows = store.completed_one_minute_candles(
+            instrument_token=256265,
+            start=base,
+            before=base + timedelta(minutes=2),
+        )
+        assert rows == [
+            (base, 100.0, 100.0),
+            (base + timedelta(minutes=1), 101.0, 101.0),
+        ]
+    finally:
+        store.close()
