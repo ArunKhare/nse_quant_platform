@@ -48,6 +48,8 @@ def evaluate_variance_risk_premium(
     expected_realized_volatility_horizon_days: int | None = None,
     expected_realized_volatility_measure: str = "",
     expected_realized_volatility_is_forecast: bool = False,
+    expected_realized_volatility_calibration_is_eligible: bool = False,
+    expected_realized_volatility_calibration_margin: float | None = None,
     implied_volatility_source: str = "unspecified",
     implied_volatility_is_30d_constant_maturity: bool = False,
 ) -> VarianceRiskPremiumResult:
@@ -57,8 +59,9 @@ def evaluate_variance_risk_premium(
     Numeric trailing-RV results remain available for diagnostics, but cannot
     pass the gate. Passing requires an explicitly identified 30-day HAR-RV
     forecast built from 5-minute intraday returns plus the overnight return,
-    and VRP strictly above minimum_vrp. Estimator metadata is provenance supplied
-    by the caller; this function does not fit or validate a HAR model.
+    a sufficient walk-forward forecast-error calibration, and VRP strictly
+    above minimum_vrp. Estimator metadata is provenance supplied by the caller;
+    this function does not fit or validate a HAR model.
     """
     reasons: list[str] = []
     details: dict[str, Any] = {
@@ -71,6 +74,8 @@ def evaluate_variance_risk_premium(
         "expected_realized_volatility_horizon_days": expected_realized_volatility_horizon_days,
         "expected_realized_volatility_measure": expected_realized_volatility_measure,
         "expected_realized_volatility_is_forecast": expected_realized_volatility_is_forecast,
+        "expected_realized_volatility_calibration_is_eligible": expected_realized_volatility_calibration_is_eligible,
+        "expected_realized_volatility_calibration_margin": expected_realized_volatility_calibration_margin,
         "implied_volatility_source": implied_volatility_source,
         "implied_volatility_is_30d_constant_maturity": implied_volatility_is_30d_constant_maturity,
     }
@@ -80,6 +85,10 @@ def evaluate_variance_risk_premium(
         and expected_realized_volatility_horizon_days == HAR_RV_HORIZON_DAYS
         and expected_realized_volatility_measure == HAR_RV_MEASURE
         and expected_realized_volatility_is_forecast is True
+        and expected_realized_volatility_calibration_is_eligible is True
+        and expected_realized_volatility_calibration_margin is not None
+        and math.isfinite(expected_realized_volatility_calibration_margin)
+        and expected_realized_volatility_calibration_margin >= 0.0
     )
     details["estimator_gate_eligible"] = estimator_eligible
     iv_eligible = (
