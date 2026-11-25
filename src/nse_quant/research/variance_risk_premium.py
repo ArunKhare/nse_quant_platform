@@ -13,7 +13,7 @@ import math
 from dataclasses import dataclass, field
 from typing import Any
 
-VRP_CALCULATION_VERSION = "variance_risk_premium_v3"
+VRP_CALCULATION_VERSION = "variance_risk_premium_v4"
 
 # The trailing estimator is retained for diagnostics only. It is not a
 # conditional forecast and must never satisfy the IC entry gate.
@@ -68,7 +68,7 @@ def evaluate_variance_risk_premium(
         "minimum_vrp": minimum_vrp,
         "formula": "IV^2 - E[RV^2]",
         "threshold_comparison": ">",
-        "gate_version": "variance_risk_premium_gate_har_and_iv30_v3",
+        "gate_version": "variance_risk_premium_gate_har_calibrated_iv30_v4",
         "expected_realized_volatility_method": expected_realized_volatility_method,
         "expected_realized_volatility_version": expected_realized_volatility_version,
         "expected_realized_volatility_horizon_days": expected_realized_volatility_horizon_days,
