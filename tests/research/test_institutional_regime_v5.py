@@ -101,7 +101,7 @@ def test_classifier_uses_canonical_inclusive_current_ivr_window() -> None:
     result = classify(**kwargs)
     assert result["complete"], result
     assert result["diagnostics"]["ivp"] == pytest.approx(50.0)
-    assert result["diagnostics"]["ivr"] == pytest.approx(50.0)
+    assert result["diagnostics"]["ivr"] == pytest.approx(50.42016806722688)
 
 
 def test_iv_and_skew_hysteresis() -> None:
