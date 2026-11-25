@@ -21,6 +21,8 @@ def har_forecast_identity() -> dict:
         "expected_realized_volatility_horizon_days": HAR_RV_HORIZON_DAYS,
         "expected_realized_volatility_measure": HAR_RV_MEASURE,
         "expected_realized_volatility_is_forecast": True,
+        "implied_volatility_source": "india_vix_eod",
+        "implied_volatility_is_30d_constant_maturity": True,
     }
 
 
@@ -70,6 +72,7 @@ def test_positive_vrp_from_trailing_fallback_is_diagnostic_only() -> None:
         {"expected_realized_volatility_measure": "close_to_close"},
         {"expected_realized_volatility_is_forecast": False},
         {"expected_realized_volatility_method": "unknown"},
+        {"implied_volatility_is_30d_constant_maturity": False},
     ],
 )
 def test_incomplete_or_mismatched_har_identity_cannot_pass(identity: dict) -> None:
@@ -207,3 +210,20 @@ def test_trailing_daily_rv_unavailable_with_too_few_closes() -> None:
     rv, details = trailing_daily_realized_volatility([100.0, 101.0], window_days=5)
     assert rv is None
     assert details["reason"] == "insufficient_daily_closes"
+
+
+
+def test_near_expiry_atm_iv_cannot_satisfy_vrp_gate() -> None:
+    result = evaluate_variance_risk_premium(
+        implied_volatility=0.30,
+        expected_realized_volatility=0.10,
+        **(har_forecast_identity() | {
+            "implied_volatility_source": "features.atm_iv",
+            "implied_volatility_is_30d_constant_maturity": False,
+        }),
+    )
+    assert result.available is True
+    assert result.details["estimator_gate_eligible"] is True
+    assert result.details["implied_volatility_gate_eligible"] is False
+    assert result.passed is False
+    assert "implied_volatility_not_30d_constant_maturity" in result.reasons
