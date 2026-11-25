@@ -108,10 +108,10 @@ def classify(
     surface_time: datetime,
     iv30: float,
     iv90: float,
-    iv30_source: str,
+    eod_iv30: float,
+    eod_iv_history: tuple[DailyValue, ...],
     rr25: float,
     rr25_source: str,
-    iv_history: tuple[DailyValue, ...],
     rr25_history: tuple[DailyValue, ...],
     previous_close: PriceDiagnostics,
     latest_close: PriceDiagnostics,
@@ -140,14 +140,16 @@ def classify(
         "decision_eligibility_asserted": False,
         "thresholds_provisional": True,
         "input_provenance": {
-            "iv30_source": iv30_source,
+            "iv30_source": "internal_cm",
             "iv90_source": "internal_cm",
+            "eod_iv30_source": "india_vix_eod",
+            "eod_iv30": eod_iv30,
             "rr25_source": rr25_source,
             "rr25_convention": "black76_call25_minus_put25_30d",
             "surface_time": surface_time.isoformat(),
             "previous_close": asdict(previous_close),
             "latest_close": asdict(latest_close),
-            "iv_history": [asdict(row) for row in iv_history],
+            "eod_iv_history": [asdict(row) for row in eod_iv_history],
             "rr25_history": [asdict(row) for row in rr25_history],
         },
     }
@@ -161,9 +163,12 @@ def classify(
             raise ValueError("future_or_stale_surface")
         if not 0 <= minimum_confidence <= 1:
             raise ValueError("invalid_confidence_floor")
-        if iv30_source not in {"india_vix", "internal_cm"} or not rr25_source:
+        if not rr25_source:
             raise ValueError("unsupported_feature_source")
-        if not all(math.isfinite(x) for x in (iv30, iv90, rr25)) or min(iv30, iv90) <= 0:
+        if (
+            not all(math.isfinite(x) for x in (iv30, iv90, eod_iv30, rr25))
+            or min(iv30, iv90, eod_iv30) <= 0
+        ):
             raise ValueError("invalid_surface_values")
         if previous_iv_state is not None and not isinstance(previous_iv_state, IvState):
             raise ValueError("invalid_previous_iv_state")
@@ -172,11 +177,14 @@ def classify(
         today = as_of.astimezone(IST).date()
         if not previous_close.session < latest_close.session < today:
             raise ValueError("completed_ordered_daily_features_required")
-        ivs = _history(iv_history, today=today, source=iv30_source, minimum=120, positive=True)
+        eod_ivs = _history(
+            eod_iv_history, today=today, source="india_vix_eod", minimum=120, positive=True
+        )
         rrs = _history(rr25_history, today=today, source=rr25_source, minimum=40, positive=False)
-        ivp = sum(value < iv30 for value in ivs) / len(ivs) * 100
-        spread = max(ivs) - min(ivs)
-        ivr = (iv30 - min(ivs)) / spread * 100 if spread > 0 else None
+        ivp = sum(value < eod_iv30 for value in eod_ivs) / len(eod_ivs) * 100
+        rank_window = [*eod_ivs[-251:], eod_iv30]
+        spread = max(rank_window) - min(rank_window)
+        ivr = (eod_iv30 - min(rank_window)) / spread * 100 if spread > 0 else None
         iv_state = IvState.HIGH_IV if ivp >= (60 if previous_iv_state is IvState.HIGH_IV else 70) else IvState.LOW_IV
         slope = iv30 - iv90
         term = (
@@ -222,6 +230,7 @@ def classify(
                     "ivr": ivr,
                     "ivp_ivr_divergence": abs(ivp - ivr) > 30 if ivr is not None else None,
                     "iv30_minus_iv90": slope,
+                    "eod_iv30": eod_iv30,
                 },
             }
         )
