@@ -23,6 +23,7 @@ from uuid import uuid4
 from nse_quant.analytics.features import build_features
 from nse_quant.core.constants import IST
 from nse_quant.core.evidence import EvidenceMode
+from nse_quant.core.market_calendar import NSE_HOLIDAYS
 from nse_quant.core.models import (
     ChainSnapshot,
     GateResult,
@@ -1545,9 +1546,10 @@ class DecisionLoop:
         snapshot_ts = snapshot.ts if snapshot.ts.tzinfo else snapshot.ts.replace(tzinfo=UTC)
         session_start = datetime.combine(snapshot_ts.astimezone(IST).date(), dt_time.min, tzinfo=IST)
         source_start = session_start - timedelta(days=550)
-        calendar = NSETradingCalendar(
-            closed_dates=set(self.settings.trading_calendar.closed_dates),
-        )
+        configured_holidays = set(self.settings.trading_calendar.closed_dates)
+        for year_holidays in NSE_HOLIDAYS.values():
+            configured_holidays.update(year_holidays)
+        calendar = NSETradingCalendar(closed_dates=configured_holidays)
         candle_reader = getattr(self.store, "completed_one_minute_candles", None)
         minute_candles = (
             candle_reader(
