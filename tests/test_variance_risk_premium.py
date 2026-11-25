@@ -4,6 +4,7 @@ import pytest
 
 from nse_quant.research.variance_risk_premium import (
     EXPECTED_RV_VERSION,
+    HAR_RV_CALIBRATION_VERSION,
     HAR_RV_HORIZON_DAYS,
     HAR_RV_MEASURE,
     HAR_RV_METHOD,
@@ -22,6 +23,8 @@ def har_forecast_identity() -> dict:
         "expected_realized_volatility_measure": HAR_RV_MEASURE,
         "expected_realized_volatility_is_forecast": True,
         "expected_realized_volatility_calibration_is_eligible": True,
+        "expected_realized_volatility_calibration_version": HAR_RV_CALIBRATION_VERSION,
+        "expected_realized_volatility_calibration_samples": 60,
         "expected_realized_volatility_calibration_margin": 0.0,
         "implied_volatility_source": "india_vix_eod",
         "configured_minimum_vrp": 0.0,
@@ -75,6 +78,8 @@ def test_positive_vrp_from_trailing_fallback_is_diagnostic_only() -> None:
         {"expected_realized_volatility_measure": "close_to_close"},
         {"expected_realized_volatility_is_forecast": False},
         {"expected_realized_volatility_calibration_is_eligible": False},
+        {"expected_realized_volatility_calibration_version": "wrong-calibration"},
+        {"expected_realized_volatility_calibration_samples": 29},
         {"expected_realized_volatility_method": "unknown"},
         {"implied_volatility_is_30d_constant_maturity": False},
     ],
