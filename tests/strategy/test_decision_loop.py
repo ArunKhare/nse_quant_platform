@@ -97,10 +97,13 @@ def test_decision_loop_persists_feature_and_decision(
             "vrp_gate_rejected",
         }
         if result["status"] == "vrp_gate_rejected":
-            assert result["rejection_reason"] == (
-                "variance_risk_premium_estimator_not_gate_eligible"
-            )
+            assert result["rejection_reason"] in {
+                "variance_risk_premium_unavailable",
+                "variance_risk_premium_estimator_not_gate_eligible",
+                "variance_risk_premium_iv_not_gate_eligible",
+            }
             assert result["variance_risk_premium"]["estimator_gate_eligible"] is False
+            assert result["variance_risk_premium"]["implied_volatility_gate_eligible"] is False
 
         feature_count = store.conn.execute("SELECT COUNT(*) FROM feature_snapshots").fetchone()[0]
 
