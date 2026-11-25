@@ -1621,6 +1621,7 @@ class DecisionLoop:
                 calibration_eligible = (
                     calibration.get("gate_margin_eligible") is True
                     and isinstance(calibration_margin_value, (int, float))
+                    and not isinstance(calibration_margin_value, bool)
                     and math.isfinite(float(calibration_margin_value))
                     and float(calibration_margin_value) >= 0.0
                 )
