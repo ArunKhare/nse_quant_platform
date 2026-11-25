@@ -118,7 +118,7 @@ def test_exact_retry_reuses_immutable_candidate_but_audits_attempt(stores):
     assert gold.execute(
         "SELECT COUNT(*) FROM medallion_audit.job_events WHERE state='SUCCEEDED'"
     ).fetchone()[0] == 2
-    assert gold.execute("SELECT COUNT(*) FROM gold.s2_iv30_candidate_attempts").fetchone()[0] == 2
+    assert gold.execute("SELECT COUNT(*) FROM \"gold\".\"gold\".s2_iv30_candidate_attempts").fetchone()[0] == 2
 
 
 def test_feature_change_creates_new_candidate_revision(stores):
