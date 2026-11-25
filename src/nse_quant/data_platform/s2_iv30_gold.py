@@ -156,6 +156,8 @@ def _validate_feature(raw: bytes, *, as_of: str) -> dict[str, Any]:
         or token <= 0
         or type(revisions) is not list
         or not revisions
+        or len(set(revisions)) != len(revisions)
+        or revisions != sorted(revisions)
         or any(not pin(item) for item in revisions)
         or feature.get("selected_revision_id") not in revisions
         or not pin(feature.get("raw_payload_sha256"))
@@ -170,6 +172,9 @@ def _validate_feature(raw: bytes, *, as_of: str) -> dict[str, Any]:
         or not pin(provenance.get("revision_id"))
     ):
         raise ValueError("S2_GOLD_EXACT_S2_PROVENANCE_REQUIRED")
+    materialization_available_at = _instant(provenance.get("materialization_available_at", ""))
+    if materialization_available_at > feature_time:
+        raise ValueError("S2_GOLD_MATERIALIZATION_NOT_YET_AVAILABLE")
     return feature
 
 
