@@ -432,3 +432,24 @@ decision-loop IV input is also still near-expiry ATM IV rather than the charter'
 
 Owner test/QA acceptance has not yet been reported for this tranche. No HAR-RV
 forecast or decision eligibility is asserted by this addendum.
+
+
+## S3 HAR-RV implementation tranche — 2026-11-25
+
+Implementation status: code added; local acceptance pending.
+
+- Added `research/har_realized_volatility.py` with a point-in-time RV observation builder and a rolling HAR-RV level-OLS model.
+- RV observations are built from the canonical 1-minute spot-candle series. Each regular NSE session must contain exactly 375 unique minute bars from 09:15 through 15:29 IST. Missing bars, duplicate timestamps, invalid prices, incomplete sessions, and unavailable predecessor sessions are not bridged.
+- Intraday variance is the sum of squared log returns over 75 five-minute observations. The first five-minute return is measured from the session open; later returns use successive five-minute closes. Overnight variance is the squared log return from the previous complete session close to the current session open.
+- HAR predictors are daily RV, trailing five-session mean RV, and trailing 22-session mean RV. The model uses a rolling 252-observation OLS fit and recursively forecasts 21 regular sessions as the 30-calendar-day approximation. The reported forecast is annualized volatility, sqrt(mean forecast daily variance × 252), for comparison with annualized 30-day IV.
+- Added rolling-origin 21-session forecast-error calibration, reporting the 90th-percentile absolute annualized-variance error when at least 30 out-of-sample origins are available. Calibration remains diagnostic-only; it is not silently applied as a VRP margin.
+- Decision-loop evidence now uses HAR-RV only. The former trailing close-to-close estimator is retained as an explicitly unused diagnostic fallback.
+- The VRP gate now separately validates the HAR-RV estimator identity and the implied-volatility input identity. The current near-expiry ATM IV is not 30-day constant maturity, so the gate remains fail-closed even when a valid HAR-RV forecast is available. D8 India VIX EOD / internal constant-maturity IV integration remains a separate required step.
+- The live loop reads only completed historical 1-minute candles from its existing operational store; it does not run Medallion transformations or synchronously build Silver/Gold artifacts.
+
+Validation required on the operator's Windows environment:
+- `uv run pytest -q tests/research/test_har_realized_volatility.py tests/test_variance_risk_premium.py tests/strategy/test_decision_loop.py`
+- `uv run ruff check src/nse_quant/research/har_realized_volatility.py src/nse_quant/research/variance_risk_premium.py src/nse_quant/strategy/decision_loop.py tests/research/test_har_realized_volatility.py tests/test_variance_risk_premium.py tests/strategy/test_decision_loop.py`
+- `uv run mypy src/nse_quant/research/har_realized_volatility.py src/nse_quant/research/variance_risk_premium.py src/nse_quant/strategy/decision_loop.py`
+
+No claim of test or QA acceptance is made until those commands pass.
