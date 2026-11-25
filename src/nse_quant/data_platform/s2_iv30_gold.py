@@ -256,10 +256,6 @@ def persist_live_candidate(
     cutoff = _instant(as_of)
     sources = (bronze, vix_silver, materializations)
     _separate(sources, gold)
-    if initialize_store:
-        initialize(gold, actor_id=actor_id, code_revision=code_revision)
-    _verify_store(gold)
-
     feature_raw = feature_reader.read_live_feature(
         materializations,
         bronze,
@@ -272,6 +268,9 @@ def persist_live_candidate(
     feature = _validate_feature(feature_raw, as_of=cutoff.isoformat())
     if feature["provenance"]["observation_id"] != observation_id:
         raise ValueError("S2_GOLD_OBSERVATION_PIN_MISMATCH")
+    if initialize_store:
+        initialize(gold, actor_id=actor_id, code_revision=code_revision)
+    _verify_store(gold)
     feature_hash = sha(feature_raw)
     input_revision_id = sha(
         canonical(
