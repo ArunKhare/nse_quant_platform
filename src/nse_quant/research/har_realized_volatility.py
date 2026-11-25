@@ -30,6 +30,7 @@ HAR_WEEK_DAYS = 5
 HAR_MONTH_DAYS = 22
 HAR_TRAINING_WINDOW = 252
 HAR_FORECAST_SESSIONS = 21
+HAR_RV_CALIBRATION_VERSION = "har_rv_30d_calibration_v1"
 CALIBRATION_MINIMUM_SAMPLES = 30
 CALIBRATION_MAXIMUM_ORIGINS = 60
 
@@ -255,7 +256,7 @@ def calibrate_har_rv_forecast_errors(
         errors.append(abs(realized_var - forecast_var))
     result: dict[str, object] = {
         "method": "rolling_origin_absolute_annualized_variance_error",
-        "version": "har_rv_30d_calibration_v1", "minimum_samples": minimum_samples,
+        "version": HAR_RV_CALIBRATION_VERSION, "minimum_samples": minimum_samples,
         "samples": len(errors), "horizon_sessions": horizon_sessions,
         "error_quantile": 0.90, "gate_margin_eligible": False, "diagnostic_only": True,
     }
