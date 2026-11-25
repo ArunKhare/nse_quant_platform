@@ -203,7 +203,7 @@ def test_decision_loop_uses_calibrated_har_forecast_and_keeps_atm_iv_fail_closed
                 tzinfo=UTC,
             ),
         )
-        for offset in range(350)
+        for offset in range(349, -1, -1)
     )
 
     monkeypatch.setattr(
