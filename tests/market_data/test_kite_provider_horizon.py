@@ -7,7 +7,9 @@ from unittest.mock import Mock
 import pytest
 
 from nse_quant.market_data import kite_provider as module
+from nse_quant.analytics.constant_maturity_inputs import SurfaceInputError
 from nse_quant.market_data.expiry_selection import ExpirySelectionError
+from nse_quant.market_data.surface_input_adapter import surface_from_batch
 
 AS_OF = date(2026, 1, 2)
 
@@ -75,6 +77,8 @@ def test_provider_captures_full_horizon_not_legacy_two_expiries(monkeypatch) -> 
     snapshots = provider.get_chain_snapshots()
     assert [(item.expiry - AS_OF).days for item in snapshots] == [0, 7, 30, 60, 90, 91]
     assert kite.quote.call_count == 6
+    assert len({item.acquisition_id for item in snapshots}) == 1
+    assert len({item.run_id for item in snapshots}) == len(snapshots)
     for item in snapshots:
         assert len(item.quotes) == 2
         assert all(q.instrument.expiry == item.expiry for q in item.quotes)
@@ -114,3 +118,21 @@ def test_missing_quote_does_not_acquire_later_expiry_as_substitute(monkeypatch) 
     snapshots = provider.get_chain_snapshots()
     assert [(item.expiry - AS_OF).days for item in snapshots] == [30, 60, 91]
     assert all(q.ltp is None and q.bid is None and q.ask is None for item in snapshots for q in item.quotes)
+
+
+
+def test_multi_expiry_provider_batch_is_accepted_by_surface_adapter(monkeypatch) -> None:
+    provider, _ = make_provider(monkeypatch, (20, 40, 80, 100))
+    snapshots = provider.get_chain_snapshots()
+    expiry_closes = {
+        item.expiry: datetime.combine(item.expiry, datetime.min.time(), tzinfo=UTC) + timedelta(hours=15, minutes=30)
+        for item in snapshots
+    }
+    with pytest.raises(SurfaceInputError, match="matching_expiry_forward_missing"):
+        surface_from_batch(
+            snapshots,
+            [],
+            expiry_closes=expiry_closes,
+            calendar_reference_id="calendar-fixture-v1",
+            as_of=Clock.now(UTC),
+        )
