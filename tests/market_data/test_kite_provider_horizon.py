@@ -123,7 +123,7 @@ def test_missing_quote_does_not_acquire_later_expiry_as_substitute(monkeypatch) 
     assert all(q.ltp is None and q.bid is None and q.ask is None for item in snapshots for q in item.quotes)
 
 
-def test_multi_expiry_provider_batch_is_accepted_by_surface_adapter(monkeypatch) -> None:
+def test_multi_expiry_provider_batch_reaches_forward_validation(monkeypatch) -> None:
     provider, _ = make_provider(monkeypatch, (20, 40, 80, 100))
     snapshots = provider.get_chain_snapshots()
     expiry_closes = {
