@@ -468,7 +468,11 @@ class DecisionLoop:
                     "rejection_reason": (
                         "variance_risk_premium_unavailable"
                         if not vrp_result.get("available")
-                        else "variance_risk_premium_below_minimum"
+                        else (
+                            "variance_risk_premium_estimator_not_gate_eligible"
+                            if not vrp_result.get("estimator_gate_eligible")
+                            else "variance_risk_premium_below_minimum"
+                        )
                     ),
                     "position_outcomes": position_outcomes,
                     "persisted_option_rows": persisted_rows,
