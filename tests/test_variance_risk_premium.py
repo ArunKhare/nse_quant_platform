@@ -21,6 +21,8 @@ def har_forecast_identity() -> dict:
         "expected_realized_volatility_horizon_days": HAR_RV_HORIZON_DAYS,
         "expected_realized_volatility_measure": HAR_RV_MEASURE,
         "expected_realized_volatility_is_forecast": True,
+        "expected_realized_volatility_calibration_is_eligible": True,
+        "expected_realized_volatility_calibration_margin": 0.001,
         "implied_volatility_source": "india_vix_eod",
         "implied_volatility_is_30d_constant_maturity": True,
     }
@@ -71,6 +73,7 @@ def test_positive_vrp_from_trailing_fallback_is_diagnostic_only() -> None:
         {"expected_realized_volatility_horizon_days": 20},
         {"expected_realized_volatility_measure": "close_to_close"},
         {"expected_realized_volatility_is_forecast": False},
+        {"expected_realized_volatility_calibration_is_eligible": False},
         {"expected_realized_volatility_method": "unknown"},
         {"implied_volatility_is_30d_constant_maturity": False},
     ],
@@ -143,9 +146,9 @@ def test_strict_har_only_gate_policy_is_auditable() -> None:
     result = evaluate_variance_risk_premium(
         implied_volatility=0.20, expected_realized_volatility=0.20
     )
-    assert result.calculation_version == "variance_risk_premium_v3"
+    assert result.calculation_version == "variance_risk_premium_v4"
     assert result.details["threshold_comparison"] == ">"
-    assert result.details["gate_version"] == "variance_risk_premium_gate_har_and_iv30_v3"
+    assert result.details["gate_version"] == "variance_risk_premium_gate_har_calibrated_iv30_v4"
     assert result.details["estimator_gate_eligible"] is False
     assert result.details["minimum_vrp"] == 0.0
 
