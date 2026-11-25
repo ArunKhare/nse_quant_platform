@@ -1683,6 +1683,7 @@ class DecisionLoop:
             implied_volatility=features.atm_iv,
             expected_realized_volatility=expected_rv,
             minimum_vrp=effective_minimum_vrp,
+            configured_minimum_vrp=gate.minimum_vrp,
             implied_volatility_source="features.atm_iv",
             implied_volatility_is_30d_constant_maturity=False,
             **har_identity,
