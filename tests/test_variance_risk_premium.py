@@ -143,9 +143,9 @@ def test_strict_har_only_gate_policy_is_auditable() -> None:
     result = evaluate_variance_risk_premium(
         implied_volatility=0.20, expected_realized_volatility=0.20
     )
-    assert result.calculation_version == "variance_risk_premium_v2"
+    assert result.calculation_version == "variance_risk_premium_v3"
     assert result.details["threshold_comparison"] == ">"
-    assert result.details["gate_version"] == "variance_risk_premium_gate_har_only_v2"
+    assert result.details["gate_version"] == "variance_risk_premium_gate_har_and_iv30_v3"
     assert result.details["estimator_gate_eligible"] is False
     assert result.details["minimum_vrp"] == 0.0
 
