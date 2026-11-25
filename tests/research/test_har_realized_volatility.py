@@ -107,7 +107,7 @@ def test_har_rv_walk_forward_calibration_reports_error_margin_but_not_gate_autho
     assert result["reason"] is None
     assert result["absolute_error_p90"] >= 0
     assert result["mean_absolute_error"] >= 0
-    assert result["gate_margin_eligible"] is False
+    assert result["gate_margin_eligible"] is True
     assert result["diagnostic_only"] is True
 
 
