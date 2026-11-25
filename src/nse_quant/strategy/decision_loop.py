@@ -1658,7 +1658,6 @@ class DecisionLoop:
                     rv_details["diagnostic_only"] = True
                     rv_details["reason"] = "stale_or_missing_complete_intraday_sessions"
             except (ValueError, TypeError) as exc:
-                observations = ()
                 rv_details["reason"] = f"intraday_rv_input_rejected:{exc}"
             self._har_rv_cache[cache_key] = (expected_rv, rv_details, calibration)
 
