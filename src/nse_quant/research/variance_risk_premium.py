@@ -45,7 +45,7 @@ def evaluate_variance_risk_premium(
     minimum_vrp: float = 0.0,
     expected_realized_volatility_method: str = EXPECTED_RV_METHOD,
     expected_realized_volatility_version: str = EXPECTED_RV_VERSION,
-    expected_realized_volatility_horizon_days: int = HAR_RV_HORIZON_DAYS,
+    expected_realized_volatility_horizon_days: int | None = None,
     expected_realized_volatility_measure: str = "",
     expected_realized_volatility_is_forecast: bool = False,
 ) -> VarianceRiskPremiumResult:
