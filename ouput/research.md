@@ -408,3 +408,27 @@ check unless separately demonstrated by configuration and tests.
 Paper-only controls, decision_eligibility_asserted=false, canonical four-component
 regimes and single-writer ownership remain unchanged. No runner cutover, live
 activation, implicit EOD-to-live fallback or automatic Gold promotion is authorized.
+
+### S3 estimator gate hardening — implementation supplied; acceptance pending
+
+The VRP evaluator now distinguishes numeric diagnostic availability from estimator
+eligibility. The trailing close-to-close RV implementation is explicitly tagged
+`trailing_close_close`, `diagnostic_only`, and `gate_eligible=false`. A
+positive arithmetic VRP computed from that fallback cannot pass the hard gate.
+
+The gate contract records the required HAR-RV identity: 30-day forecast horizon,
+5-minute intraday squared log returns plus squared overnight return, and a
+versioned estimator identifier. The evaluator checks the declared identity but
+does not fit, validate, or produce a HAR model. The live decision-loop path still
+supplies the trailing fallback, so it now fails closed with the distinct
+`variance_risk_premium_estimator_not_gate_eligible` rejection reason. Estimator
+identity and eligibility are retained in decision evidence and audit output.
+
+This is a safety correction, not completion of S3. The 5-minute RV construction,
+overnight-return alignment, rolling HAR fit, 30-calendar-day forecast, point-in-time
+model validation and forecast-error calibration remain unimplemented. The current
+decision-loop IV input is also still near-expiry ATM IV rather than the charter's
+30-day India VIX/internal constant-maturity input; that D8 integration remains open.
+
+Owner test/QA acceptance has not yet been reported for this tranche. No HAR-RV
+forecast or decision eligibility is asserted by this addendum.
