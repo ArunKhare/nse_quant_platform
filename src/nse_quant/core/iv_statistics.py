@@ -41,10 +41,10 @@ def iv_percentile_and_rank(
         for value in values
     ):
         raise ValueError("invalid_prior_iv_values")
-    if len(values) < minimum_history:
-        return None, None, 0
-    ivp = 100.0 * sum(value < current_value for value in values) / len(values)
     rank_window = [*values[-(lookback - 1) :], float(current_value)] if lookback > 1 else [float(current_value)]
+    if len(values) < minimum_history:
+        return None, None, len(rank_window)
+    ivp = 100.0 * sum(value < current_value for value in values) / len(values)
     low, high = min(rank_window), max(rank_window)
     ivr = 100.0 * (current_value - low) / (high - low) if high > low else None
     return ivp, ivr, len(rank_window)
