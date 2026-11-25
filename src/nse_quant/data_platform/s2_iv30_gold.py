@@ -125,10 +125,11 @@ def _validate_feature(raw: bytes, *, as_of: str) -> dict[str, Any]:
     if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or value <= 0:
         raise ValueError("S2_GOLD_FINITE_POSITIVE_IV30_REQUIRED")
     source_time = _instant(feature.get("source_time", ""))
+    received_at = _instant(feature.get("received_at", ""))
     cutoff = _instant(as_of)
     feature_time = _instant(feature.get("as_of", ""))
-    if source_time > cutoff or feature_time > cutoff:
-        raise ValueError("S2_GOLD_FUTURE_FEATURE_DEPENDENCY")
+    if not source_time <= received_at <= feature_time <= cutoff:
+        raise ValueError("S2_GOLD_FUTURE_OR_UNORDERED_FEATURE_DEPENDENCY")
     age = feature.get("age_seconds")
     age_limit = feature.get("max_age_seconds")
     percent = feature.get("value_percent")
@@ -210,7 +211,7 @@ def initialize(gold: Any, *, actor_id: str, code_revision: str) -> None:
     ledger.register_contract(CONTRACT)
 
 
-def _verify_store(gold: Any) -> None:
+def _verify_store(gold: Any, *, require_definition: bool = False) -> None:
     if gold.execute(f"SELECT version FROM {_name(gold, 'schema_versions')} LIMIT 2").fetchall() != [
         (SCHEMA_VERSION,)
     ]:
@@ -219,8 +220,10 @@ def _verify_store(gold: Any) -> None:
         f"SELECT definition,definition_sha256 FROM {_name(gold, DEFINITIONS)} LIMIT 2"
     ).fetchall()
     expected = canonical(DEFINITION)
-    if definition != [(expected, sha(expected))]:
+    if len(definition) > 1 or (definition and definition != [(expected, sha(expected))]):
         raise ValueError("S2_GOLD_DEFINITION_DRIFT")
+    if require_definition and definition != [(expected, sha(expected))]:
+        raise ValueError("S2_GOLD_DEFINITION_REQUIRED")
     contract = gold.execute(
         "SELECT fingerprint,contract_json FROM medallion_audit.dataset_contracts "
         "WHERE dataset_name=? AND contract_version=? LIMIT 2",
@@ -374,7 +377,7 @@ def retrieve_candidate(
         raise ValueError("S2_GOLD_EXACT_BUILD_PIN_REQUIRED")
     cutoff = _instant(as_of)
     _path(gold, readonly=True)
-    _verify_store(gold)
+    _verify_store(gold, require_definition=True)
     table = _name(gold, TABLE)
     row = gold.execute(
         f"SELECT input_revision_id,feature_version,status,reason_code,feature_sha256,"
