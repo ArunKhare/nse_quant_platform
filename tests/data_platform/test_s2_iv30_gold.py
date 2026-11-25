@@ -96,7 +96,7 @@ def test_persists_audited_candidate_without_publication(stores):
     assert receipt["published"] is False
     assert receipt["decision_eligibility_asserted"] is False
     row = gold.execute(
-        "SELECT status,reason_code,published_at,feature_sha256 FROM gold.s2_iv30_candidates"
+        "SELECT status,reason_code,published_at,feature_sha256 FROM "gold"."gold".s2_iv30_candidates"
     ).fetchone()
     assert row[:3] == ("candidate", "OBSERVATIONAL_IV30_CANDIDATE", None)
     assert row[3] == api.sha(current["raw"])
@@ -114,7 +114,7 @@ def test_exact_retry_reuses_immutable_candidate_but_audits_attempt(stores):
     assert first["input_revision_id"] == second["input_revision_id"]
     assert second["inserted"] is False
     assert first["job_id"] != second["job_id"]
-    assert gold.execute("SELECT COUNT(*) FROM gold.s2_iv30_candidates").fetchone()[0] == 1
+    assert gold.execute("SELECT COUNT(*) FROM "gold"."gold".s2_iv30_candidates").fetchone()[0] == 1
     assert gold.execute(
         "SELECT COUNT(*) FROM medallion_audit.job_events WHERE state='SUCCEEDED'"
     ).fetchone()[0] == 2
@@ -127,7 +127,7 @@ def test_feature_change_creates_new_candidate_revision(stores):
     current["raw"] = feature_bytes(iv30=0.16)
     second = persist(initialize_store=False)
     assert first["build_id"] != second["build_id"]
-    assert gold.execute("SELECT COUNT(*) FROM gold.s2_iv30_candidates").fetchone()[0] == 2
+    assert gold.execute("SELECT COUNT(*) FROM "gold"."gold".s2_iv30_candidates").fetchone()[0] == 2
 
 
 def test_retrieval_requires_exact_pin_asof_and_successful_audit(stores):
@@ -214,7 +214,7 @@ def test_retrieval_recomputes_candidate_identity_from_feature(stores):
     _, gold, path, _, persist = stores
     receipt = persist()
     gold.execute(
-        "UPDATE gold.s2_iv30_candidates SET input_revision_id=? WHERE build_id=?",
+        "UPDATE "gold"."gold".s2_iv30_candidates SET input_revision_id=? WHERE build_id=?",
         ["9" * 64, receipt["build_id"]],
     )
     gold.close()
@@ -227,11 +227,11 @@ def test_retrieval_recomputes_candidate_identity_from_feature(stores):
 def test_definition_tampering_is_not_repaired(stores):
     _, gold, _, _, persist = stores
     persist()
-    gold.execute("UPDATE gold.s2_iv30_candidate_definitions SET definition=? ", [b"[]"])
+    gold.execute("UPDATE "gold"."gold".s2_iv30_candidate_definitions SET definition=? ", [b"[]"])
     with pytest.raises(ValueError, match="DEFINITION_DRIFT"):
         persist(initialize_store=False)
     assert gold.execute(
-        "SELECT definition FROM gold.s2_iv30_candidate_definitions"
+        "SELECT definition FROM "gold"."gold".s2_iv30_candidate_definitions"
     ).fetchone() == (b"[]",)
 
 
@@ -239,7 +239,7 @@ def test_definition_tampering_is_not_repaired(stores):
 def test_unexpected_gold_table_blocks_reuse(stores):
     _, gold, _, _, persist = stores
     persist()
-    gold.execute("CREATE TABLE gold.unexpected_artifact (value INTEGER)")
+    gold.execute("CREATE TABLE "gold"."gold".unexpected_artifact (value INTEGER)")
     with pytest.raises(ValueError, match="STORE_INVENTORY_MISMATCH"):
         persist(initialize_store=False)
 
@@ -248,7 +248,7 @@ def test_feature_tampering_blocks_retrieval(stores):
     _, gold, path, _, persist = stores
     receipt = persist()
     gold.execute(
-        "UPDATE gold.s2_iv30_candidates SET feature_json=? WHERE build_id=?",
+        "UPDATE "gold"."gold".s2_iv30_candidates SET feature_json=? WHERE build_id=?",
         [b"{}", receipt["build_id"]],
     )
     gold.close()
@@ -271,10 +271,10 @@ def test_failed_original_audit_is_not_accepted_or_healed(stores, monkeypatch):
     with pytest.raises(RuntimeError, match="final audit failure"):
         persist()
     build_id = gold.execute(
-        "SELECT build_id FROM gold.s2_iv30_candidates"
+        "SELECT build_id FROM "gold"."gold".s2_iv30_candidates"
     ).fetchone()[0]
     job_id = gold.execute(
-        "SELECT first_job_id FROM gold.s2_iv30_candidates"
+        "SELECT first_job_id FROM "gold"."gold".s2_iv30_candidates"
     ).fetchone()[0]
     assert gold.execute(
         "SELECT state FROM medallion_audit.job_events WHERE job_id=? ORDER BY event_index DESC LIMIT 1",
