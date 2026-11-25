@@ -43,6 +43,7 @@ def evaluate_variance_risk_premium(
     implied_volatility: float | None,
     expected_realized_volatility: float | None,
     minimum_vrp: float = 0.0,
+    configured_minimum_vrp: float | None = None,
     expected_realized_volatility_method: str = EXPECTED_RV_METHOD,
     expected_realized_volatility_version: str = EXPECTED_RV_VERSION,
     expected_realized_volatility_horizon_days: int | None = None,
@@ -79,6 +80,22 @@ def evaluate_variance_risk_premium(
         "implied_volatility_source": implied_volatility_source,
         "implied_volatility_is_30d_constant_maturity": implied_volatility_is_30d_constant_maturity,
     }
+    configured_threshold = minimum_vrp if configured_minimum_vrp is None else configured_minimum_vrp
+    margin_applied = (
+        isinstance(configured_threshold, (int, float))
+        and not isinstance(configured_threshold, bool)
+        and math.isfinite(float(configured_threshold))
+        and float(configured_threshold) >= 0.0
+        and minimum_vrp >= float(configured_threshold) + float(
+            expected_realized_volatility_calibration_margin
+            if isinstance(expected_realized_volatility_calibration_margin, (int, float))
+            and not isinstance(expected_realized_volatility_calibration_margin, bool)
+            and math.isfinite(float(expected_realized_volatility_calibration_margin))
+            else math.inf
+        )
+    )
+    details["configured_minimum_vrp"] = configured_threshold
+    details["calibration_margin_applied"] = margin_applied
     estimator_eligible = (
         expected_realized_volatility_method == HAR_RV_METHOD
         and expected_realized_volatility_version == HAR_RV_VERSION
@@ -90,6 +107,7 @@ def evaluate_variance_risk_premium(
         and not isinstance(expected_realized_volatility_calibration_margin, bool)
         and math.isfinite(expected_realized_volatility_calibration_margin)
         and expected_realized_volatility_calibration_margin >= 0.0
+        and margin_applied
     )
     details["estimator_gate_eligible"] = estimator_eligible
     iv_eligible = (
