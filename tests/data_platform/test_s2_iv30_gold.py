@@ -145,8 +145,9 @@ def test_retrieval_requires_exact_pin_asof_and_successful_audit(stores):
 
 
 def test_candidate_not_available_before_recording_or_event_time(stores):
-    _, gold, path, _, persist = stores
+    _, gold, path, current, persist = stores
     receipt = persist()
+    before_event = datetime.fromisoformat(json.loads(current["raw"])["source_time"]) - timedelta(seconds=1)
     gold.close()
     with duckdb.connect(str(path), read_only=True) as reader, pytest.raises(
         ValueError, match="NOT_YET_AVAILABLE"
@@ -154,7 +155,7 @@ def test_candidate_not_available_before_recording_or_event_time(stores):
         api.retrieve_candidate(
             reader,
             build_id=receipt["build_id"],
-            as_of=(datetime.fromisoformat(AS_OF) - timedelta(minutes=5)).isoformat(),
+            as_of=before_event.isoformat(),
         )
 
 
