@@ -38,7 +38,16 @@ def surface_from_batch(
     calculate a synthetic forward, write a store, or authorize an entry.
     """
     batches = list(snapshots)
-    if not batches or len({(item.run_id, item.underlying) for item in batches}) != 1:
+    if not batches:
+        raise SurfaceInputError("one_persisted_run_and_underlying_required")
+    acquisition_ids = {
+        getattr(item, "acquisition_id", None) or item.run_id
+        for item in batches
+    }
+    if len({item.underlying for item in batches}) != 1 or len(acquisition_ids) != 1:
+        raise SurfaceInputError("one_persisted_run_and_underlying_required")
+    acquisition_id = next(iter(acquisition_ids))
+    if not isinstance(acquisition_id, str) or not acquisition_id.strip():
         raise SurfaceInputError("one_persisted_run_and_underlying_required")
     if not isinstance(calendar_reference_id, str) or not calendar_reference_id.strip():
         raise SurfaceInputError("calendar_reference_required")
@@ -83,7 +92,7 @@ def surface_from_batch(
                 PremiumPoint(
                     quote.instrument_token,
                     snapshot.underlying,
-                    snapshot.run_id,
+                    acquisition_id,
                     close,
                     instrument.strike,
                     instrument.option_type.value,
