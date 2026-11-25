@@ -1,13 +1,14 @@
 """Provider integration with real discovery and mocked Kite requests."""
 
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, date, datetime, time, timedelta
 from types import SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
 
-from nse_quant.market_data import kite_provider as module
 from nse_quant.analytics.constant_maturity_inputs import SurfaceInputError
+from nse_quant.core.constants import IST
+from nse_quant.market_data import kite_provider as module
 from nse_quant.market_data.expiry_selection import ExpirySelectionError
 from nse_quant.market_data.surface_input_adapter import surface_from_batch
 
@@ -61,6 +62,8 @@ def make_provider(monkeypatch: pytest.MonkeyPatch, days: tuple[int, ...]):
     kite.quote.side_effect = lambda keys: {
         key: {
             "last_price": 100.0,
+            "timestamp": "2026-01-02T01:00:00+05:30",
+            "last_trade_time": "2026-01-02T01:00:00+05:30",
             "oi": 100_000,
             "volume": 1000,
             "depth": {"buy": [{"price": 99}], "sell": [{"price": 101}]},
@@ -120,12 +123,11 @@ def test_missing_quote_does_not_acquire_later_expiry_as_substitute(monkeypatch) 
     assert all(q.ltp is None and q.bid is None and q.ask is None for item in snapshots for q in item.quotes)
 
 
-
 def test_multi_expiry_provider_batch_is_accepted_by_surface_adapter(monkeypatch) -> None:
     provider, _ = make_provider(monkeypatch, (20, 40, 80, 100))
     snapshots = provider.get_chain_snapshots()
     expiry_closes = {
-        item.expiry: datetime.combine(item.expiry, datetime.min.time(), tzinfo=UTC) + timedelta(hours=15, minutes=30)
+        item.expiry: datetime.combine(item.expiry, time(15, 30), tzinfo=IST)
         for item in snapshots
     }
     with pytest.raises(SurfaceInputError, match="matching_expiry_forward_missing"):
