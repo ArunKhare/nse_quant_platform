@@ -38,11 +38,13 @@ from nse_quant.research.regime_risk_policy import RegimeRiskLimits
 from nse_quant.strategy.decision_loop import DecisionLoop
 from tests.data_platform.native_failure_acceptance_lab import NativeFailureLab
 
+# _COLLECTOR_OPTIONS = ("s2_evidence_output",)
+
 
 def pytest_configure(config):
     """Give each terminal run its own timestamped folder and per-worker log files."""
-    if config.getoption("s2_evidence_output", default=None) is not None:
-        return
+    # if any(config.getoption(name, default=None) is not None for name in _COLLECTOR_OPTIONS):
+    #     return
     worker_id = os.environ.get("PYTEST_XDIST_WORKER", "master")
 
     if worker_id == "master":

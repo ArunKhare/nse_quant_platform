@@ -15,7 +15,8 @@ import logging
 import math
 import time
 from collections.abc import Callable
-from datetime import UTC, date, datetime, time as dt_time, timedelta
+from datetime import UTC, date, datetime, timedelta
+from datetime import time as dt_time
 from pathlib import Path
 from typing import Any, cast
 from uuid import uuid4
@@ -1580,10 +1581,7 @@ class DecisionLoop:
             source_digest = hashlib.sha256()
             for candle_ts, candle_open, candle_close in minute_candles:
                 source_digest.update(
-                    (
-                        f"{candle_ts.isoformat()}|{float(candle_open).hex()}|"
-                        f"{float(candle_close).hex()}\\n"
-                    ).encode("utf-8")
+                    (f"{candle_ts.isoformat()}|{float(candle_open).hex()}|{float(candle_close).hex()}\\n").encode()
                 )
             rv_details = {
                 "method": HAR_RV_METHOD,
@@ -1638,21 +1636,13 @@ class DecisionLoop:
                 rv_details["gate_eligible"] = expected_rv is not None and calibration_eligible
                 rv_details["diagnostic_only"] = not rv_details["gate_eligible"]
                 rv_details["complete_sessions"] = len(observations)
-                rv_details["first_session_date"] = (
-                    observations[0].session_date.isoformat() if observations else None
-                )
-                rv_details["last_session_date"] = (
-                    observations[-1].session_date.isoformat() if observations else None
-                )
+                rv_details["first_session_date"] = observations[0].session_date.isoformat() if observations else None
+                rv_details["last_session_date"] = observations[-1].session_date.isoformat() if observations else None
                 rv_details["last_session_close_ts"] = (
                     observations[-1].last_minute_ts.isoformat() if observations else None
                 )
                 rv_details["calibration"] = calibration
-                last_session_age = (
-                    (session_start.date() - observations[-1].session_date).days
-                    if observations
-                    else None
-                )
+                last_session_age = (session_start.date() - observations[-1].session_date).days if observations else None
                 rv_details["last_complete_session_age_days"] = last_session_age
                 rv_details["max_daily_close_age_days"] = gate.max_daily_close_age_days
                 if last_session_age is None or last_session_age > gate.max_daily_close_age_days:
@@ -1720,9 +1710,7 @@ class DecisionLoop:
             "available": result.available,
             "passed": result.passed,
             "estimator_gate_eligible": result.details.get("estimator_gate_eligible", False),
-            "implied_volatility_gate_eligible": result.details.get(
-                "implied_volatility_gate_eligible", False
-            ),
+            "implied_volatility_gate_eligible": result.details.get("implied_volatility_gate_eligible", False),
             "gate_passed": result.available and result.passed,
             "gate_mode": EvidenceMode.HARD_GATE.value,
             "minimum_vrp": effective_minimum_vrp,
