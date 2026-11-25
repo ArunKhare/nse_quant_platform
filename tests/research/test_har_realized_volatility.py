@@ -70,7 +70,7 @@ def test_daily_rv_respects_configured_exchange_holidays() -> None:
         calendar=NSETradingCalendar(closed_dates={holiday}),
         as_of=datetime(2026, 11, 25, 17, 0, tzinfo=IST),
     )
-    assert result == ()
+    assert [item.session_date for item in result] == [date(2026, 11, 25)]
 
 
 def _synthetic_daily_variances(count: int) -> list[float]:
