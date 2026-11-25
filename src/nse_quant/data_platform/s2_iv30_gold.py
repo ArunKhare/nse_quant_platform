@@ -12,12 +12,12 @@ import json
 import math
 import re
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 
+from nse_quant.data_platform import s2_iv30_feature_reader as feature_reader
 from nse_quant.data_platform.audit import AuditLedger
 from nse_quant.data_platform.contracts import DatasetContract, Layer, WritePolicy
-from nse_quant.data_platform import s2_iv30_feature_reader as feature_reader
-from nse_quant.data_platform import s2_series_materialization as series
 
 VERSION = "s2-india-vix-iv30-gold-candidates@1"
 FEATURE_VERSION = "s2-observational-iv30-features@1"
@@ -77,10 +77,10 @@ def _path(conn: Any, *, readonly: bool | None = None) -> str:
 
 
 def _separate(sources: tuple[Any, ...], gold: Any) -> None:
-    target = _path(gold, readonly=False)
-    for source in sources:
-        if source is gold or _path(source, readonly=True) == target:
-            raise ValueError("S2_GOLD_SEPARATE_READONLY_SOURCES_REQUIRED")
+    target = Path(_path(gold, readonly=False)).resolve()
+    source_paths = [Path(_path(source, readonly=True)).resolve() for source in sources]
+    if len(set(source_paths)) != len(source_paths) or target in source_paths:
+        raise ValueError("S2_GOLD_SEPARATE_READONLY_SOURCES_REQUIRED")
 
 
 def _actor(actor_id: str, code_revision: str) -> None:
@@ -126,8 +126,38 @@ def _validate_feature(raw: bytes, *, as_of: str) -> dict[str, Any]:
         raise ValueError("S2_GOLD_FINITE_POSITIVE_IV30_REQUIRED")
     source_time = _instant(feature.get("source_time", ""))
     cutoff = _instant(as_of)
-    if source_time > cutoff or _instant(feature.get("as_of", "")) > cutoff:
+    feature_time = _instant(feature.get("as_of", ""))
+    if source_time > cutoff or feature_time > cutoff:
         raise ValueError("S2_GOLD_FUTURE_FEATURE_DEPENDENCY")
+    age = feature.get("age_seconds")
+    age_limit = feature.get("max_age_seconds")
+    percent = feature.get("value_percent")
+    token = feature.get("instrument_token")
+    revisions = feature.get("source_revisions")
+    if (
+        isinstance(age, bool)
+        or not isinstance(age, (int, float))
+        or not math.isfinite(age)
+        or age < 0
+        or isinstance(age_limit, bool)
+        or not isinstance(age_limit, (int, float))
+        or not math.isfinite(age_limit)
+        or age_limit <= 0
+        or age > age_limit
+        or isinstance(percent, bool)
+        or not isinstance(percent, (int, float))
+        or not math.isfinite(percent)
+        or not math.isclose(float(value) * 100, float(percent), rel_tol=1e-12, abs_tol=1e-12)
+        or type(token) is not int
+        or token <= 0
+        or type(revisions) is not list
+        or not revisions
+        or any(not pin(item) for item in revisions)
+        or feature.get("selected_revision_id") not in revisions
+        or not pin(feature.get("raw_payload_sha256"))
+        or not pin(feature.get("instrument_reference_sha256"))
+    ):
+        raise ValueError("S2_GOLD_LIVE_OBSERVATION_CONTRACT_MISMATCH")
     provenance = feature.get("provenance")
     if (
         type(provenance) is not dict
@@ -189,7 +219,7 @@ def _verify_store(gold: Any) -> None:
         f"SELECT definition,definition_sha256 FROM {_name(gold, DEFINITIONS)} LIMIT 2"
     ).fetchall()
     expected = canonical(DEFINITION)
-    if definition and definition != [(expected, sha(expected))]:
+    if definition != [(expected, sha(expected))]:
         raise ValueError("S2_GOLD_DEFINITION_DRIFT")
     contract = gold.execute(
         "SELECT fingerprint,contract_json FROM medallion_audit.dataset_contracts "
