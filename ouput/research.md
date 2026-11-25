@@ -409,7 +409,7 @@ Paper-only controls, decision_eligibility_asserted=false, canonical four-compone
 regimes and single-writer ownership remain unchanged. No runner cutover, live
 activation, implicit EOD-to-live fallback or automatic Gold promotion is authorized.
 
-### S3 estimator gate hardening — implementation supplied; acceptance pending
+### S3 estimator gate hardening — historical gate-contract baseline
 
 The VRP evaluator now distinguishes numeric diagnostic availability from estimator
 eligibility. The trailing close-to-close RV implementation is explicitly tagged
@@ -430,8 +430,10 @@ model validation and forecast-error calibration remain unimplemented. The curren
 decision-loop IV input is also still near-expiry ATM IV rather than the charter's
 30-day India VIX/internal constant-maturity input; that D8 integration remains open.
 
-Owner test/QA acceptance has not yet been reported for this tranche. No HAR-RV
-forecast or decision eligibility is asserted by this addendum.
+This section records the earlier gate-only state before the HAR-RV implementation
+below. Its statements that the HAR-RV pipeline remains unimplemented and that
+the decision loop supplies trailing RV are superseded by the subsequent
+implementation addendum. The D8 30-day IV-source limitation remains open.
 
 
 ## S3 HAR-RV implementation tranche — 2026-11-25
