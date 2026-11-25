@@ -108,6 +108,7 @@ def classify(
     surface_time: datetime,
     iv30: float,
     iv90: float,
+    iv30_source: str,
     eod_iv30: float,
     eod_iv_history: tuple[DailyValue, ...],
     rr25: float,
@@ -140,7 +141,7 @@ def classify(
         "decision_eligibility_asserted": False,
         "thresholds_provisional": True,
         "input_provenance": {
-            "iv30_source": "internal_cm",
+            "iv30_source": iv30_source,
             "iv90_source": "internal_cm",
             "eod_iv30_source": "india_vix_eod",
             "eod_iv30": eod_iv30,
@@ -163,7 +164,7 @@ def classify(
             raise ValueError("future_or_stale_surface")
         if not 0 <= minimum_confidence <= 1:
             raise ValueError("invalid_confidence_floor")
-        if not rr25_source:
+        if iv30_source != "internal_cm" or not rr25_source:
             raise ValueError("unsupported_feature_source")
         if (
             not all(math.isfinite(x) for x in (iv30, iv90, eod_iv30, rr25))
