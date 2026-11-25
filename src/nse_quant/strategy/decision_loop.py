@@ -1554,6 +1554,9 @@ class DecisionLoop:
         snapshot_ts = snapshot.ts if snapshot.ts.tzinfo else snapshot.ts.replace(tzinfo=UTC)
         session_start = datetime.combine(snapshot_ts.astimezone(IST).date(), dt_time.min, tzinfo=IST)
         cache_key = (instrument_token, session_start.date())
+        expected_rv: float | None
+        rv_details: dict[str, Any]
+        calibration: dict[str, Any]
         cached = self._har_rv_cache.get(cache_key)
         if cached is not None:
             expected_rv, rv_details, calibration = cached
@@ -1582,7 +1585,7 @@ class DecisionLoop:
                         f"{float(candle_close).hex()}\\n"
                     ).encode("utf-8")
                 )
-            rv_details: dict[str, Any] = {
+            rv_details = {
                 "method": HAR_RV_METHOD,
                 "version": HAR_RV_VERSION,
                 "horizon_days": HAR_RV_HORIZON_DAYS,
@@ -1603,8 +1606,8 @@ class DecisionLoop:
                 "expected_minute_rows_per_session": 375,
                 "five_minute_observations_per_session": 75,
             }
-            expected_rv: float | None = None
-            calibration: dict[str, Any] = {
+            expected_rv = None
+            calibration = {
                 "reason": "har_rv_observations_unavailable",
                 "diagnostic_only": True,
                 "gate_margin_eligible": False,
