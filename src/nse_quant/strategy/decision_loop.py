@@ -1604,8 +1604,16 @@ class DecisionLoop:
             expected_rv, forecast_details = forecast_har_rv_30d(daily_variances)
             calibration = calibrate_har_rv_forecast_errors(daily_variances)
             rv_details.update(forecast_details)
-            rv_details["gate_eligible"] = expected_rv is not None
-            rv_details["diagnostic_only"] = expected_rv is None
+            calibration_margin_value = calibration.get("absolute_error_p90")
+            calibration_eligible = (
+                calibration.get("gate_margin_eligible") is True
+                and isinstance(calibration_margin_value, (int, float))
+                and math.isfinite(float(calibration_margin_value))
+                and float(calibration_margin_value) >= 0.0
+            )
+            rv_details["calibration_gate_eligible"] = calibration_eligible
+            rv_details["gate_eligible"] = expected_rv is not None and calibration_eligible
+            rv_details["diagnostic_only"] = not rv_details["gate_eligible"]
             rv_details["complete_sessions"] = len(observations)
             rv_details["first_session_date"] = (
                 observations[0].session_date.isoformat() if observations else None
@@ -1651,19 +1659,28 @@ class DecisionLoop:
             "used_for_gate": False,
         }
 
+        calibration_margin = (
+            float(calibration["absolute_error_p90"])
+            if calibration.get("gate_margin_eligible") is True
+            and isinstance(calibration.get("absolute_error_p90"), (int, float))
+            else None
+        )
+        effective_minimum_vrp = gate.minimum_vrp + (calibration_margin or 0.0)
         har_identity: dict[str, Any] = {}
-        if expected_rv is not None:
+        if expected_rv is not None and calibration_margin is not None:
             har_identity = {
                 "expected_realized_volatility_method": HAR_RV_METHOD,
                 "expected_realized_volatility_version": HAR_RV_VERSION,
                 "expected_realized_volatility_horizon_days": HAR_RV_HORIZON_DAYS,
                 "expected_realized_volatility_measure": HAR_RV_MEASURE,
                 "expected_realized_volatility_is_forecast": True,
+                "expected_realized_volatility_calibration_is_eligible": True,
+                "expected_realized_volatility_calibration_margin": calibration_margin,
             }
         result = evaluate_variance_risk_premium(
             implied_volatility=features.atm_iv,
             expected_realized_volatility=expected_rv,
-            minimum_vrp=gate.minimum_vrp,
+            minimum_vrp=effective_minimum_vrp,
             implied_volatility_source="features.atm_iv",
             implied_volatility_is_30d_constant_maturity=False,
             **har_identity,
@@ -1680,7 +1697,9 @@ class DecisionLoop:
             ),
             "gate_passed": result.available and result.passed,
             "gate_mode": EvidenceMode.HARD_GATE.value,
-            "minimum_vrp": gate.minimum_vrp,
+            "minimum_vrp": effective_minimum_vrp,
+            "configured_minimum_vrp": gate.minimum_vrp,
+            "forecast_error_margin": calibration_margin,
             "implied_volatility": result.implied_volatility,
             "implied_volatility_input": {
                 "source": "features.atm_iv",
