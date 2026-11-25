@@ -20,7 +20,7 @@ def inputs() -> dict:
         as_of=datetime(2026, 11, 23, 5, tzinfo=UTC),
         surface_time=datetime(2026, 11, 23, 5, tzinfo=UTC),
         iv30=0.23, iv90=0.25, iv30_source="internal_cm",
-        eod_iv30=0.23, eod_iv_history=ivs,
+        eod_iv30=0.23, eod_iv_session=date(2026, 11, 20), eod_iv_history=ivs,
         rr25=-0.03, rr25_source="surface_rr25",
         rr25_history=rrs, previous_close=previous,
         latest_close=replace(previous, session=date(2026, 11, 20)),
@@ -88,7 +88,7 @@ def test_partial_session_and_unconfirmed_transition_are_rejected() -> None:
 
 def test_history_source_mixing_and_duplicate_days_are_rejected() -> None:
     kwargs = inputs()
-    history = kwargs["iv_history"]
+    history = kwargs["eod_iv_history"]
     kwargs["eod_iv_history"] = history[:-1] + (replace(history[-1], source="live_india_vix"),)
     assert not classify(**kwargs)["complete"]
     kwargs["eod_iv_history"] = history + (history[-1],)
@@ -105,3 +105,17 @@ def test_iv_and_skew_hysteresis() -> None:
     assert classify(**kwargs)["regime_components"]["skew"] == "NORMAL_SKEW"
     kwargs["previous_skew"] = Skew.HIGH_PUT_SKEW
     assert classify(**kwargs)["regime_components"]["skew"] == "HIGH_PUT_SKEW"
+
+
+
+def test_eod_iv30_requires_recent_completed_close_and_rejects_live_series() -> None:
+    kwargs = inputs()
+    kwargs["eod_iv_session"] = date(2026, 11, 23)
+    assert classify(**kwargs)["reason"] == "completed_recent_eod_iv30_required"
+    kwargs = inputs()
+    kwargs["eod_iv_session"] = date(2026, 11, 18)
+    assert classify(**kwargs)["reason"] == "completed_recent_eod_iv30_required"
+    kwargs = inputs()
+    history = kwargs["eod_iv_history"]
+    kwargs["eod_iv_history"] = history[:-1] + (replace(history[-1], source="india_vix_live"),)
+    assert classify(**kwargs)["reason"] == "invalid_daily_history_or_source"
