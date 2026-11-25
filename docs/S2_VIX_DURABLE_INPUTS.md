@@ -103,12 +103,14 @@ Implemented in `src/nse_quant/data_platform/s2_iv30_gold.py` as
   feature clock ordering, freshness, selected source-revision pins and exact
   materialization provenance.
 - The Gold build is content-addressed and immutable. Exact retry retains one
-  candidate and appends an audit attempt. A changed feature creates a distinct
-  candidate. The versioned dataset contract and definition are checked; drift
-  is rejected, never repaired.
-- Retrieval requires an exact build pin, a read-only Gold connection, the
-  original successful audit lifecycle, matching feature hash and an as-of time
-  no earlier than both event and recording time.
+  candidate and appends an audit attempt. Every job is linked through an
+  immutable attempt row. Retrieval requires all linked attempts to be terminal
+  and the original build attempt to have succeeded; a later retry cannot heal an
+  incomplete original audit. A changed feature creates a distinct candidate.
+  The versioned dataset contract and definition are checked; drift is rejected,
+  never repaired.
+- Retrieval requires an exact build pin, a read-only Gold connection, matching
+  feature hash and an as-of time no earlier than both event and recording time.
 - This is a candidate/retrieval boundary only. `published_at` remains NULL;
   `publication_asserted`, `decision_eligibility_asserted` and
   `model_suitability_verified` remain false. It does not wire the candidate
