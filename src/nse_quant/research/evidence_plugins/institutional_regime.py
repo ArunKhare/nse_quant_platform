@@ -286,11 +286,11 @@ class InstitutionalRegimePlugin(EvidencePlugin):
         cutoff_date = self._utc(context.ts).astimezone(IST).date()
         rows = self._store.conn.execute(
             """
-            SELECT CAST(ts AS DATE), open, high, low, close, volume
+            SELECT CAST(ts AT TIME ZONE 'Asia/Kolkata' AS DATE), open, high, low, close, volume
             FROM spot_candles
             WHERE instrument_token = ?
               AND interval = 'day'
-              AND CAST(ts AS DATE) < ?
+              AND CAST(ts AT TIME ZONE 'Asia/Kolkata' AS DATE) < ?
             ORDER BY ts DESC
             LIMIT ?
             """,
