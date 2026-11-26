@@ -196,3 +196,23 @@ step. It does NOT establish India VIX model suitability as the charter's
 the VRP gate, grant decision eligibility, authorize live acquisition, or lift
 existing publication and operational cutover holds. All such authority flags
 remain false. Local QA for this tranche is pending user execution.
+
+
+## 2026-11-27 — India VIX IV30 proxy suitability diagnostics
+
+Added the pure research evaluator `src/nse_quant/research/india_vix_iv30_suitability.py`
+and focused tests. It compares synchronized NIFTY India VIX observations with
+the versioned `internal_cm` Black-76 30-day option-surface benchmark. It
+validates source identity, revision/batch SHA-256 pin syntax, causal timestamps,
+and a 30-second maximum source-time gap. It reports bias, MAE, RMSE, median/p90
+absolute error, correlation, OLS slope/intercept, and chronological calibration
+and holdout metrics.
+
+The sample markers (60 matched pairs, 20 sessions, 20 holdout pairs) are minimum
+evidence checks only, not suitability thresholds. Even sufficient data produces
+`DIAGNOSTIC_ONLY_REVIEW_REQUIRED`, never approval. No empirical data is bundled;
+durable option-surface evidence capture/replay remains outstanding. The evaluator
+does not authenticate/replay its supplied source artifacts or establish historical
+availability. It does not change the VRP evaluator, DecisionLoop, publication,
+decision eligibility, acquisition, or trading authority. All authority flags
+remain false. See `docs/INDIA_VIX_IV30_PROXY_SUITABILITY.md`.
