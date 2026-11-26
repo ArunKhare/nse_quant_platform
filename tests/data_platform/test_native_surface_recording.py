@@ -35,7 +35,7 @@ def _source_fixture(tmp_path: Path) -> tuple[Path, list[dict[str, str]], dict[st
             expiry_date = AS_OF.date() + timedelta(days=days)
             expiry_close = datetime.combine(expiry_date, time(15, 30), IST)
             expiries.append(expiry_close)
-            quotes = []
+            quotes: list[dict[str, Any]] = []
             for option_type in ("CE", "PE"):
                 for strike in (22000.0, 23500.0, 25000.0, 26500.0, 28000.0):
                     premium = cm.black76_price(
