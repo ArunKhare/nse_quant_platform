@@ -92,10 +92,11 @@ minimums returns only `DIAGNOSTIC_ONLY_REVIEW_REQUIRED`; it is not a pass.
    taxonomy: QUIET, NORMAL, ELEVATED_VOLATILITY, EVENT, EXPIRY and STRUCTURAL.
    All six are mandatory for evaluation. The study code does not infer these
    labels or authenticate their issuer.
-3. Explicitly choose numeric limits for absolute bias, MAE, RMSE, p90 error,
-   minimum correlation and OLS slope range. Register the immutable policy in the
-   study journal before persisting the pair set. There are deliberately no
-   default numerical suitability tolerances in code.
+3. Explicitly choose numeric limits for absolute bias, MAE, RMSE and p90 error
+   in annualized decimal-IV units, plus minimum correlation and the OLS slope
+   range. Register the immutable policy in the study journal before persisting
+   the pair set. There are deliberately no default numerical suitability
+   tolerances in code.
 4. Persist the pair set using `persist_pair_set`; run `persist_evaluation_report`.
    The report uses a session-isolated chronological holdout and reports both
    aggregate metrics and condition-specific calibration/holdout metrics. Each
