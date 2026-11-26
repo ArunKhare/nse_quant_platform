@@ -604,10 +604,6 @@ def persist_evaluation_report(
     raw = _canonical(report)
     digest = base.sha(raw)
     table = _table(conn, REPORTS)
-    existing = conn.execute(
-        f"SELECT body,job_id FROM {table} WHERE pair_set_id=? AND report_sha256=? LIMIT 2",
-        [pair_set_id, digest],
-    ).fetchall()
     variants = conn.execute(
         f"SELECT report_sha256,body,job_id FROM {table} WHERE pair_set_id=? LIMIT 2", [pair_set_id]
     ).fetchall()
@@ -627,3 +623,83 @@ def persist_evaluation_report(
     with ledger.execution(job):
         conn.execute(f"INSERT INTO {table} VALUES (?,?,?,?)", [pair_set_id, digest, raw, job])
     return report
+
+
+
+def replay_pair_set(
+    vix_bronze: Any,
+    vix_silver: Any,
+    option_bronze: Any,
+    surface_silver: Any,
+    reader: Any,
+    pair_set_id: str,
+) -> list[ProxyPair]:
+    """Rebuild every pair from its original pinned sources and compare the immutable pair set."""
+    sources = (vix_bronze, vix_silver, option_bronze, surface_silver)
+    for source in sources:
+        _file_backed(source)
+        base.readonly(source)
+        base.separate(source, reader)
+    for index, source in enumerate(sources):
+        for other in sources[index + 1 :]:
+            base.separate(source, other)
+    base.readonly(reader)
+    stored, policy_id, _recorded_at = _load_pair_set(reader, pair_set_id)
+    policy, _registered_at = _load_policy(reader, policy_id)
+    reproduced = []
+    for pair in stored:
+        if pair.condition_evidence_json is None or pair.condition_evidence_sha256 is None:
+            raise ValueError("RETAINED_CONDITION_EVIDENCE_REQUIRED")
+        request = ProxyPairRequest(
+            vix_silver_revision_id=pair.vix_silver_revision_id,
+            surface_observation_id=pair.surface_observation_id,
+            surface_sha256=pair.surface_batch_sha256,
+            condition_artifact=pair.condition_evidence_json.encode(),
+            condition_sha256=pair.condition_evidence_sha256,
+        )
+        reproduced.append(
+            replay_matched_pair(
+                vix_bronze,
+                vix_silver,
+                option_bronze,
+                surface_silver,
+                request,
+                max_pair_gap_seconds=policy.max_pair_gap_seconds,
+                max_source_age_seconds=policy.max_source_age_seconds,
+            )
+        )
+    reproduced.sort(key=lambda item: item.as_of)
+    if _canonical([asdict(item) for item in reproduced]) != _canonical([asdict(item) for item in stored]):
+        raise ValueError("PROXY_PAIRSET_SOURCE_REPLAY_MISMATCH")
+    return reproduced
+
+
+def replay_evaluation_report(
+    conn: Any,
+    pair_set_id: str,
+    expected_report_sha256: str,
+    *,
+    actor_id: str,
+    code_revision: str,
+) -> dict[str, Any]:
+    """Read-only report replay: verify its audit, then recompute from the pinned pair set."""
+    vix.execution(actor_id, code_revision)
+    _file_backed(conn)
+    base.readonly(conn)
+    if not _pin(expected_report_sha256):
+        raise ValueError("EXACT_PROXY_REPORT_PIN_REQUIRED")
+    rows = conn.execute(
+        f"SELECT report_sha256,body,job_id FROM {_table(conn, REPORTS)} "
+        "WHERE pair_set_id=? LIMIT 2",
+        [pair_set_id],
+    ).fetchall()
+    if len(rows) != 1 or rows[0][0] != expected_report_sha256:
+        raise ValueError("PROXY_REPORT_MISSING_CONFLICTED_OR_WRONG_PIN")
+    raw = bytes(rows[0][1])
+    if base.sha(raw) != expected_report_sha256:
+        raise ValueError("PROXY_REPORT_HASH_MISMATCH")
+    vix.audit(conn, rows[0][2], REPORT_COMMAND, pair_set_id, expected_report_sha256)
+    reproduced = evaluate_pair_set(conn, pair_set_id, actor_id=actor_id, code_revision=code_revision)
+    if _canonical(reproduced) != raw:
+        raise ValueError("PROXY_REPORT_REPLAY_MISMATCH")
+    return reproduced
