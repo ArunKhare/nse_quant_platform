@@ -755,3 +755,9 @@ def replay_evaluation_report(
     if _canonical(reproduced) != raw:
         raise ValueError("PROXY_REPORT_REPLAY_MISMATCH")
     return reproduced
+
+
+
+def evaluation_report_sha256(report: dict[str, Any]) -> str:
+    """Return the exact canonical report pin required by read-only report replay."""
+    return base.sha(_canonical(report))
