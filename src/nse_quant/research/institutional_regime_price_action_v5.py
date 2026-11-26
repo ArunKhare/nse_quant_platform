@@ -397,7 +397,11 @@ def classify_daily_price_action(
     confirmed_metrics = _metrics_at(bars, confirmed_index, atr, plus_di, minus_di, adx)
     if confirmed_metrics is None:
         return _unavailable("confirmed_state_metrics_unavailable")
-    _, confirmed_confidence = _classify(confirmed_metrics, None)
+    confirmed_confidence = next(
+        confidence
+        for index, _state, confidence, _metrics in classified
+        if index == confirmed_index
+    )
     pending_state = latest_raw_state if latest_raw_state != confirmed_state else None
     output_confidence = latest_confidence if pending_state is None else confirmed_confidence
 
