@@ -106,6 +106,10 @@ def test_out_of_order_or_duplicate_as_of_is_rejected() -> None:
         pairs[2],
         as_of=pairs[1].as_of,
         trade_date=pairs[1].trade_date,
+        india_vix_source_time=pairs[1].india_vix_source_time,
+        india_vix_received_at=pairs[1].india_vix_received_at,
+        surface_source_time=pairs[1].surface_source_time,
+        surface_received_at=pairs[1].surface_received_at,
     )
     with pytest.raises(ValueError, match="STRICTLY_ORDERED_UNIQUE_AS_OF_REQUIRED"):
         evaluate_india_vix_iv30_proxy(pairs)
