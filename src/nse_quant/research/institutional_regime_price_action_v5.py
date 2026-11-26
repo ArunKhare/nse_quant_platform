@@ -29,8 +29,8 @@ PRICE_ACTION_STATES = (
 class InstitutionalRegimePriceActionSettings(BaseModel):
     """Versioned, configurable evidence requirements for daily classification."""
 
-    daily_history_limit: int = Field(default=300, ge=266)
-    minimum_daily_bars: int = Field(default=266, ge=266)
+    daily_history_limit: int = Field(default=300, ge=267)
+    minimum_daily_bars: int = Field(default=267, ge=267)
     confidence_floor: float = Field(default=0.0, ge=0.0, le=1.0)
 
     @model_validator(mode="after")
