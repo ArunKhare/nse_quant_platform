@@ -579,7 +579,7 @@ def evaluate_pair_set(conn: Any, pair_set_id: str, *, actor_id: str, code_revisi
         max_pair_gap_seconds=policy.max_pair_gap_seconds,
         holdout_fraction=policy.holdout_fraction,
     )
-    condition_results = {}
+    condition_results: dict[str, Any] = {}
     sufficient_conditions = True
     all_conditions_pass = True
     for condition in policy.required_conditions:
