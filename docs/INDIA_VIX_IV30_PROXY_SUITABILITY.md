@@ -146,3 +146,20 @@ previously viewed the holdout data.
 
 The workflow remains offline, observation-only and fail-closed. It does not
 change the VRP evaluator, DecisionLoop, Gold publication or trading controls.
+
+
+## Paper-loop readiness report boundary
+
+The paper-loop runner now retains its latest structured decision result at
+`logs/paper_loop_last_decision.json`. Generate the independent operational
+readiness summary with:
+
+```powershell
+uv run python scripts/paper_loop_vrp_readiness_report.py --input logs/paper_loop_last_decision.json
+```
+
+This report diagnoses HAR-RV history/freshness/calibration, IV input tenor and
+the actual VRP gate. It does not compare India VIX with internal constant-maturity
+IV30 and therefore always labels proxy suitability as not evaluated by the
+paper loop. The paired-source study described above remains the only workflow
+in this tranche that can evaluate proxy error against a preregistered policy.
