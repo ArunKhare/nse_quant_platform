@@ -209,12 +209,12 @@ def evaluate_india_vix_iv30_proxy(
         ):
             if value is not None and _utc(value, field) > as_of:
                 raise ValueError("SOURCE_NOT_AVAILABLE_AT_PAIR_AS_OF")
-        for field, value in (
+        for field, pin_value in (
             ("VIX_SILVER_REVISION", pair.vix_silver_revision_id),
             ("SURFACE_OBSERVATION", pair.surface_observation_id),
         ):
-            if value:
-                _pin(value, field)
+            if pin_value:
+                _pin(pin_value, field)
         normalized.append(pair)
 
     session_dates = sorted({pair.trade_date for pair in normalized})
