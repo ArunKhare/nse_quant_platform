@@ -109,9 +109,7 @@ class ProxyAcceptancePolicy:
             or type(self.minimum_holdout_pairs_per_condition) is not int
             or self.minimum_holdout_pairs_per_condition < 2
             or type(self.required_conditions) is not tuple
-            or not self.required_conditions
-            or self.required_conditions != tuple(sorted(set(self.required_conditions)))
-            or not set(self.required_conditions) <= set(CONDITIONS)
+            or self.required_conditions != CONDITIONS
             or not 0.1 <= self.holdout_fraction <= 0.5
         ):
             raise ValueError("INVALID_PROXY_ACCEPTANCE_POLICY")
