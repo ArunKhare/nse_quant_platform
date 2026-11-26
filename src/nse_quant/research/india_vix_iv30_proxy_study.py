@@ -193,18 +193,16 @@ def _vix_available_at(silver: Any, revision_id: str) -> tuple[datetime, dict[str
 
 
 def _surface_available_at(silver: Any, observation_id: str, expected_sha256: str) -> tuple[datetime, dict[str, Any]]:
-    rows = surface._variants(silver, observation_id)
-    if len(rows) != 1 or rows[0][0] != expected_sha256:
-        raise ValueError("SURFACE_MISSING_CONFLICTED_OR_WRONG_PIN")
-    raw = surface._verified(silver, rows[0], observation_id)
-    doc = surface._object(raw)
+    doc, job_id = surface.read_recording_metadata(
+        silver, observation_id=observation_id, expected_sha256=expected_sha256
+    )
     jobs = vix.table(silver, "medallion_audit.jobs")
     events = vix.table(silver, "medallion_audit.job_events")
     audit_rows = silver.execute(
         f"SELECT j.created_at,e.recorded_at FROM {jobs} j "
         f"JOIN {events} e ON e.job_id=j.job_id "
         "WHERE j.job_id=? AND e.event_index=3 AND e.state='SUCCEEDED' LIMIT 2",
-        [rows[0][2]],
+        [job_id],
     ).fetchall()
     if len(audit_rows) != 1 or doc.get("version") != surface.VERSION:
         raise ValueError("SURFACE_ORIGINAL_SUCCESSFUL_AUDIT_REQUIRED")
