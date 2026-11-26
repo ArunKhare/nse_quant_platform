@@ -63,7 +63,15 @@ def stores(tmp_path: Path, monkeypatch):
                 policy=surface_policy,
             )
 
-    condition = _condition(now, ["NORMAL"])
+    with (
+        duckdb.connect(str(vix_silver_path), read_only=True) as vix_reader,
+        duckdb.connect(str(surface_silver_path), read_only=True) as surface_reader,
+    ):
+        vix_available, _ = study._vix_available_at(vix_reader, vix_revision)
+        surface_available, _ = study._surface_available_at(
+            surface_reader, "c" * 64, surface_digest
+        )
+    condition = _condition(max(vix_available, surface_available), ["NORMAL"])
     request = study.ProxyPairRequest(
         vix_silver_revision_id=vix_revision,
         surface_observation_id="c" * 64,
