@@ -89,6 +89,15 @@ class ProxyAcceptancePolicy:
             or not isinstance(self.min_correlation, (int, float))
             or not math.isfinite(self.min_correlation)
             or not -1 <= self.min_correlation <= 1
+            or isinstance(self.holdout_fraction, bool)
+            or not isinstance(self.holdout_fraction, (int, float))
+            or not math.isfinite(self.holdout_fraction)
+            or isinstance(self.max_pair_gap_seconds, bool)
+            or not isinstance(self.max_pair_gap_seconds, (int, float))
+            or not math.isfinite(self.max_pair_gap_seconds)
+            or isinstance(self.max_source_age_seconds, bool)
+            or not isinstance(self.max_source_age_seconds, (int, float))
+            or not math.isfinite(self.max_source_age_seconds)
             or self.min_ols_slope >= self.max_ols_slope
             or type(self.minimum_holdout_pairs_per_condition) is not int
             or self.minimum_holdout_pairs_per_condition < 2
@@ -128,6 +137,7 @@ def _condition_artifact(raw: bytes, expected_sha256: str, pair_as_of: datetime) 
         or not isinstance(doc["source"], str)
         or not doc["source"].strip()
         or not isinstance(doc["tags"], list)
+        or any(type(tag) is not str for tag in doc["tags"])
         or not doc["tags"]
         or doc["tags"] != sorted(set(doc["tags"]))
         or not set(doc["tags"]) <= set(CONDITIONS)
@@ -137,7 +147,7 @@ def _condition_artifact(raw: bytes, expected_sha256: str, pair_as_of: datetime) 
     as_of, available_at = _utc(doc["as_of"]), _utc(doc["available_at"])
     if (
         trade_date != pair_as_of.astimezone(IST).date()
-        or as_of.date() != trade_date
+        or as_of.astimezone(IST).date() != trade_date
         or as_of > pair_as_of
         or available_at > pair_as_of
     ):
@@ -332,6 +342,7 @@ def register_acceptance_policy(
     code_revision: str,
 ) -> str:
     vix.execution(actor_id, code_revision)
+    vix.silver_target(conn)
     raw = _policy_bytes(policy)
     policy_id = base.sha(raw)
     table = _table(conn, POLICIES)
@@ -390,6 +401,7 @@ def persist_pair_set(
 ) -> str:
     """Replay all requested source pairs, then persist one immutable preregistered study set."""
     vix.execution(actor_id, code_revision)
+    vix.silver_target(target)
     if not isinstance(requests, Sequence) or isinstance(requests, (str, bytes)) or not 1 <= len(requests) <= MAX_PAIRS:
         raise ValueError("BOUNDED_PROXY_PAIR_REQUESTS_REQUIRED")
     for source in (vix_bronze, vix_silver, option_bronze, surface_silver):
@@ -571,10 +583,13 @@ def persist_evaluation_report(
         f"SELECT body,job_id FROM {table} WHERE pair_set_id=? AND report_sha256=? LIMIT 2",
         [pair_set_id, digest],
     ).fetchall()
-    if existing:
-        if len(existing) != 1 or bytes(existing[0][0]) != raw:
-            raise ValueError("PROXY_REPORT_RETRY_CONFLICT")
-        vix.audit(conn, existing[0][1], REPORT_COMMAND, pair_set_id, digest)
+    variants = conn.execute(
+        f"SELECT report_sha256,body,job_id FROM {table} WHERE pair_set_id=? LIMIT 2", [pair_set_id]
+    ).fetchall()
+    if variants:
+        if len(variants) != 1 or variants[0][0] != digest or bytes(variants[0][1]) != raw:
+            raise ValueError("PROXY_REPORT_VARIANT_CONFLICT")
+        vix.audit(conn, variants[0][2], REPORT_COMMAND, pair_set_id, digest)
         return report
     ledger = AuditLedger(conn)
     job = ledger.plan_job(
