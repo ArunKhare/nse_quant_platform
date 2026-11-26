@@ -147,6 +147,8 @@ def test_policy_is_preregistered_before_immutable_pairset_and_report(stores):
     assert report["decision_eligibility_asserted"] is False
     assert report["publication_asserted"] is False
     assert report["preregistered_policy_id"] == policy_id
+    assert set(report["condition_results"]) == set(study.CONDITIONS)
+    assert report["condition_results"]["EVENT"]["status"] == "INSUFFICIENT_HOLDOUT_EVIDENCE"
     with (
         duckdb.connect(str(bp), read_only=True) as vix_bronze,
         duckdb.connect(str(sp), read_only=True) as vix_silver,
@@ -209,3 +211,19 @@ def test_pairset_requires_preregistered_policy(stores):
                 actor_id=OWNER,
                 code_revision=REVISION,
             )
+
+
+
+def test_policy_cannot_omit_required_market_conditions():
+    policy = study.ProxyAcceptancePolicy(
+        max_abs_bias=0.02,
+        max_mae=0.02,
+        max_rmse=0.03,
+        max_p90_absolute_error=0.05,
+        min_correlation=0.0,
+        min_ols_slope=0.5,
+        max_ols_slope=1.5,
+        required_conditions=("NORMAL",),
+    )
+    with pytest.raises(ValueError, match="INVALID_PROXY_ACCEPTANCE_POLICY"):
+        policy.validate()
