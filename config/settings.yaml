@@ -246,9 +246,9 @@ evidence:
       max_term_observation_age_seconds: 300
       max_term_observation_gap_seconds: 30
       # Provisional daily price-action v5 history; 266 bars cover 252 ATR
-      # percentile observations after Wilder initialization.
+      # percentile observations after Wilder initialization and two-close confirmation.
       price_action_daily_history_limit: 300
-      price_action_minimum_daily_bars: 266
+      price_action_minimum_daily_bars: 267
       # No empirical confidence floor has been approved yet.
       price_action_confidence_floor: 0.0
 llm_enrichment:
