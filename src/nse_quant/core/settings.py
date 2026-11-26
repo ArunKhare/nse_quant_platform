@@ -463,8 +463,8 @@ class InstitutionalRegimeSettings(BaseModel):
         ge=0,
     )
 
-    price_action_daily_history_limit: int = Field(default=300, ge=266)
-    price_action_minimum_daily_bars: int = Field(default=266, ge=266)
+    price_action_daily_history_limit: int = Field(default=300, ge=267)
+    price_action_minimum_daily_bars: int = Field(default=267, ge=267)
     price_action_confidence_floor: float = Field(default=0.0, ge=0.0, le=1.0)
 
     @model_validator(mode="after")
