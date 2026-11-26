@@ -649,3 +649,57 @@ The prior “Operator QA required” wording above is superseded as an implement
 status by this owner report. No exact command output or independent QA execution
 evidence was supplied with the report, so this addendum does not claim
 independently verified test, lint or type-check results.
+
+
+## 2026-11-27 — Charter Stage 1 / S4 daily price-action v5 implementation
+
+Added `src/nse_quant/research/institutional_regime_price_action_v5.py` and
+integrated it into the observational `InstitutionalRegimePlugin`. The price
+action component now reads only `spot_candles.interval='day'`; it excludes the
+current IST calendar date unconditionally, so an in-progress daily candle cannot
+enter the classifier. Intraday 1-minute candles are not a fallback.
+
+The implementation calculates Wilder ADX(14), +DI/-DI, Kaufman ER(20),
+CHOP(14), ATR(14), rolling 252-observation ATR percentile, Bollinger
+BandWidth(20, 2) percentile over 120 observations, 60-day range position,
+20-day close change and SMA20 slope. The minimum history is 267 completed daily
+bars: the first valid 252-observation ATR percentile needs 266 bars after
+Wilder initialization, and the second close is required to confirm a new state.
+
+The provisional first-match rules follow section 3.4 above:
+- `HIGH_VOL_CHOP`: ATR percentile >= 70, (ADX < 20 or CHOP > 61.8), ER20 < 0.22.
+- Strong bull/bear: ADX >= 25, ER20 >= 0.35, with 20-day change, SMA20 slope
+  and +DI/-DI direction agreeing.
+- `COMPRESSION`: BandWidth percentile <= 10 and ATR percentile <= 30.
+- `RANGE_HIGH` / `RANGE_LOW`: range position >= / < 0.5 and ADX < 25.
+
+New labels require two consecutive daily closes. A confirmed directional trend
+is retained through the ADX 20–25 neutral band while direction remains aligned;
+ADX < 20 is the documented trend exit. No unapproved numeric exit buffers were
+invented for the other states. Confidence is the minimum normalized distance of
+the deciding diagnostics from their thresholds; the configurable floor defaults
+to 0.0 because no empirical floor has been approved.
+
+The plugin now records the six canonical price-action tokens directly. It does
+not yet emit a composite canonical regime: the other v4 IV/term/skew components
+still use incompatible vocabularies. Composite `regime_label` is therefore
+withheld unless the full four-component label passes the canonical registry.
+The classifier remains observational; no strategy gate, sizing, publication,
+decision eligibility or execution authority was changed.
+
+Focused tests were added for both trend directions, all six state decision
+branches, trend hysteresis, confidence/history fail-closed behavior, malformed
+daily bars, and integration proving the current-date and intraday bars are
+excluded. Operator QA is pending. No local test, Ruff or mypy result is claimed.
+
+Run on the operator's Windows environment:
+
+```powershell
+uv run pytest -q tests/research/test_institutional_regime_price_action_v5.py tests/research/evidence_plugins/test_institutional_regime_price_action_v5_integration.py tests/research/evidence_plugins/test_institutional_regime_plugin.py
+
+uv run ruff check src/nse_quant/research/institutional_regime_price_action_v5.py src/nse_quant/research/evidence_plugins/institutional_regime.py src/nse_quant/core/settings.py tests/research/test_institutional_regime_price_action_v5.py tests/research/evidence_plugins/test_institutional_regime_price_action_v5_integration.py
+
+uv run mypy src/nse_quant/research/institutional_regime_price_action_v5.py src/nse_quant/research/evidence_plugins/institutional_regime.py src/nse_quant/core/settings.py
+
+git diff --check
+```
