@@ -127,3 +127,22 @@ Focused validation commands (run locally; not claimed as executed here):
     uv run ruff check src/nse_quant/data_platform/s2_iv30_gold.py tests/data_platform/test_s2_iv30_gold.py
     uv run mypy src/nse_quant/data_platform/s2_iv30_gold.py
 
+
+
+## 2026-11-27 — India VIX / option-surface proxy diagnostics
+
+Added `src/nse_quant/research/india_vix_iv30_suitability.py` as a pure,
+research-only evaluator for paired NIFTY India VIX and `internal_cm` Black-76
+IV30 observations. It enforces exact-format revision/batch pins, causal clocks,
+strict chronological ordering, and a 30-second default source-time match. It
+reports full-sample, calibration and chronological holdout error diagnostics.
+
+This is an evaluator contract, not a data-ingestion path or empirical finding.
+No durable option-surface evidence capture/replay has been added. Minimum sample
+markers do not constitute acceptance thresholds; no numeric suitability limits
+have been approved. The evaluator cannot authenticate source artifacts or assert
+historical availability. It never asserts suitability, publication or decision
+eligibility and does not alter VRP or DecisionLoop behavior.
+
+See `docs/INDIA_VIX_IV30_PROXY_SUITABILITY.md` for required evidence and review
+criteria before any suitability decision.
