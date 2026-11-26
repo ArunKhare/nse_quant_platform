@@ -149,7 +149,7 @@ def test_policy_is_preregistered_before_immutable_pairset_and_report(stores):
         report = study.persist_evaluation_report(
             writer, pair_set_id, actor_id=OWNER, code_revision=REVISION
         )
-        report_sha256 = hashlib.sha256(study._canonical(report)).hexdigest()
+        report_sha256 = study.evaluation_report_sha256(report)
     assert report["status"] == "INSUFFICIENT_EVIDENCE"
     assert report["suitability_asserted"] is False
     assert report["decision_eligibility_asserted"] is False
