@@ -160,7 +160,6 @@ def test_trade_date_must_match_as_of_in_ist() -> None:
         evaluate_india_vix_iv30_proxy(pairs)
 
 
-
 def test_condition_metrics_use_the_global_session_holdout() -> None:
     raw = b'{"tags":["NORMAL"]}'
     digest = hashlib.sha256(raw).hexdigest()
