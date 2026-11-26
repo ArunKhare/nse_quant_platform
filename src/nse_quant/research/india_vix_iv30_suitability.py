@@ -6,6 +6,7 @@ It cannot approve model suitability, publish a feature, or grant decision author
 
 from __future__ import annotations
 
+import hashlib
 import math
 import re
 from collections.abc import Sequence
@@ -198,8 +199,6 @@ def evaluate_india_vix_iv30_proxy(
             ):
                 raise ValueError("PINNED_MARKET_CONDITION_TAGS_REQUIRED")
             _pin(pair.condition_evidence_sha256, "CONDITION_EVIDENCE")
-            import hashlib
-
             if hashlib.sha256(pair.condition_evidence_json.encode()).hexdigest() != pair.condition_evidence_sha256:
                 raise ValueError("CONDITION_EVIDENCE_CONTENT_HASH_MISMATCH")
         elif pair.condition_evidence_sha256 is not None or pair.condition_evidence_json is not None:
