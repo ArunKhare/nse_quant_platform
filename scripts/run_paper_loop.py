@@ -480,6 +480,22 @@ def main() -> int:
                     },
                 )
 
+            # Retain the latest structured evidence for the read-only readiness CLI.
+            # This artifact is diagnostic only and is replaced by the next loop cycle.
+            decision_artifact = {
+                "run_id": run_id,
+                "captured_at": datetime.now(UTC).isoformat(),
+                "paper_trading": settings.safety.paper_trading,
+                "dry_run": settings.safety.dry_run,
+                "result": result,
+            }
+            decision_artifact_path = Path("logs/paper_loop_last_decision.json")
+            decision_artifact_path.parent.mkdir(parents=True, exist_ok=True)
+            decision_artifact_path.write_text(
+                json.dumps(decision_artifact, indent=2, default=str),
+                encoding="utf-8",
+            )
+
             status_path = Path("logs/live_status.json")
             status_path.parent.mkdir(parents=True, exist_ok=True)
 
