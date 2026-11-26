@@ -68,9 +68,11 @@ def build_paper_loop_vrp_readiness_report(payload: dict[str, Any]) -> dict[str, 
         and isinstance(calibration_minimum, int)
         and calibration_samples >= calibration_minimum
         and calibration_margin is not None
+        and calibration.get("gate_margin_eligible") is True
     )
+    har_gate_eligible = rv.get("gate_eligible") is True
     if history_sufficient and freshness_sufficient and forecast is not None:
-        har_status = "READY" if calibration_sufficient else "BLOCKED_CALIBRATION"
+        har_status = "READY" if calibration_sufficient and har_gate_eligible else "BLOCKED_CALIBRATION"
     elif not history_sufficient:
         har_status = "BLOCKED_HISTORY"
     elif not freshness_sufficient:
@@ -95,6 +97,7 @@ def build_paper_loop_vrp_readiness_report(payload: dict[str, Any]) -> dict[str, 
         calibration_minimum_samples=calibration_minimum,
         calibration_margin=calibration_margin,
         calibration_sufficient=calibration_sufficient,
+        har_gate_eligible=har_gate_eligible,
         trailing_fallback=rv.get("trailing_close_to_close_fallback"),
         trailing_fallback_used_for_gate=False,
     )
