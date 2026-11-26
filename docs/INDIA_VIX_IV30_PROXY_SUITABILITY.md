@@ -33,12 +33,14 @@ already-assembled paired observations and validates:
   than the pair's `as_of`.
 - India VIX and surface source timestamps are within 30 seconds by default.
 - Positive finite IV values and SHA-256 revision/batch pins.
-- Strictly increasing, unique pair `as_of` timestamps.
+- Strictly increasing, unique pair `as_of` timestamps; the supplied trade date
+  must match the `as_of` calendar date in Asia/Kolkata.
 
 The report includes signed bias, MAE, RMSE, median absolute error, p90 absolute
 error, correlation, OLS slope/intercept, and separate chronological calibration
-and holdout diagnostics. The default split reserves the latest 30% (at least 20
-pairs where sample size permits) as holdout.
+and holdout diagnostics. The default split reserves the latest 30% of complete
+trading sessions as holdout, expanding backward as needed to include at least 20
+pairs. No trading session is split between calibration and holdout.
 
 Minimum evidence markers are 60 matched pairs, 20 distinct sessions, and 20
 holdout pairs. Falling short returns `INSUFFICIENT_EVIDENCE`. Meeting these
