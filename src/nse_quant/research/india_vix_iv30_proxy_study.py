@@ -27,6 +27,7 @@ REPORT_COMMAND = "research.evaluate_vix_proxy_pairset@1"
 POLICIES = "silver.vix_proxy_policies"
 PAIRSETS = "silver.vix_proxy_pairsets"
 REPORTS = "silver.vix_proxy_reports"
+SCHEMA_VERSIONS = "silver.vix_proxy_study_schema_versions"
 IST = ZoneInfo("Asia/Kolkata")
 CONDITIONS = ("ELEVATED_VOLATILITY", "EVENT", "EXPIRY", "NORMAL", "QUIET", "STRUCTURAL")
 MAX_PAIRSET_BYTES = 64 * 1024 * 1024
@@ -343,6 +344,10 @@ def initialize_study_store(conn: Any, *, actor_id: str, code_revision: str) -> N
     AuditLedger(conn).initialize()
     conn.execute("CREATE SCHEMA IF NOT EXISTS silver")
     conn.execute(
+        f"CREATE TABLE IF NOT EXISTS {_table(conn, SCHEMA_VERSIONS)} "
+        "(version INTEGER PRIMARY KEY,applied_at TIMESTAMPTZ NOT NULL)"
+    )
+    conn.execute(
         f"CREATE TABLE IF NOT EXISTS {_table(conn, POLICIES)} "
         "(policy_id VARCHAR PRIMARY KEY,body BLOB NOT NULL,registered_at TIMESTAMPTZ NOT NULL,job_id VARCHAR NOT NULL)"
     )
@@ -356,6 +361,29 @@ def initialize_study_store(conn: Any, *, actor_id: str, code_revision: str) -> N
         "(pair_set_id VARCHAR NOT NULL,report_sha256 VARCHAR NOT NULL,body BLOB NOT NULL,"
         "job_id VARCHAR NOT NULL,PRIMARY KEY(pair_set_id,report_sha256))"
     )
+    versions = conn.execute(
+        f"SELECT version FROM {_table(conn, SCHEMA_VERSIONS)} ORDER BY version"
+    ).fetchall()
+    if versions not in ([], [(1,)]):
+        raise ValueError("UNSUPPORTED_PROXY_STUDY_SCHEMA_VERSION")
+    if not versions:
+        conn.execute(
+            f"INSERT INTO {_table(conn, SCHEMA_VERSIONS)} VALUES (1, ?)", [datetime.now(UTC)]
+        )
+    expected_columns = {
+        POLICIES: ("policy_id", "body", "registered_at", "job_id"),
+        PAIRSETS: ("pair_set_id", "policy_id", "body", "recorded_at", "job_id"),
+        REPORTS: ("pair_set_id", "report_sha256", "body", "job_id"),
+    }
+    for table_name, expected in expected_columns.items():
+        actual = conn.execute(
+            "SELECT column_name FROM information_schema.columns "
+            "WHERE table_catalog=current_database() AND table_schema='silver' AND table_name=? "
+            "ORDER BY ordinal_position",
+            [table_name.split(".", maxsplit=1)[1]],
+        ).fetchall()
+        if tuple(row[0] for row in actual) != expected:
+            raise ValueError("PROXY_STUDY_TABLE_SCHEMA_MISMATCH")
 
 
 def register_acceptance_policy(
@@ -657,8 +685,10 @@ def replay_pair_set(
             base.separate(source, other)
     _file_backed(reader)
     base.readonly(reader)
-    stored, policy_id, _recorded_at = _load_pair_set(reader, pair_set_id)
-    policy, _registered_at = _load_policy(reader, policy_id)
+    stored, policy_id, pair_set_recorded_at = _load_pair_set(reader, pair_set_id)
+    policy, registered_at = _load_policy(reader, policy_id)
+    if registered_at > pair_set_recorded_at:
+        raise ValueError("POLICY_NOT_PREREGISTERED_BEFORE_PAIRSET")
     reproduced = []
     for pair in stored:
         if pair.condition_evidence_json is None or pair.condition_evidence_sha256 is None:
