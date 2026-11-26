@@ -91,7 +91,6 @@ def _policy() -> study.ProxyAcceptancePolicy:
         min_correlation=0.0,
         min_ols_slope=0.5,
         max_ols_slope=1.5,
-        required_conditions=("NORMAL",),
     )
 
 
