@@ -62,7 +62,8 @@ def test_unsynchronized_pair_is_rejected() -> None:
     pairs = _pairs(2)
     pairs[1] = replace(
         pairs[1],
-        surface_source_time=pairs[1].surface_source_time + timedelta(minutes=2),
+        surface_source_time=pairs[1].surface_source_time - timedelta(minutes=2),
+        surface_received_at=pairs[1].surface_received_at - timedelta(minutes=2),
     )
     with pytest.raises(ValueError, match="SYNCHRONIZED_SOURCE_PAIR_REQUIRED"):
         evaluate_india_vix_iv30_proxy(pairs)
@@ -101,7 +102,11 @@ def test_invalid_source_revision_pin_is_rejected() -> None:
 
 def test_out_of_order_or_duplicate_as_of_is_rejected() -> None:
     pairs = _pairs(3)
-    pairs[2] = replace(pairs[2], as_of=pairs[1].as_of)
+    pairs[2] = replace(
+        pairs[2],
+        as_of=pairs[1].as_of,
+        trade_date=pairs[1].trade_date,
+    )
     with pytest.raises(ValueError, match="STRICTLY_ORDERED_UNIQUE_AS_OF_REQUIRED"):
         evaluate_india_vix_iv30_proxy(pairs)
 
