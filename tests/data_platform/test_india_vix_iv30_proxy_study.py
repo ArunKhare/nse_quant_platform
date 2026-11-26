@@ -146,6 +146,9 @@ def test_policy_is_preregistered_before_immutable_pairset_and_report(stores):
     assert report["suitability_asserted"] is False
     assert report["decision_eligibility_asserted"] is False
     assert report["publication_asserted"] is False
+    assert report["pair_source_replay_verified_at_pairset_creation"] is True
+    assert report["pair_source_availability_verified_at_pairset_creation"] is True
+    assert report["atomic_cross_database_snapshot_asserted"] is False
     assert report["preregistered_policy_id"] == policy_id
     assert set(report["condition_results"]) == set(study.CONDITIONS)
     assert report["condition_results"]["EVENT"]["status"] == "INSUFFICIENT_HOLDOUT_EVIDENCE"
