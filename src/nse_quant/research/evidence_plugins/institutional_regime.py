@@ -13,9 +13,11 @@ from nse_quant.research.evidence_plugins.base import (
     DecisionContext,
     EvidencePlugin,
 )
-from nse_quant.research.institutional_regime_price_action import (
+from nse_quant.research.institutional_regime_price_action_v5 import (
+    DailyBar,
     InstitutionalRegimePriceActionSettings,
-    compute_price_action,
+    PRICE_ACTION_CLASSIFIER_VERSION,
+    classify_daily_price_action,
 )
 from nse_quant.research.institutional_regime_skew import (
     InstitutionalRegimeSkewSettings,
@@ -37,7 +39,11 @@ class InstitutionalRegimePlugin(EvidencePlugin):
         self._store = store
         self._settings = settings
         self._skew_settings = InstitutionalRegimeSkewSettings()
-        self._price_action_settings = InstitutionalRegimePriceActionSettings()
+        self._price_action_settings = InstitutionalRegimePriceActionSettings(
+            daily_history_limit=settings.price_action_daily_history_limit,
+            minimum_daily_bars=settings.price_action_minimum_daily_bars,
+            confidence_floor=settings.price_action_confidence_floor,
+        )
 
     def build(self, context: DecisionContext) -> dict[str, Any]:
         as_of = self._utc(context.ts)
@@ -171,8 +177,8 @@ class InstitutionalRegimePlugin(EvidencePlugin):
             "price_action": price_action_component,
         }
 
-        all_complete = all(component["complete"] for component in components.values())
-        regime_label = (
+        components_complete = all(component["complete"] for component in components.values())
+        candidate_label = (
             "_".join(
                 [
                     iv_component["state"],
@@ -181,9 +187,15 @@ class InstitutionalRegimePlugin(EvidencePlugin):
                     price_action_component["state"],
                 ]
             )
-            if all_complete
+            if components_complete
             else None
         )
+        regime_label = (
+            candidate_label
+            if candidate_label is not None and is_canonical_regime_label(candidate_label)
+            else None
+        )
+        all_complete = components_complete and regime_label is not None
 
         return {
             "available": True,
@@ -192,12 +204,14 @@ class InstitutionalRegimePlugin(EvidencePlugin):
             "symbol": context.symbol,
             "expiry": snapshot.expiry.isoformat(),
             "snapshot_ts": snapshot_ts.isoformat(),
-            "classifier_version": "institutional_iv_term_components_v4",
+            "classifier_version": "institutional_iv_term_components_v4_with_daily_price_action_v5",
+            "price_action_classifier_version": PRICE_ACTION_CLASSIFIER_VERSION,
             "mode": "observation",
             "regime_label": regime_label,
             "components": components,
             "missing_components": [
                 name for name, component in components.items() if not component["complete"]
+            ] + (["canonical_regime_label"] if components_complete and regime_label is None else [])
             ],
             "reason": (
                 None
@@ -247,48 +261,64 @@ class InstitutionalRegimePlugin(EvidencePlugin):
 
     def _price_action(self, context: DecisionContext) -> dict[str, Any]:
         token = getattr(context, "spot_instrument_token", None)
-
         if token is None:
             return {
                 "available": False,
                 "complete": False,
-                "state": "INSUFFICIENT_DATA",
-                "reason": "not_implemented",
+                "state": None,
+                "reason": "missing_spot_instrument_token",
+                "classifier_version": PRICE_ACTION_CLASSIFIER_VERSION,
                 "decision_eligibility_asserted": False,
             }
+
+        # Daily bars are timestamped at the session date. Exclude the current
+        # IST calendar date unconditionally so a partially aggregated daily bar
+        # can never enter the classifier, including after the close.
+        cutoff_date = context.ts.astimezone(IST).date()
         rows = self._store.conn.execute(
             """
-            SELECT ts, open, high, low, close, volume
+            SELECT CAST(ts AS DATE), open, high, low, close, volume
             FROM spot_candles
             WHERE instrument_token = ?
-              AND interval = '1m'
-              AND ts <= ?
+              AND interval = 'day'
+              AND CAST(ts AS DATE) < ?
             ORDER BY ts DESC
             LIMIT ?
             """,
-            [token, context.ts, 6000],
+            [
+                token,
+                cutoff_date,
+                self._price_action_settings.daily_history_limit,
+            ],
         ).fetchall()
 
         if not rows:
             return {
                 "available": False,
                 "complete": False,
-                "state": "INSUFFICIENT_DATA",
-                "reason": "no_1m_history",
+                "state": None,
+                "reason": "no_completed_daily_history",
+                "classifier_version": PRICE_ACTION_CLASSIFIER_VERSION,
                 "decision_eligibility_asserted": False,
             }
 
-        rows = list(reversed(rows))
-        closes = [float(row[4]) for row in rows]
-        highs = [float(row[2]) for row in rows]
-        lows = [float(row[3]) for row in rows]
-
-        return compute_price_action(
-            closes=closes,
-            highs=highs,
-            lows=lows,
-            settings=self._price_action_settings,
-        )
+        bars = [
+            DailyBar(
+                trade_date=row[0],
+                open=float(row[1]),
+                high=float(row[2]),
+                low=float(row[3]),
+                close=float(row[4]),
+                volume=float(row[5] or 0.0),
+            )
+            for row in reversed(rows)
+        ]
+        result = classify_daily_price_action(bars, self._price_action_settings)
+        result["source"] = "spot_candles.day"
+        result["bar_cutoff_exclusive"] = cutoff_date.isoformat()
+        result["bar_completion_policy"] = "exclude_current_ist_calendar_date"
+        result["instrument_token"] = token
+        return result
 
     def _term_structure(
         self,
