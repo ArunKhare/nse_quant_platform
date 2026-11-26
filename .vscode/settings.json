@@ -11,9 +11,28 @@
     "pylint.path": [
         "${workspaceFolder}/.venv/Scripts/pylint"
     ],
-
     "pylint.args": [
-        "--load-plugins=pylint_pydantic"
+        "--load-plugins=pylint_pydantic",
+        "--init-hook=import sys; sys.path.insert(0, '.')"
     ],
-
+    "files.watcherExclude": {
+        "**/.git/objects/**": true,
+        "**/.venv/**": true,
+        "**/venv/**": true,
+        "**/test_results/**": true,
+        "**/.pytest_cache/**": true,
+        "**/.mypy_cache/**": true,
+        "**/.ruff_cache/**": true,
+        "**/*.duckdb*": true
+    },
+    "python.analysis.exclude": [
+        "**/test_results/**",
+        "**/.pytest_cache/**",
+        "**/.mypy_cache/**",
+        "**/.ruff_cache/**"
+    ],
+    "[python]": {
+        "editor.defaultFormatter": null,
+        "editor.formatOnSave": false,
+    },
 }

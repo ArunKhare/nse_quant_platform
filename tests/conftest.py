@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 import gc
+import json
 import logging
 import os
 import shutil
-import subprocess
 import time
 from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
@@ -14,6 +14,7 @@ from typing import Any
 import duckdb
 import pandas as pd
 import pytest
+from data_platform.native_failure_acceptance_lab import NativeFailureLab
 
 from nse_quant.core.models import (
     ChainSnapshot,
@@ -27,6 +28,7 @@ from nse_quant.core.models import (
     TradeProposal,
 )
 from nse_quant.core.settings import Settings, get_settings
+from nse_quant.data_platform import publication_admission as _policy
 from nse_quant.execution.broker import PaperBroker
 from nse_quant.market_data.replay_provider import (
     ReplayMarketDataProvider,
@@ -36,7 +38,6 @@ from nse_quant.persistence.duckdb_store import DuckDBStore
 from nse_quant.research.evidence_plugins.base import DecisionContext
 from nse_quant.research.regime_risk_policy import RegimeRiskLimits
 from nse_quant.strategy.decision_loop import DecisionLoop
-from tests.data_platform.native_failure_acceptance_lab import NativeFailureLab
 
 # _COLLECTOR_OPTIONS = ("s2_evidence_output",)
 
@@ -78,7 +79,7 @@ def cap_duckdb_resources():
 
     def bounded_connect(*args, **kwargs):
         config = dict(kwargs.get("config") or {})
-        config.setdefault("memory_limit", "2500MB")
+        config.setdefault("memory_limit", "3750MB")
         config.setdefault("threads", 2)
         kwargs["config"] = config
         return original_connect(*args, **kwargs)
@@ -105,26 +106,98 @@ def _seed_lock(lock_path: Path):
 
 @pytest.fixture(scope="session")
 def _seed_native_failure_lab(tmp_path_factory):
-    """Build NativeFailureLab ONCE per worker (serialized across workers) and snapshot."""
+    """Build NativeFailureLab ONCE across all xdist workers and snapshot via meta.json."""
+    shared_dir = tmp_path_factory.getbasetemp().parent
+    backup_root = shared_dir / "native_failure_lab_shared_backup"
+    lock_path = shared_dir / "native_failure_lab_seed.lock"
     work_root = tmp_path_factory.mktemp("native_failure_lab_work")
-    backup_root = tmp_path_factory.mktemp("native_failure_lab_backup")
-    lock_path = tmp_path_factory.getbasetemp().parent / "native_failure_lab_seed.lock"
 
     with _seed_lock(lock_path):
-        lab_instance = NativeFailureLab(work_root)
+        if not (backup_root / "meta.json").exists():
+            seed_tmp = shared_dir / "native_failure_lab_seed_tmp"
+            shutil.rmtree(seed_tmp, ignore_errors=True)
+            seed_tmp.mkdir(parents=True, exist_ok=True)
 
-    shutil.copytree(work_root, backup_root, dirs_exist_ok=True)
+            # Run the full 8-DB producer pipeline once
+            seeded = NativeFailureLab(seed_tmp)
+
+            meta = {
+                "at": seeded.at.isoformat(),
+                "identity": seeded.identity,
+                "raw_hex": seeded.raw.hex(),
+                "original_receipt_id": seeded.original.receipt_id,
+                "capture": seeded.capture,
+                "build_id": seeded.build_id,
+                "bundle_id": seeded.bundle_id,
+                "publication_id": seeded.publication_id,
+            }
+            (seed_tmp / "meta.json").write_text(
+                json.dumps(meta, sort_keys=True),
+                encoding="utf-8",
+            )
+
+            # Atomic rename into place so other workers never see a partial directory
+            shutil.rmtree(backup_root, ignore_errors=True)
+            seed_tmp.replace(backup_root)
+
+    # Copy the clean snapshot into this worker's isolated work_root
+    shutil.copytree(backup_root, work_root, dirs_exist_ok=True)
+    meta = json.loads((work_root / "meta.json").read_text(encoding="utf-8"))
+
+    # Hydrate NativeFailureLab without calling __init__
+    lab_instance = NativeFailureLab.__new__(NativeFailureLab)
+    lab_instance.paths = {
+        role: work_root / f"{role}.duckdb"
+        for role in (
+            "bronze",
+            "frames",
+            "references",
+            "assessments",
+            "gold",
+            "staging",
+            "publications",
+            "captures",
+        )
+    }
+    lab_instance.at = datetime.fromisoformat(meta["at"]).astimezone(UTC)
+    lab_instance.identity = dict(meta["identity"])
+    lab_instance.artifacts = work_root / "artifacts"
+    lab_instance.raw = bytes.fromhex(meta["raw_hex"])
+    lab_instance.original = _policy.replay_admission_receipt(
+        lab_instance.raw,
+        expected_receipt_id=meta["original_receipt_id"],
+    )
+    lab_instance.capture = dict(meta["capture"])
+    lab_instance.build_id = meta["build_id"]
+    lab_instance.bundle_id = meta["bundle_id"]
+    lab_instance.publication_id = meta["publication_id"]
+
     return work_root, backup_root, lab_instance
 
 
 @pytest.fixture
 def lab(_seed_native_failure_lab):
     work_root, backup_root, lab_instance = _seed_native_failure_lab
-    shutil.rmtree(work_root)
-    subprocess.run(
-        ["cp", "-a", "--reflink=auto", str(backup_root), str(work_root)],
-        check=True,
-    )
+
+    # Remove any stray WAL files left by writable fault injections
+    for wal in work_root.glob("*.wal"):
+        wal.unlink()
+
+    # Only restore files whose size or mtime differs from backup_root
+    for src in backup_root.iterdir():
+        if src.name == "meta.json":
+            continue
+        dst = work_root / src.name
+        if src.is_dir():
+            shutil.rmtree(dst, ignore_errors=True)
+            shutil.copytree(src, dst)
+        elif (
+            not dst.exists()
+            or dst.stat().st_size != src.stat().st_size
+            or dst.stat().st_mtime_ns != src.stat().st_mtime_ns
+        ):
+            shutil.copy2(src, dst)
+
     return lab_instance
 
 
@@ -252,10 +325,19 @@ def seed_daily_candles(
 
 @pytest.fixture(scope="session")
 def _template_duckdb(tmp_path_factory) -> Path:
-    """Create and initialize the DuckDB schema once per xdist worker."""
-    template_path = tmp_path_factory.mktemp("db_template") / "template.duckdb"
-    store = DuckDBStore(path=template_path)
-    store.close()
+    """Create and initialize the DuckDB schema ONCE across all xdist workers."""
+    shared_dir = tmp_path_factory.getbasetemp().parent
+    template_path = shared_dir / "shared_template.duckdb"
+    lock_path = shared_dir / "shared_template.lock"
+
+    with _seed_lock(lock_path):
+        if not template_path.exists():
+            tmp_db = shared_dir / "shared_template_tmp.duckdb"
+            tmp_db.unlink(missing_ok=True)
+            store = DuckDBStore(path=tmp_db)
+            store.close()
+            tmp_db.replace(template_path)
+
     return template_path
 
 
