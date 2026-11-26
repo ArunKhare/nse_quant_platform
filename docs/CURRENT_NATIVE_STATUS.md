@@ -195,7 +195,8 @@ step. It does NOT establish India VIX model suitability as the charter's
 30-day constant-maturity option IV, wire the feature into `DecisionLoop`, alter
 the VRP gate, grant decision eligibility, authorize live acquisition, or lift
 existing publication and operational cutover holds. All such authority flags
-remain false. Local QA for this tranche is pending user execution.
+remain false. The platform owner subsequently reported focused QA/tests passed;
+this is owner-reported acceptance, not assistant-reproduced validation.
 
 
 ## 2026-11-27 — India VIX IV30 proxy suitability diagnostics
@@ -216,3 +217,38 @@ does not authenticate/replay its supplied source artifacts or establish historic
 availability. It does not change the VRP evaluator, DecisionLoop, publication,
 decision eligibility, acquisition, or trading authority. All authority flags
 remain false. See `docs/INDIA_VIX_IV30_PROXY_SUITABILITY.md`.
+
+
+
+## 2026-11-27 — native surface evidence acceptance boundary
+
+Repository inspection found that durable observational surface recording was
+already implemented in:
+
+- `src/nse_quant/analytics/constant_maturity_inputs.py`
+- `src/nse_quant/data_platform/surface_evidence_bundle.py`
+- `src/nse_quant/data_platform/native_surface_recording.py`
+
+The native recorder reads premiums only through exact native option-chain Bronze
+pins, retains the reviewed calendar/forward/rate artifact bytes and calculation
+policy with a content-addressed Silver variant, and recomputes the surface bundle
+against the original Bronze snapshots during read-only replay. Original audit
+success and variant uniqueness are required; competing valid content under one
+observation identity is quarantined. This remains observation-only.
+
+Added `tests/data_platform/test_native_surface_recording.py` for native
+Bronze-to-Silver recording, read-only replay, exact retry, conflicting-variant
+quarantine, artifact-pin integrity and original-audit enforcement. The tests are
+supplied but not yet owner-QA-confirmed. Therefore surface evidence implementation
+is present; native integration acceptance remains open.
+
+This recorder does not authenticate the issuer of supplied calendar/forward/rate
+artifacts, independently establish their historical availability, or claim an
+atomic snapshot across Bronze and Silver databases. It does not produce paired
+India VIX/surface history or establish proxy suitability. Those are separate
+evidence and research gates.
+
+The next acceptance action is operator execution of the focused surface recorder,
+bundle and constant-maturity tests plus Ruff/mypy. Do not wire the surface or
+India VIX candidate into VRP/DecisionLoop, publish Gold, activate live acquisition,
+or change decision eligibility on the basis of this implementation alone.
