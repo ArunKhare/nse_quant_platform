@@ -535,3 +535,15 @@ and pre-register numeric suitability tolerances before inspecting holdout
 results. Until then, India VIX remains an observational candidate only; no VRP
 or DecisionLoop integration, Gold publication, live acquisition activation,
 decision eligibility, or trading authority is granted.
+
+Focused operator QA commands for the new native surface recorder tranche:
+
+    uv run pytest -q tests/data_platform/test_native_surface_recording.py tests/data_platform/test_surface_evidence_bundle.py tests/data_platform/test_native_option_chain_snapshot.py tests/analytics/test_s2_constant_maturity_inputs.py
+    uv run ruff check src/nse_quant/data_platform/native_surface_recording.py src/nse_quant/data_platform/surface_evidence_bundle.py tests/data_platform/test_native_surface_recording.py
+    uv run mypy src/nse_quant/data_platform/native_surface_recording.py src/nse_quant/data_platform/surface_evidence_bundle.py src/nse_quant/analytics/constant_maturity_inputs.py
+
+Then run the proxy evaluator selection separately:
+
+    uv run pytest -q tests/research/test_india_vix_iv30_suitability.py
+    uv run ruff check src/nse_quant/research/india_vix_iv30_suitability.py tests/research/test_india_vix_iv30_suitability.py
+    uv run mypy src/nse_quant/research/india_vix_iv30_suitability.py
