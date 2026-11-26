@@ -152,3 +152,32 @@ does not alter VRP or DecisionLoop behavior.
 
 See `docs/INDIA_VIX_IV30_PROXY_SUITABILITY.md` for required evidence and review
 criteria before any suitability decision.
+
+
+
+## 2026-11-27 — paired India VIX / internal-CM proxy study
+
+Added the research-only paired study workflow in
+`src/nse_quant/research/india_vix_iv30_proxy_study.py`. It consumes the
+existing exact VIX Bronze/Silver and native option-chain Bronze/surface Silver
+readers; it does not add a capture or acquisition path.
+
+The workflow derives source availability from the retained Silver record and
+the original successful audit completion, uses the later availability/receive
+time as pair as-of, and rejects pairs outside source freshness or the 30-second
+source-time synchronization limit. Historical imports whose source is stale by
+the time they become available cannot be backdated into a valid pair.
+
+A separate file-backed study journal retains an immutable preregistered numeric
+policy, source-pinned pair set, exact market-condition artifact bytes and audited
+evaluation report. The default condition coverage is QUIET, NORMAL,
+ELEVATED_VOLATILITY, EVENT, EXPIRY and STRUCTURAL; labels must come from
+reviewed, pinned external condition artifacts and are not inferred or
+authenticated by the study code. No numeric acceptance thresholds are
+defaulted. Pair and report replay APIs recompute against their original pins.
+
+This does not make India VIX suitable for VRP, publish a Gold feature, change
+the VRP evaluator or DecisionLoop, or assert decision eligibility. Real source
+coverage, operator QA and explicit human research review remain outstanding.
+See `docs/INDIA_VIX_IV30_PROXY_SUITABILITY.md` and
+`ouput/research.md`.
