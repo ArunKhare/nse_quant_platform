@@ -685,6 +685,7 @@ def replay_pair_set(
             base.separate(source, other)
     _file_backed(reader)
     base.readonly(reader)
+    vix.silver_target(reader)
     stored, policy_id, pair_set_recorded_at = _load_pair_set(reader, pair_set_id)
     policy, registered_at = _load_policy(reader, policy_id)
     if registered_at > pair_set_recorded_at:
@@ -729,6 +730,7 @@ def replay_evaluation_report(
     vix.execution(actor_id, code_revision)
     _file_backed(conn)
     base.readonly(conn)
+    vix.silver_target(conn)
     if not _pin(expected_report_sha256):
         raise ValueError("EXACT_PROXY_REPORT_PIN_REQUIRED")
     rows = conn.execute(
