@@ -1,7 +1,7 @@
 """Research-only paired India VIX / NIFTY surface-IV30 proxy diagnostics."""
 
 from dataclasses import replace
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
