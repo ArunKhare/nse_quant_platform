@@ -90,6 +90,8 @@ python scripts/loop_status.py --config config/settings.test.yaml
 | `debug_iron_condor.py` | Debugs iron-condor proposal generation and gates. | `python scripts/debug_iron_condor.py --symbol NIFTY` |
 | `debug_option_stream.py` | Debugs live option-stream capture. | `python scripts/debug_option_stream.py` |
 | `decision_report.py` | Prints a human-readable decision report. | `python scripts/decision_report.py --help` |
+| `paper_loop_vrp_readiness_report.py` | Builds a read-only HAR-RV, IV30 and VRP readiness report from the latest paper-loop evidence. | `uv run python scripts/paper_loop_vrp_readiness_report.py --input logs/paper_loop_last_decision.json` |
+
 | `run_platform.py` | Starts the combined platform entry point. | `python scripts/run_platform.py --help` |
 | `run_stream_check.py` | Checks live market-data streaming. | `python scripts/run_stream_check.py` |
 
