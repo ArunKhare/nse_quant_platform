@@ -609,3 +609,43 @@ real source-data coverage remain open. After QA, register the research-approved
 numeric policy before persisting any holdout pair set, then review the report
 and replay evidence. The D8 proxy remains non-authoritative until a separate
 human model-suitability decision and separately approved VRP-consumption change.
+
+
+## 2026-11-27 — D8 paired-source proxy-study tranche completion
+
+The platform owner reports that points 1–6 of the D8 paired-source proxy-study
+tranche are complete. This status update records owner-reported completion; the
+assistant has not independently executed the operator QA commands or inspected
+a resulting empirical study report.
+
+Completed scope:
+
+1. Replayed the retained India VIX Bronze/Silver and option-chain Bronze/surface
+   Silver sources to construct synchronized, provenance-pinned NIFTY IV30 pairs.
+2. Registered the immutable, explicit numerical acceptance policy before
+   persisting the associated pair set.
+3. Evaluated all six required market-condition categories: QUIET, NORMAL,
+   ELEVATED_VOLATILITY, EVENT, EXPIRY and STRUCTURAL, with condition-specific
+   calibration and chronological holdout metrics.
+4. Implemented exact pair-set source reconstruction and deterministic report
+   recomputation, including SHA-256 integrity verification.
+5. Reconciled the research documentation with the implemented workflow and its
+   evidence boundaries.
+6. Preserved the non-authoritative boundary: no VRP or DecisionLoop integration,
+   Gold publication, live acquisition activation, decision eligibility or
+   trading authority is introduced by this tranche.
+
+Completion of the implementation workflow is not, by itself, a finding that
+India VIX is a suitable substitute for internal constant-maturity IV30. Any
+empirical suitability conclusion still requires actual retained source data,
+sufficient coverage across the required conditions, review of the resulting
+holdout evidence, and a separately approved model-suitability decision using
+the preregistered policy. Hashes establish byte identity, not external issuer
+authenticity; the independent source stores do not provide an atomic
+cross-database snapshot. No numerical acceptance thresholds are inferred or
+changed by this status update.
+
+The prior “Operator QA required” wording above is superseded as an implementation
+status by this owner report. No exact command output or independent QA execution
+evidence was supplied with the report, so this addendum does not claim
+independently verified test, lint or type-check results.
