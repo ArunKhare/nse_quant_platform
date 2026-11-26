@@ -135,8 +135,8 @@ def evaluate_india_vix_iv30_proxy(
     """
     if not isinstance(pairs, Sequence) or isinstance(pairs, (str, bytes)):
         raise ValueError("PROXY_PAIR_SEQUENCE_REQUIRED")
-    if len(pairs) < 2:
-        raise ValueError("AT_LEAST_TWO_MATCHED_PAIRS_REQUIRED")
+    if len(pairs) < 1:
+        raise ValueError("AT_LEAST_ONE_MATCHED_PAIR_REQUIRED")
     if (
         isinstance(max_pair_gap_seconds, bool)
         or not isinstance(max_pair_gap_seconds, (int, float))
