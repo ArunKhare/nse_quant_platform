@@ -83,10 +83,13 @@ import, installation or replay. Broker and decision modules are not imported.
 
 ## Deferred
 
-Surface evidence recording is NOT implemented here. Persisted option batches do
-not by themselves supply a retained forward/rate/expiry-close/calendar evidence
-bundle. Hash/reference strings alone do not establish exact Black-76 replay.
-Full-cycle paper validation and wider S1–S6 acceptance remain outstanding.
+Surface evidence recording is NOT implemented by this VIX-specific module.
+Persisted option-chain batches do not by themselves supply a retained
+forward/rate/expiry-close/calendar evidence bundle. The separate native surface
+path is implemented in `native_surface_recording.py` and
+`surface_evidence_bundle.py`; see the 2026-11-27 status below. Hash/reference
+strings alone do not establish exact Black-76 replay. Full-cycle paper validation
+and wider S1–S6 acceptance remain outstanding.
 
 
 ## 2026-11-25 — observational IV30 Gold candidate boundary
@@ -138,11 +141,14 @@ strict chronological ordering, and a 30-second default source-time match. It
 reports full-sample, calibration and chronological holdout error diagnostics.
 
 This is an evaluator contract, not a data-ingestion path or empirical finding.
-No durable option-surface evidence capture/replay has been added. Minimum sample
-markers do not constitute acceptance thresholds; no numeric suitability limits
-have been approved. The evaluator cannot authenticate source artifacts or assert
-historical availability. It never asserts suitability, publication or decision
-eligibility and does not alter VRP or DecisionLoop behavior.
+The separate native surface recorder/replay already exists in
+`native_surface_recording.py` and `surface_evidence_bundle.py`; dedicated native
+integration tests have been added, with operator QA acceptance still pending.
+The VIX evaluator does not consume or authenticate those source artifacts and
+cannot assert their historical availability. Minimum sample markers do not
+constitute acceptance thresholds; no numeric suitability limits have been
+approved. It never asserts suitability, publication or decision eligibility and
+does not alter VRP or DecisionLoop behavior.
 
 See `docs/INDIA_VIX_IV30_PROXY_SUITABILITY.md` for required evidence and review
 criteria before any suitability decision.
