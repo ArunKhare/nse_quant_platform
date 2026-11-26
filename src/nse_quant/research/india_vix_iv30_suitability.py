@@ -11,6 +11,7 @@ import re
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
+from zoneinfo import ZoneInfo
 from statistics import median
 from typing import Any
 
@@ -21,6 +22,7 @@ MINIMUM_PAIRS = 60
 MINIMUM_HOLDOUT_PAIRS = 20
 MINIMUM_SESSIONS = 20
 DEFAULT_MAX_PAIR_GAP_SECONDS = 30.0
+IST = ZoneInfo("Asia/Kolkata")
 
 
 @dataclass(frozen=True)
@@ -160,6 +162,8 @@ def evaluate_india_vix_iv30_proxy(
         if not isinstance(pair.trade_date, date) or isinstance(pair.trade_date, datetime):
             raise ValueError("TRADE_DATE_REQUIRED")
         as_of = _utc(pair.as_of, "as_of")
+        if as_of.astimezone(IST).date() != pair.trade_date:
+            raise ValueError("TRADE_DATE_DOES_NOT_MATCH_AS_OF_IST")
         vix_source = _utc(pair.india_vix_source_time, "india_vix_source_time")
         vix_received = _utc(pair.india_vix_received_at, "india_vix_received_at")
         surface_source = _utc(pair.surface_source_time, "surface_source_time")
@@ -178,13 +182,17 @@ def evaluate_india_vix_iv30_proxy(
         _pin(pair.surface_batch_sha256, "SURFACE_BATCH")
         normalized.append(pair)
 
-    holdout_count = max(MINIMUM_HOLDOUT_PAIRS, math.ceil(len(normalized) * holdout_fraction))
-    if holdout_count >= len(normalized):
-        holdout_count = max(1, math.ceil(len(normalized) * holdout_fraction))
-    split = len(normalized) - holdout_count
-    calibration = normalized[:split]
-    holdout = normalized[split:]
-    sessions = len({pair.trade_date for pair in normalized})
+    session_dates = sorted({pair.trade_date for pair in normalized})
+    holdout_session_count = max(1, math.ceil(len(session_dates) * holdout_fraction))
+    holdout_start = len(session_dates) - holdout_session_count
+    holdout_dates = set(session_dates[holdout_start:])
+    holdout = [pair for pair in normalized if pair.trade_date in holdout_dates]
+    while len(holdout) < MINIMUM_HOLDOUT_PAIRS and holdout_start > 0:
+        holdout_start -= 1
+        holdout_dates = set(session_dates[holdout_start:])
+        holdout = [pair for pair in normalized if pair.trade_date in holdout_dates]
+    calibration = [pair for pair in normalized if pair.trade_date not in holdout_dates]
+    sessions = len(session_dates)
     sufficient = (
         len(normalized) >= MINIMUM_PAIRS
         and len(holdout) >= MINIMUM_HOLDOUT_PAIRS
