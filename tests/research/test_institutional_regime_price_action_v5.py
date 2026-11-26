@@ -8,6 +8,8 @@ from nse_quant.research.institutional_regime_price_action_v5 import (
     PRICE_ACTION_CLASSIFIER_VERSION,
     DailyBar,
     InstitutionalRegimePriceActionSettings,
+    _Metrics,
+    _classify,
     classify_daily_price_action,
 )
 
@@ -130,3 +132,82 @@ def test_settings_reject_history_limit_below_required_minimum() -> None:
             daily_history_limit=267,
             minimum_daily_bars=268,
         )
+
+
+@pytest.mark.parametrize(
+    ("metrics", "expected"),
+    [
+        (
+            _Metrics(18.0, 10.0, 10.0, 0.15, 70.0, 3.0, 85.0, 50.0, 0.5, 0.0, 0.0),
+            "HIGH_VOL_CHOP",
+        ),
+        (
+            _Metrics(35.0, 35.0, 5.0, 0.60, 35.0, 2.0, 50.0, 50.0, 0.8, 20.0, 1.0),
+            "STRONG_BULL_TREND",
+        ),
+        (
+            _Metrics(35.0, 5.0, 35.0, 0.60, 35.0, 2.0, 50.0, 50.0, 0.2, -20.0, -1.0),
+            "STRONG_BEAR_TREND",
+        ),
+        (
+            _Metrics(15.0, 10.0, 10.0, 0.30, 50.0, 1.0, 20.0, 5.0, 0.5, 0.0, 0.0),
+            "COMPRESSION",
+        ),
+        (
+            _Metrics(15.0, 10.0, 10.0, 0.30, 50.0, 2.0, 50.0, 50.0, 0.8, 0.0, 0.0),
+            "RANGE_HIGH",
+        ),
+        (
+            _Metrics(15.0, 10.0, 10.0, 0.30, 50.0, 2.0, 50.0, 50.0, 0.2, 0.0, 0.0),
+            "RANGE_LOW",
+        ),
+    ],
+)
+def test_all_six_canonical_price_action_states(
+    metrics: _Metrics,
+    expected: str,
+) -> None:
+    state, confidence = _classify(metrics, None)
+
+    assert state == expected
+    assert 0.0 <= confidence <= 1.0
+
+
+def test_confirmed_trend_is_held_through_adx_neutral_band() -> None:
+    metrics = _Metrics(
+        22.0,
+        30.0,
+        10.0,
+        0.50,
+        45.0,
+        2.0,
+        50.0,
+        50.0,
+        0.8,
+        10.0,
+        0.5,
+    )
+
+    state, _confidence = _classify(metrics, "STRONG_BULL_TREND")
+
+    assert state == "STRONG_BULL_TREND"
+
+
+def test_trend_is_not_held_below_explicit_adx_exit_threshold() -> None:
+    metrics = _Metrics(
+        19.0,
+        30.0,
+        10.0,
+        0.50,
+        45.0,
+        2.0,
+        50.0,
+        50.0,
+        0.8,
+        10.0,
+        0.5,
+    )
+
+    state, _confidence = _classify(metrics, "STRONG_BULL_TREND")
+
+    assert state != "STRONG_BULL_TREND"
