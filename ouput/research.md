@@ -663,8 +663,9 @@ The implementation calculates Wilder ADX(14), +DI/-DI, Kaufman ER(20),
 CHOP(14), ATR(14), rolling 252-observation ATR percentile, Bollinger
 BandWidth(20, 2) percentile over 120 observations, 60-day range position,
 20-day close change and SMA20 slope. The minimum history is 267 completed daily
-bars: the first valid 252-observation ATR percentile needs 266 bars after
-Wilder initialization, and the second close is required to confirm a new state.
+bars: 14 prior true-range observations initialize Wilder ATR, 252 valid ATR
+observations require 266 total bars, and one additional close is required to
+confirm a new state.
 
 The provisional first-match rules follow section 3.4 above:
 - `HIGH_VOL_CHOP`: ATR percentile >= 70, (ADX < 20 or CHOP > 61.8), ER20 < 0.22.
