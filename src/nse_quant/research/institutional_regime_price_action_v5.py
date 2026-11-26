@@ -78,7 +78,9 @@ def _unavailable(reason: str, **details: Any) -> dict[str, Any]:
 
 
 def _percentile_rank(values: list[float], current: float) -> float:
-    return 100.0 * sum(value <= current for value in values) / len(values)
+    less = sum(value < current for value in values)
+    equal = sum(value == current for value in values)
+    return 100.0 * (less + 0.5 * equal) / len(values)
 
 
 def _adx_series(
@@ -243,7 +245,7 @@ def _clip(value: float) -> float:
     return max(0.0, min(1.0, value))
 
 
-def _classify(metrics: _Metrics, prior_state: str | None) -> tuple[str, float]:
+def _classify(metrics: _Metrics, prior_state: str | None) -> tuple[str | None, float]:
     bullish_direction = (
         metrics.change20 > 0
         and metrics.sma20_slope > 0
@@ -325,7 +327,7 @@ def _classify(metrics: _Metrics, prior_state: str | None) -> tuple[str, float]:
         )
         return "RANGE_LOW", confidence
 
-    return "RANGE_HIGH" if metrics.range_position >= 0.5 else "RANGE_LOW", 0.0
+    return None, 0.0
 
 
 def classify_daily_price_action(
@@ -365,7 +367,7 @@ def classify_daily_price_action(
         if metrics is None:
             continue
         raw_state, confidence = _classify(metrics, confirmed_state)
-        if confidence < settings.confidence_floor:
+        if raw_state is None or confidence < settings.confidence_floor:
             candidate_state = None
             candidate_count = 0
             continue
