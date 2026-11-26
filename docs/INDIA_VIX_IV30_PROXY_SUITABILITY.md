@@ -90,7 +90,8 @@ minimums returns only `DIAGNOSTIC_ONLY_REVIEW_REQUIRED`; it is not a pass.
 2. Select synchronized NIFTY VIX/surface source revisions. Supply a separately
    reviewed, pinned condition artifact for each pair, tagged from the controlled
    taxonomy: QUIET, NORMAL, ELEVATED_VOLATILITY, EVENT, EXPIRY and STRUCTURAL.
-   The study code does not infer these labels or authenticate their issuer.
+   All six are mandatory for evaluation. The study code does not infer these
+   labels or authenticate their issuer.
 3. Explicitly choose numeric limits for absolute bias, MAE, RMSE, p90 error,
    minimum correlation and OLS slope range. Register the immutable policy in the
    study journal before persisting the pair set. There are deliberately no
