@@ -268,9 +268,9 @@ A separate file-backed study journal stores immutable audited numerical policy
 registrations, source-pinned pair sets and deterministic evaluation reports.
 Policy registration must precede pair-set recording. The pair set retains the
 source revision/observation pins and canonical condition-artifact bytes; the
-condition taxonomy covers quiet, normal, elevated-volatility, event, expiry and
-structural conditions. Condition tags are supplied from reviewed external
-evidence, not inferred or authenticated by this module.
+required condition taxonomy covers all six strata: quiet, normal,
+elevated-volatility, event, expiry and structural. Condition tags are supplied
+from reviewed external evidence, not inferred or authenticated by this module.
 
 The evaluator now reports aggregate and condition-specific calibration/holdout
 metrics. Numerical tolerances are explicit preregistered policy inputs; no
