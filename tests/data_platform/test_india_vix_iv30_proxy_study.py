@@ -10,9 +10,9 @@ from zoneinfo import ZoneInfo
 
 import duckdb
 import pytest
-
 import test_india_vix_recording as vix_fixture
 import test_native_surface_recording as surface_fixture
+
 from nse_quant.data_platform import native_surface_recording as surface
 from nse_quant.research import india_vix_iv30_proxy_study as study
 
@@ -68,9 +68,7 @@ def stores(tmp_path: Path, monkeypatch):
         duckdb.connect(str(surface_silver_path), read_only=True) as surface_reader,
     ):
         vix_available, _ = study._vix_available_at(vix_reader, vix_revision)
-        surface_available, _ = study._surface_available_at(
-            surface_reader, "c" * 64, surface_digest
-        )
+        surface_available, _ = study._surface_available_at(surface_reader, "c" * 64, surface_digest)
     condition = _condition(max(vix_available, surface_available), ["NORMAL"])
     request = study.ProxyPairRequest(
         vix_silver_revision_id=vix_revision,
@@ -126,9 +124,7 @@ def test_policy_is_preregistered_before_immutable_pairset_and_report(stores):
     bp, sp, op, vp, request, _now, journal = stores
     with duckdb.connect(str(journal)) as writer:
         study.initialize_study_store(writer, actor_id=OWNER, code_revision=REVISION)
-        policy_id = study.register_acceptance_policy(
-            writer, _policy(), actor_id=OWNER, code_revision=REVISION
-        )
+        policy_id = study.register_acceptance_policy(writer, _policy(), actor_id=OWNER, code_revision=REVISION)
         with (
             duckdb.connect(str(bp), read_only=True) as vix_bronze,
             duckdb.connect(str(sp), read_only=True) as vix_silver,
@@ -146,9 +142,7 @@ def test_policy_is_preregistered_before_immutable_pairset_and_report(stores):
                 actor_id=OWNER,
                 code_revision=REVISION,
             )
-        report = study.persist_evaluation_report(
-            writer, pair_set_id, actor_id=OWNER, code_revision=REVISION
-        )
+        report = study.persist_evaluation_report(writer, pair_set_id, actor_id=OWNER, code_revision=REVISION)
         report_sha256 = study.evaluation_report_sha256(report)
     assert report["status"] == "INSUFFICIENT_EVIDENCE"
     assert report["suitability_asserted"] is False
@@ -167,9 +161,7 @@ def test_policy_is_preregistered_before_immutable_pairset_and_report(stores):
         duckdb.connect(str(vp), read_only=True) as surface_silver,
         duckdb.connect(str(journal), read_only=True) as reader,
     ):
-        reproduced = study.replay_pair_set(
-            vix_bronze, vix_silver, option_bronze, surface_silver, reader, pair_set_id
-        )
+        reproduced = study.replay_pair_set(vix_bronze, vix_silver, option_bronze, surface_silver, reader, pair_set_id)
         replayed_report = study.replay_evaluation_report(
             reader,
             pair_set_id,

@@ -3,12 +3,12 @@
 This report diagnoses supplied decision evidence. It never changes a gate,
 infers India VIX proxy suitability, or grants decision/execution authority.
 """
+
 from __future__ import annotations
 
 import json
 from pathlib import Path
 from typing import Any
-
 
 REPORT_VERSION = "paper_loop_vrp_readiness_v1"
 
@@ -54,14 +54,10 @@ def build_paper_loop_vrp_readiness_report(payload: dict[str, Any]) -> dict[str, 
     rv_reason = rv.get("reason") or rv.get("forecast_reason")
 
     history_sufficient = (
-        isinstance(observations, int)
-        and isinstance(minimum_observations, int)
-        and observations >= minimum_observations
+        isinstance(observations, int) and isinstance(minimum_observations, int) and observations >= minimum_observations
     )
     freshness_sufficient = (
-        isinstance(last_age, (int, float))
-        and isinstance(max_age, (int, float))
-        and last_age <= max_age
+        isinstance(last_age, (int, float)) and isinstance(max_age, (int, float)) and last_age <= max_age
     )
     calibration_sufficient = (
         isinstance(calibration_samples, int)
@@ -107,7 +103,10 @@ def build_paper_loop_vrp_readiness_report(payload: dict[str, Any]) -> dict[str, 
     is_30d = iv.get("constant_maturity_30d") is True
     if is_30d:
         iv_status = "30D_CM_SOURCE_PRESENT_REVIEW_REQUIRED"
-        iv_reason = "Input identifies a 30-day constant-maturity source; independent source and lineage validation remain required"
+        iv_reason = (
+            "Input identifies a 30-day constant-maturity source; independent source "
+            "and lineage validation remain required"
+        )
     elif iv_source is None:
         iv_status = "MISSING_IV_SOURCE_METADATA"
         iv_reason = "No implied-volatility source metadata was supplied"
@@ -174,7 +173,8 @@ def build_paper_loop_vrp_readiness_report(payload: dict[str, Any]) -> dict[str, 
 
     proxy = _stage(
         "NOT_EVALUATED_BY_PAPER_LOOP",
-        "Proxy suitability requires a separate synchronized India VIX versus internal_cm IV30 paired-source study, preregistered numerical policy, chronological holdout and human review",
+        "Proxy suitability requires a separate synchronized India VIX versus internal_cm IV30 paired-source study,"
+        " preregistered numerical policy, chronological holdout and human review",
         suitability_asserted=False,
         decision_eligibility_asserted=False,
         publication_asserted=False,
@@ -183,10 +183,14 @@ def build_paper_loop_vrp_readiness_report(payload: dict[str, Any]) -> dict[str, 
     if har_status != "READY":
         blockers.append("Restore complete, fresh HAR-RV history and eligible walk-forward calibration")
     if not is_30d:
-        blockers.append("Provide a separately validated 30-day constant-maturity IV input; near-expiry ATM IV is not a substitute")
+        blockers.append(
+            "Provide a separately validated 30-day constant-maturity IV input; near-expiry ATM IV is not a substitute"
+        )
     if not vrp_passed:
         blockers.append("Keep new entries blocked until the unchanged VRP gate has eligible inputs and passes")
-    blockers.append("Run the independent India VIX/internal_cm proxy study; paper-loop results do not establish proxy suitability")
+    blockers.append(
+        "Run the independent India VIX/internal_cm proxy study; paper-loop results do not establish proxy suitability"
+    )
 
     report = {
         "report_version": REPORT_VERSION,
@@ -234,7 +238,8 @@ def render_paper_loop_vrp_readiness_markdown(report: dict[str, Any]) -> str:
         "## 1. HAR-RV readiness",
         f"- Status: **{har.get('status')}**",
         f"- Complete observations: {har.get('observations_available')} / {har.get('minimum_observations')}",
-        f"- Last complete session age: {har.get('last_complete_session_age_days')} days (maximum {har.get('max_daily_close_age_days')})",
+        f"- Last complete session age: {har.get('last_complete_session_age_days')} \
+            days (maximum {har.get('max_daily_close_age_days')})",
         f"- Forecast available: {har.get('forecast_available')}",
         f"- Calibration samples: {har.get('calibration_samples')} / {har.get('calibration_minimum_samples')}",
         f"- Calibration margin: {har.get('calibration_margin')}",
@@ -263,7 +268,8 @@ def render_paper_loop_vrp_readiness_markdown(report: dict[str, Any]) -> str:
         [
             "",
             "## Authority boundary",
-            "This report is observational. It does not establish proxy suitability, decision eligibility, publication authority or trading authority. An unavailable VRP is not a negative VRP.",
+            "This report is observational. It does not establish proxy suitability, decision eligibility, \
+                publication authority or trading authority. An unavailable VRP is not a negative VRP.",
             "",
         ]
     )
