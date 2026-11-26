@@ -252,3 +252,39 @@ The next acceptance action is operator execution of the focused surface recorder
 bundle and constant-maturity tests plus Ruff/mypy. Do not wire the surface or
 India VIX candidate into VRP/DecisionLoop, publish Gold, activate live acquisition,
 or change decision eligibility on the basis of this implementation alone.
+
+
+
+## 2026-11-27 — D8 paired-source proxy study implementation
+
+Added `src/nse_quant/research/india_vix_iv30_proxy_study.py` and focused
+integration tests. The workflow replays exact retained VIX Bronze/Silver and
+option-chain Bronze/surface Silver source references, derives pair availability
+from successful original audit completion and recorded/receive clocks, and
+rejects source pairs outside the source freshness policies or the 30-second
+source-time synchronization bound.
+
+A separate file-backed study journal stores immutable audited numerical policy
+registrations, source-pinned pair sets and deterministic evaluation reports.
+Policy registration must precede pair-set recording. The pair set retains the
+source revision/observation pins and canonical condition-artifact bytes; the
+condition taxonomy covers quiet, normal, elevated-volatility, event, expiry and
+structural conditions. Condition tags are supplied from reviewed external
+evidence, not inferred or authenticated by this module.
+
+The evaluator now reports aggregate and condition-specific calibration/holdout
+metrics. Numerical tolerances are explicit preregistered policy inputs; no
+default suitability limits have been selected. Exact pair reconstruction and
+report recomputation APIs are included.
+
+This closes the implementation gap for source-replayed pair construction and
+preregistered diagnostic evaluation. It does NOT close empirical model
+suitability: no real synchronized historical sample, accepted numerical policy,
+or human research decision is supplied. Hashes do not authenticate external
+issuers; source stores are replayed independently, not as an atomic cross-store
+snapshot. All suitability/publication/decision authority flags remain false.
+No VRP evaluator, DecisionLoop, Gold publication, acquisition or trading path
+was changed.
+
+Operator QA is pending. Run the focused commands recorded in
+`ouput/research.md`; no local execution or passing result is claimed here.
