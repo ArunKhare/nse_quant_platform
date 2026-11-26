@@ -54,8 +54,16 @@ minimums returns only `DIAGNOSTIC_ONLY_REVIEW_REQUIRED`; it is not a pass.
   Pins are syntax-checked only.
 - It does not establish historical availability, atomic cross-store snapshots,
   session completeness, or source authenticity.
-- Durable, replayable option-surface evidence recording is still outstanding.
-  A surface value must not be fabricated from current quotes or reconstructed
+- A native surface evidence recording/replay implementation now exists in
+  `data_platform/native_surface_recording.py`, backed by
+  `surface_evidence_bundle.py` and the native option-chain Bronze reader. Its
+  dedicated native integration tests have been added but still require operator
+  QA acceptance. This is implementation presence, not completed S2 acceptance.
+- The recorder retains exact native snapshot pins plus caller-reviewed calendar,
+  forward and rate artifact bytes, and recomputes the complete Black-76 bundle on
+  replay. It does not authenticate external artifact issuers, prove historical
+  source availability, or provide an atomic cross-database snapshot.
+- A surface value must not be fabricated from current quotes or reconstructed
   with future information for a historical pair.
 - No empirical dataset is bundled and no empirical conclusion is made.
 - `suitability_asserted`, `decision_eligibility_asserted`, and
@@ -64,11 +72,15 @@ minimums returns only `DIAGNOSTIC_ONLY_REVIEW_REQUIRED`; it is not a pass.
 
 ## Required evidence before a suitability decision
 
-1. Implement separately governed durable option-surface evidence capture and
-   replay, including premium quotes, forward/rate evidence, expiry-close
-   calendar reference, exact source/receive clocks, and immutable source pins.
-2. Produce synchronized NIFTY pairs from the same observation window; enforce
-   the 30-second maximum source-time gap and point-in-time availability.
+1. Complete operator QA acceptance of the existing separately governed native
+   surface recorder/replay. Confirm native Bronze snapshot pin validation,
+   retained premium quotes, forward/rate artifacts, expiry-close calendar,
+   exact source/receive clocks, immutable Silver variants, original audit checks,
+   and exact replay. Resolve any test failures before treating this dependency as
+   closed.
+2. Produce synchronized NIFTY pairs from the same observation window using the
+   accepted recorder/replay outputs; enforce the 30-second maximum source-time
+   gap and independently establish point-in-time availability.
 3. Run the evaluator over a sufficiently broad period covering quiet, normal,
    elevated-volatility, event, expiry and structural market conditions.
 4. Review calibration and untouched chronological holdout separately. Report
