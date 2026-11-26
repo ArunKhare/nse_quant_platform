@@ -1,7 +1,8 @@
 """Daily-bar institutional price-action classifier (v5 component).
 
 The classifier is deterministic and observational. It consumes completed daily
-OHLCV bars only and never grants decision or execution eligibility.
+OHLCV bars only and never grants decision or execution eligibility. Thresholds
+remain provisional until walk-forward calibration on NIFTY history.
 """
 
 from __future__ import annotations
