@@ -288,3 +288,41 @@ was changed.
 
 Operator QA is pending. Run the focused commands recorded in
 `ouput/research.md`; no local execution or passing result is claimed here.
+
+
+## 2026-11-27 — Paper Loop + VRP readiness report
+
+Added the read-only report engine
+`src/nse_quant/research/paper_loop_vrp_readiness.py`, focused tests and
+`scripts/paper_loop_vrp_readiness_report.py`. The paper-loop runner now writes
+the latest structured decision result to
+`logs/paper_loop_last_decision.json` after each cycle. The artifact includes
+run ID, capture time, paper/dry-run flags and the exact result/evidence payload;
+it is a latest-cycle diagnostic artifact, not an immutable run archive.
+
+The report separately evaluates HAR-RV history, complete-session freshness,
+forecast availability and walk-forward calibration; identifies the supplied IV
+source and whether it is 30-day constant maturity; and reports the actual VRP
+gate state. It explicitly distinguishes unavailable VRP from a measured negative
+VRP, marks trailing close-to-close RV as diagnostic-only, and states that India
+VIX proxy suitability is NOT evaluated by a paper-loop run. It also carries
+other evidence-stage availability/completeness summaries and a bounded list of
+next actions.
+
+Run after a paper-loop cycle:
+
+```powershell
+uv run python scripts/paper_loop_vrp_readiness_report.py --input logs/paper_loop_last_decision.json
+```
+
+Optional structured output:
+
+```powershell
+uv run python scripts/paper_loop_vrp_readiness_report.py --input logs/paper_loop_last_decision.json --format json --output logs/paper_loop_vrp_readiness.json
+```
+
+This is observational diagnostics only. It does not change HAR-RV requirements,
+the VRP gate, India VIX proxy acceptance, decision eligibility, publication or
+trading authority. The latest-cycle JSON is overwritten by subsequent cycles;
+copy/archive it externally if a run-level evidence history is required. Operator
+QA is pending; no local execution or passing result is claimed.
