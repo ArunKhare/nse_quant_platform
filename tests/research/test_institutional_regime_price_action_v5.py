@@ -56,6 +56,7 @@ def test_completed_daily_bars_produce_canonical_bull_trend() -> None:
     assert result["state"] == "STRONG_BULL_TREND"
     assert result["classifier_version"] == PRICE_ACTION_CLASSIFIER_VERSION
     assert result["persistence_closes"] == 2
+    assert result["persistence_basis"] == "consecutive_available_daily_bars"
     assert result["decision_eligibility_asserted"] is False
     assert result["diagnostics"]["adx14"] >= 25.0
     assert result["diagnostics"]["er20"] >= 0.35
