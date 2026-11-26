@@ -566,6 +566,8 @@ def _criteria(metrics: dict[str, Any], policy: ProxyAcceptancePolicy) -> dict[st
 def evaluate_pair_set(conn: Any, pair_set_id: str, *, actor_id: str, code_revision: str) -> dict[str, Any]:
     """Evaluate only a preregistered immutable pair set; report review status, never approval."""
     vix.execution(actor_id, code_revision)
+    _file_backed(conn)
+    vix.silver_target(conn)
     pairs, policy_id, pair_set_recorded_at = _load_pair_set(conn, pair_set_id)
     policy, policy_registered_at = _load_policy(conn, policy_id)
     if policy_registered_at > pair_set_recorded_at:
@@ -663,7 +665,6 @@ def persist_evaluation_report(
     with ledger.execution(job):
         conn.execute(f"INSERT INTO {table} VALUES (?,?,?,?)", [pair_set_id, digest, raw, job])
     return report
-
 
 
 def replay_pair_set(
