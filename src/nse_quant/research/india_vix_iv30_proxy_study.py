@@ -7,6 +7,7 @@ import math
 from collections.abc import Sequence
 from dataclasses import asdict, dataclass
 from datetime import UTC, date, datetime
+from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -82,7 +83,12 @@ class ProxyAcceptancePolicy:
             "max_ols_slope",
         ):
             value = getattr(self, name)
-            if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or value <= 0:
+            if (
+                isinstance(value, bool)
+                or not isinstance(value, (int, float))
+                or not math.isfinite(value)
+                or value <= 0
+            ):
                 raise ValueError("POSITIVE_FINITE_POLICY_LIMIT_REQUIRED")
         if (
             isinstance(self.min_correlation, bool)
@@ -314,8 +320,15 @@ def _table(conn: Any, name: str) -> str:
     return vix.table(conn, name)
 
 
+def _file_backed(conn: Any) -> None:
+    paths = [row[2] for row in conn.execute("PRAGMA database_list").fetchall() if row[2]]
+    if not paths or any(not Path(value).is_file() for value in paths):
+        raise ValueError("FILE_BACKED_STUDY_DATABASE_REQUIRED")
+
+
 def initialize_study_store(conn: Any, *, actor_id: str, code_revision: str) -> None:
     vix.execution(actor_id, code_revision)
+    _file_backed(conn)
     vix.silver_target(conn)
     AuditLedger(conn).initialize()
     conn.execute("CREATE SCHEMA IF NOT EXISTS silver")
@@ -343,6 +356,7 @@ def register_acceptance_policy(
     code_revision: str,
 ) -> str:
     vix.execution(actor_id, code_revision)
+    _file_backed(conn)
     vix.silver_target(conn)
     raw = _policy_bytes(policy)
     policy_id = base.sha(raw)
@@ -402,10 +416,12 @@ def persist_pair_set(
 ) -> str:
     """Replay all requested source pairs, then persist one immutable preregistered study set."""
     vix.execution(actor_id, code_revision)
+    _file_backed(target)
     vix.silver_target(target)
     if not isinstance(requests, Sequence) or isinstance(requests, (str, bytes)) or not 1 <= len(requests) <= MAX_PAIRS:
         raise ValueError("BOUNDED_PROXY_PAIR_REQUESTS_REQUIRED")
     for source in (vix_bronze, vix_silver, option_bronze, surface_silver):
+        _file_backed(source)
         base.readonly(source)
         base.separate(source, target)
     for index, source in enumerate((vix_bronze, vix_silver, option_bronze, surface_silver)):
@@ -526,7 +542,11 @@ def evaluate_pair_set(conn: Any, pair_set_id: str, *, actor_id: str, code_revisi
     all_conditions_pass = True
     for condition in policy.required_conditions:
         values = result["condition_metrics"].get(condition)
-        if values is None or values["holdout"] is None or values["holdout"]["pairs"] < policy.minimum_holdout_pairs_per_condition:
+        if (
+            values is None
+            or values["holdout"] is None
+            or values["holdout"]["pairs"] < policy.minimum_holdout_pairs_per_condition
+        ):
             sufficient_conditions = False
             condition_results[condition] = dict(status="INSUFFICIENT_HOLDOUT_EVIDENCE", criteria=None)
             continue
@@ -539,7 +559,11 @@ def evaluate_pair_set(conn: Any, pair_set_id: str, *, actor_id: str, code_revisi
             holdout_metrics=values["holdout"],
             holdout_sessions=values["holdout_sessions"],
         )
-    overall_criteria = _criteria(result["holdout_metrics"], policy) if result["sample"]["holdout_pairs"] >= 20 else None
+    overall_criteria = (
+        _criteria(result["holdout_metrics"], policy)
+        if result["sample"]["holdout_pairs"] >= 20
+        else None
+    )
     if (
         result["assessment_status"] == "INSUFFICIENT_EVIDENCE"
         or not sufficient_conditions
