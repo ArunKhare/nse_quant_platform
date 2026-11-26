@@ -571,8 +571,9 @@ pairing and preregistered evaluation workflow.
   reports. The policy must be registered before its pair set is persisted.
 - Pair sets retain source revision/observation pins, source availability and
   receive clocks, and the exact canonical market-condition artifact bytes and
-  hash. Controlled tags are QUIET, NORMAL, ELEVATED_VOLATILITY, EVENT, EXPIRY
-  and STRUCTURAL; the workflow does not infer or authenticate those labels.
+  hash. All six controlled tags are mandatory: QUIET, NORMAL,
+  ELEVATED_VOLATILITY, EVENT, EXPIRY and STRUCTURAL. The workflow does not infer
+  or authenticate those labels.
 - Added exact source reconstruction through `replay_pair_set` and deterministic
   report recomputation through `replay_evaluation_report`.
 - Extended the pure suitability evaluator with condition-specific calibration
