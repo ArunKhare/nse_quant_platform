@@ -284,6 +284,12 @@ def replay_matched_pair(
     )
     source_times = (_utc(vix_observation["source_time"]), _utc(surface_result["source_time"]))
     received_times = (_utc(vix_observation["received_at"]), _utc(surface_result["received_at"]))
+    observation_as_of = (_utc(vix_observation["as_of"]), _utc(surface_result["as_of"]))
+    if (
+        vix_available < max(received_times[0], observation_as_of[0])
+        or surface_available < max(received_times[1], observation_as_of[1])
+    ):
+        raise ValueError("SOURCE_AUDIT_PRECEDES_OBSERVATION_AVAILABILITY")
     pair_as_of = max(vix_available, surface_available, *received_times)
     if any(value > pair_as_of for value in (*source_times, *received_times)):
         raise ValueError("PAIR_SOURCE_CLOCK_AFTER_AS_OF")
