@@ -366,6 +366,8 @@ def classify_daily_price_action(
             continue
         raw_state, confidence = _classify(metrics, confirmed_state)
         if confidence < settings.confidence_floor:
+            candidate_state = None
+            candidate_count = 0
             continue
         if raw_state == candidate_state:
             candidate_count += 1
@@ -387,6 +389,11 @@ def classify_daily_price_action(
         )
 
     latest_index, latest_raw_state, latest_confidence, latest_metrics = classified[-1]
+    if latest_index != len(bars) - 1:
+        return _unavailable(
+            "latest_daily_bar_did_not_produce_confident_metrics",
+            latest_bar_date=bars[-1].trade_date.isoformat(),
+        )
     confirmed_metrics = _metrics_at(bars, confirmed_index, atr, plus_di, minus_di, adx)
     if confirmed_metrics is None:
         return _unavailable("confirmed_state_metrics_unavailable")
