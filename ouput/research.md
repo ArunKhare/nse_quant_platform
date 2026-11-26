@@ -547,3 +547,64 @@ Then run the proxy evaluator selection separately:
     uv run pytest -q tests/research/test_india_vix_iv30_suitability.py
     uv run ruff check src/nse_quant/research/india_vix_iv30_suitability.py tests/research/test_india_vix_iv30_suitability.py
     uv run mypy src/nse_quant/research/india_vix_iv30_suitability.py
+
+## 2026-11-27 — D8 paired-source proxy study implementation
+
+This addendum updates the 27 November next-gate status above. The remaining
+implementation gap was not the surface calculator or its Silver recorder;
+those already existed. It was the absence of a source-replayed, point-in-time
+pairing and preregistered evaluation workflow.
+
+### Implemented
+
+- Added `research/india_vix_iv30_proxy_study.py` with an exact-pinned pair
+  builder. It replays VIX Bronze/Silver and option-chain Bronze/surface Silver
+  through their existing readers; rejected VIX observations, conflicting or
+  unaudited surface variants, and wrong source identities fail closed.
+- Pair as-of is the latest successful source availability/receive time. The
+  builder enforces source-time synchronization (30 seconds by default), causal
+  receive clocks, and freshness no looser than either source's own max-age
+  policy. Historical imports whose persistence/availability is too late are
+  rejected rather than assigned a fabricated historical availability time.
+- Added immutable, audited study-journal records for explicit numerical
+  acceptance-policy preregistration, paired observation sets, and evaluation
+  reports. The policy must be registered before its pair set is persisted.
+- Pair sets retain source revision/observation pins, source availability and
+  receive clocks, and the exact canonical market-condition artifact bytes and
+  hash. Controlled tags are QUIET, NORMAL, ELEVATED_VOLATILITY, EVENT, EXPIRY
+  and STRUCTURAL; the workflow does not infer or authenticate those labels.
+- Added exact source reconstruction through `replay_pair_set` and deterministic
+  report recomputation through `replay_evaluation_report`.
+- Extended the pure suitability evaluator with condition-specific calibration
+  and holdout metrics while preserving the session-isolated chronological
+  holdout. Required conditions need the preregistered minimum holdout-pair count.
+- Numeric limits (absolute bias, MAE, RMSE, p90 error, minimum correlation and
+  OLS slope range) are explicit policy inputs. No numerical tolerance was
+  invented or silently adopted as a default.
+
+### Boundaries
+
+This is implementation, not empirical acceptance. No synchronized historical
+dataset or real proxy-suitability result is bundled. Hashes establish byte
+identity, not external issuer authenticity. The journal records policy
+registration before pair-set recording, but cannot prove a researcher had not
+previously inspected holdout observations. Independent source databases are
+replayed separately; no atomic cross-database snapshot is asserted.
+
+Status values are descriptive only: `INSUFFICIENT_EVIDENCE`,
+`HOLDOUT_CRITERIA_NOT_MET_REVIEW_REQUIRED`, and
+`HOLDOUT_CRITERIA_MET_REVIEW_REQUIRED`. None asserts model suitability,
+publication, decision eligibility or trading authority. No VRP or DecisionLoop
+input was changed.
+
+### Operator QA required
+
+    uv run pytest -q tests/research/test_india_vix_iv30_proxy_study.py tests/research/test_india_vix_iv30_suitability.py tests/data_platform/test_native_surface_recording.py tests/data_platform/test_surface_evidence_bundle.py tests/data_platform/test_india_vix_recording.py
+    uv run ruff check src/nse_quant/research/india_vix_iv30_proxy_study.py src/nse_quant/research/india_vix_iv30_suitability.py tests/research/test_india_vix_iv30_proxy_study.py tests/research/test_india_vix_iv30_suitability.py
+    uv run mypy src/nse_quant/research/india_vix_iv30_proxy_study.py src/nse_quant/research/india_vix_iv30_suitability.py
+
+These commands have not been run by the assistant. Operator QA acceptance and
+real source-data coverage remain open. After QA, register the research-approved
+numeric policy before persisting any holdout pair set, then review the report
+and replay evidence. The D8 proxy remains non-authoritative until a separate
+human model-suitability decision and separately approved VRP-consumption change.
