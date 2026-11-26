@@ -231,3 +231,18 @@ def replay(bronze: Any, reader: Any, *, observation_id: str, expected_sha256: st
     if assemble(bronze, **_inputs(doc)) != raw or _variants(reader, observation_id) != rows:
         raise ValueError("SURFACE_REPLAY_MISMATCH")
     return doc["bundle"]["result"]
+
+
+
+def read_recording_metadata(
+    reader: Any, *, observation_id: str, expected_sha256: str
+) -> tuple[dict[str, Any], str]:
+    """Read one exact audited surface recording and return its retained document/job pin."""
+    base.readonly(reader)
+    if not base.pin(observation_id) or not base.pin(expected_sha256):
+        raise ValueError("EXACT_SURFACE_PINS_REQUIRED")
+    rows = _variants(reader, observation_id)
+    if len(rows) != 1 or rows[0][0] != expected_sha256:
+        raise ValueError("SURFACE_MISSING_CONFLICTED_OR_WRONG_PIN")
+    raw = _verified(reader, rows[0], observation_id)
+    return _object(raw), str(rows[0][2])
