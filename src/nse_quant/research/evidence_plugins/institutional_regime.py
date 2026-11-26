@@ -8,6 +8,7 @@ from typing import Any
 
 from nse_quant.core.constants import IST, REGULAR_SESSION_CLOSE
 from nse_quant.core.models import ChainSnapshot, MarketFeatures
+from nse_quant.core.regime_registry import is_canonical_regime_label
 from nse_quant.core.settings import InstitutionalRegimeSettings
 from nse_quant.research.evidence_plugins.base import (
     DecisionContext,
@@ -282,7 +283,7 @@ class InstitutionalRegimePlugin(EvidencePlugin):
         # Daily bars are timestamped at the session date. Exclude the current
         # IST calendar date unconditionally so a partially aggregated daily bar
         # can never enter the classifier, including after the close.
-        cutoff_date = context.ts.astimezone(IST).date()
+        cutoff_date = self._utc(context.ts).astimezone(IST).date()
         rows = self._store.conn.execute(
             """
             SELECT CAST(ts AS DATE), open, high, low, close, volume
