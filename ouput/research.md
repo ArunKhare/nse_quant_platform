@@ -599,8 +599,8 @@ input was changed.
 
 ### Operator QA required
 
-    uv run pytest -q tests/research/test_india_vix_iv30_proxy_study.py tests/research/test_india_vix_iv30_suitability.py tests/data_platform/test_native_surface_recording.py tests/data_platform/test_surface_evidence_bundle.py tests/data_platform/test_india_vix_recording.py
-    uv run ruff check src/nse_quant/research/india_vix_iv30_proxy_study.py src/nse_quant/research/india_vix_iv30_suitability.py tests/research/test_india_vix_iv30_proxy_study.py tests/research/test_india_vix_iv30_suitability.py
+    uv run pytest -q tests/data_platform/test_india_vix_iv30_proxy_study.py tests/research/test_india_vix_iv30_suitability.py tests/data_platform/test_native_surface_recording.py tests/data_platform/test_surface_evidence_bundle.py tests/data_platform/test_india_vix_recording.py
+    uv run ruff check src/nse_quant/research/india_vix_iv30_proxy_study.py src/nse_quant/research/india_vix_iv30_suitability.py tests/data_platform/test_india_vix_iv30_proxy_study.py tests/research/test_india_vix_iv30_suitability.py
     uv run mypy src/nse_quant/research/india_vix_iv30_proxy_study.py src/nse_quant/research/india_vix_iv30_suitability.py
 
 These commands have not been run by the assistant. Operator QA acceptance and
