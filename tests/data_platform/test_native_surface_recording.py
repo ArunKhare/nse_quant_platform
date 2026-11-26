@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import UTC, date, datetime, time, timedelta
+from datetime import UTC, datetime, time, timedelta
 from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -12,7 +12,6 @@ import pytest
 
 from nse_quant.analytics import constant_maturity_inputs as cm
 from nse_quant.data_platform import india_vix_recording as common
-from nse_quant.data_platform import legacy_silver_common as base
 from nse_quant.data_platform import native_option_chain_snapshot as codec
 from nse_quant.data_platform import native_option_chain_snapshot_bronze as bronze_api
 from nse_quant.data_platform import native_surface_recording as surface
