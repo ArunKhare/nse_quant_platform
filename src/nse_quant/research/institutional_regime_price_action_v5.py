@@ -424,6 +424,7 @@ def classify_daily_price_action(
         "bars_available": len(bars),
         "bars_required": settings.minimum_daily_bars,
         "persistence_closes": 2,
+        "persistence_basis": "consecutive_available_daily_bars",
         "pending_state": pending_state,
         "confidence": output_confidence,
         "confidence_floor": settings.confidence_floor,
