@@ -8,10 +8,11 @@ from __future__ import annotations
 
 import math
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from statistics import median
-from typing import Any, Sequence
+from typing import Any
 
 from nse_quant.analytics.constant_maturity_inputs import VERSION as SURFACE_VERSION
 
