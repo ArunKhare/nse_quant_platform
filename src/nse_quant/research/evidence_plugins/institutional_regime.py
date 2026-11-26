@@ -209,20 +209,28 @@ class InstitutionalRegimePlugin(EvidencePlugin):
             "mode": "observation",
             "regime_label": regime_label,
             "components": components,
-            "missing_components": [
-                name for name, component in components.items() if not component["complete"]
-            ] + (["canonical_regime_label"] if components_complete and regime_label is None else [])
-            ],
+            "missing_components": (
+                [
+                    name
+                    for name, component in components.items()
+                    if not component["complete"]
+                ]
+                + (["canonical_regime_label"] if components_complete and regime_label is None else [])
+            ),
             "reason": (
                 None
                 if all_complete
-                else next(
-                    (
-                        component["reason"]
-                        for component in components.values()
-                        if not component["complete"]
-                    ),
-                    "incomplete_components",
+                else (
+                    "non_canonical_composite_label"
+                    if components_complete
+                    else next(
+                        (
+                            component["reason"]
+                            for component in components.values()
+                            if not component["complete"]
+                        ),
+                        "incomplete_components",
+                    )
                 )
             ),
         }
