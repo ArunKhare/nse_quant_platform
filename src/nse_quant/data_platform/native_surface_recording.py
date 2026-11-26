@@ -189,7 +189,8 @@ def persist(
         raise ValueError("REVIEWED_SURFACE_CHANGED")
     table = common.table(target, TABLE)
     variant = target.execute(
-        f"SELECT digest, CASE WHEN octet_length(body)<=? THEN body END, job_id FROM {table} WHERE scope=? AND digest=?",
+        f"SELECT digest, CASE WHEN octet_length(body)<=? THEN body END, job_id "
+        f"FROM {table} WHERE scope=? AND digest=?",
         [MAX_RECORD, observation_id, expected_sha256],
     ).fetchone()
     existing = _variants(target, observation_id)
