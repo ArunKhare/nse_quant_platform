@@ -272,8 +272,9 @@ def evaluate_india_vix_iv30_proxy(
         "condition_metrics": condition_metrics,
         "limitations": [
             "descriptive_proxy_comparison_not_model_approval",
-            "source_pins_are_validated_but_source_artifacts_are_not_replayed_here",
-            "historical_availability_and_cross_store_atomicity_are_not_asserted",
+            "standalone_evaluator_does_not_replay_source_artifacts",
+            "standalone_evaluator_does_not_establish_source_availability",
+            "atomic_cross_database_snapshot_is_not_asserted",
             "no_vrp_or_decision_loop_authority",
         ],
     }
