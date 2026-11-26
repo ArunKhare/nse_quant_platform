@@ -290,6 +290,7 @@ def replay_matched_pair(
         surface_available_at=surface_available,
         condition_tags=tags,
         condition_evidence_sha256=condition_pin,
+        condition_evidence_json=request.condition_artifact.decode("utf-8"),
     )
 
 
