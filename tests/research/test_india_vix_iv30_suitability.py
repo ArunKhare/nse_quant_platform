@@ -116,3 +116,35 @@ def test_non_nifty_underlying_is_rejected() -> None:
 def test_invalid_holdout_fraction_is_rejected() -> None:
     with pytest.raises(ValueError, match="HOLDOUT_FRACTION_OUT_OF_RANGE"):
         evaluate_india_vix_iv30_proxy(_pairs(2), holdout_fraction=0.05)
+
+
+def test_holdout_split_keeps_each_trading_session_wholly_on_one_side() -> None:
+    base = _pairs(20)
+    intraday = []
+    for day_index, first in enumerate(base):
+        for sample_index in range(3):
+            as_of = first.as_of + timedelta(hours=sample_index)
+            source = as_of - timedelta(seconds=2)
+            intraday.append(
+                replace(
+                    first,
+                    as_of=as_of,
+                    india_vix_source_time=source,
+                    india_vix_received_at=source + timedelta(milliseconds=200),
+                    india_vix_revision_sha256=f"{day_index * 3 + sample_index + 1:064x}",
+                    surface_source_time=source + timedelta(seconds=1),
+                    surface_received_at=source + timedelta(seconds=1, milliseconds=200),
+                    surface_batch_sha256=f"{day_index * 3 + sample_index + 100:064x}",
+                )
+            )
+    result = evaluate_india_vix_iv30_proxy(intraday)
+    assert result["sample"]["pairs"] == 60
+    assert result["sample"]["calibration_pairs"] == 39
+    assert result["sample"]["holdout_pairs"] == 21
+
+
+def test_trade_date_must_match_as_of_in_ist() -> None:
+    pairs = _pairs(2)
+    pairs[0] = replace(pairs[0], trade_date=pairs[0].trade_date + timedelta(days=1))
+    with pytest.raises(ValueError, match="TRADE_DATE_DOES_NOT_MATCH_AS_OF_IST"):
+        evaluate_india_vix_iv30_proxy(pairs)
