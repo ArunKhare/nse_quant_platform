@@ -455,3 +455,83 @@ Validation required on the operator's Windows environment:
 - `uv run mypy src/nse_quant/research/har_realized_volatility.py src/nse_quant/research/variance_risk_premium.py src/nse_quant/strategy/decision_loop.py`
 
 No claim of test or QA acceptance is made until those commands pass.
+
+## 2026-11-27 — implementation and evidence reconciliation
+
+This addendum supersedes the earlier open-status wording where explicitly noted;
+it does not rewrite the original research decisions, charter, or provisional
+thresholds. It distinguishes code presence, focused test coverage, owner-reported
+QA, and empirical suitability evidence.
+
+### S3 — HAR-RV implementation accepted by owner report
+
+The platform owner subsequently reported that the HAR-RV focused QA and tests
+passed. Record the S3 HAR-RV implementation tranche as owner-reported QA
+accepted. The earlier 25 November statement that local acceptance was pending
+is historical and superseded by this report. No exact command output or
+independent local execution evidence was supplied in this conversation.
+
+### D8 — India VIX Gold candidate boundary accepted
+
+The audited observational India VIX IV30 Gold candidate/retrieval implementation
+in `src/nse_quant/data_platform/s2_iv30_gold.py` is owner-reported QA accepted.
+It recomputes from retained, pinned source/materialization inputs and retrieves
+only an exact immutable candidate build. It is not a published Gold artifact.
+`published_at` remains NULL; publication, model suitability and decision
+eligibility are not asserted. It is not connected to `DecisionLoop` and does not
+change the VRP evaluator.
+
+### D8 — proxy-suitability diagnostics
+
+`src/nse_quant/research/india_vix_iv30_suitability.py` and its focused tests
+implement a pure comparison of synchronized NIFTY India VIX observations with
+the observational `internal_cm` Black-76 IV30 benchmark. It reports bias, MAE,
+RMSE, median/p90 absolute error, correlation, OLS slope/intercept, and
+session-isolated chronological calibration/holdout metrics.
+
+The evaluator validates input structure, timestamps and pin syntax; it does not
+authenticate or replay source artifacts, establish historical availability, or
+make an empirical suitability decision. Minimum sample markers are not
+acceptance thresholds. The latest reported test-fixture corrections are
+committed, but owner QA acceptance for this evaluator has not yet been reported.
+
+### Durable option-surface evidence — implementation present; acceptance gap
+
+Repository inspection found an existing implementation, not an absent feature:
+
+- `analytics/constant_maturity_inputs.py` computes observational Black-76 IV30,
+  IV90 and RR25 from timestamped premiums, matching forward/rate evidence and
+  explicit expiry-close instants.
+- `data_platform/surface_evidence_bundle.py` creates canonical, content-pinned
+  surface bundles and recomputes them during replay.
+- `data_platform/native_surface_recording.py` projects premiums from exact
+  native option-chain Bronze pins, retains the calendar/forward/rate artifacts
+  and policy with the computed bundle in an audited Silver variant, and
+  reassembles/replays against the original Bronze snapshots.
+
+The identified gap was the absence of a dedicated native recording/replay
+integration test file in the current test tree, plus inconsistent documentation
+that described surface evidence recording as wholly unimplemented. Added
+`tests/data_platform/test_native_surface_recording.py` to cover synthetic
+Bronze-to-Silver recording, read-only exact replay, idempotent retry, conflicting
+variant quarantine, artifact-pin rejection, and original-audit enforcement.
+These tests are supplied for operator QA; they have not been run by the assistant
+and are not yet owner-reported as passing.
+
+Boundaries remain: caller-supplied calendar/forward/rate artifacts are retained
+byte-for-byte and replayed, but this does not authenticate their issuers or prove
+the external source's historical availability. The native snapshots and artifact
+clocks are point-in-time consistency checks, not an atomic cross-database
+snapshot. No synchronized historical VIX/surface sample set or empirical
+suitability result has yet been produced.
+
+### Next gate
+
+Run the focused native surface recording, bundle and Black-76 tests, then the
+proxy-suitability tests and relevant lint/type checks on the actual Windows
+checkout. After owner QA acceptance, create synchronized NIFTY pairs from
+retained source evidence, review chronological holdout across market regimes,
+and pre-register numeric suitability tolerances before inspecting holdout
+results. Until then, India VIX remains an observational candidate only; no VRP
+or DecisionLoop integration, Gold publication, live acquisition activation,
+decision eligibility, or trading authority is granted.
