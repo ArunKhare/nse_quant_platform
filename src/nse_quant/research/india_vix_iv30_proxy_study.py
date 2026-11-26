@@ -223,6 +223,17 @@ def replay_matched_pair(
     max_source_age_seconds: float = 300.0,
 ) -> ProxyPair:
     """Replay both exact sources and form a pair at the latest source-availability time."""
+    for name, value in (
+        ("MAX_PAIR_GAP", max_pair_gap_seconds),
+        ("MAX_SOURCE_AGE", max_source_age_seconds),
+    ):
+        if (
+            isinstance(value, bool)
+            or not isinstance(value, (int, float))
+            or not math.isfinite(value)
+            or value <= 0
+        ):
+            raise ValueError(f"{name}_MUST_BE_POSITIVE_FINITE")
     connections = (vix_bronze, vix_silver, option_bronze, surface_silver)
     for connection in connections:
         base.readonly(connection)
@@ -644,6 +655,7 @@ def replay_pair_set(
     for index, source in enumerate(sources):
         for other in sources[index + 1 :]:
             base.separate(source, other)
+    _file_backed(reader)
     base.readonly(reader)
     stored, policy_id, _recorded_at = _load_pair_set(reader, pair_set_id)
     policy, _registered_at = _load_policy(reader, policy_id)
