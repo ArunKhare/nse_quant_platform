@@ -133,7 +133,8 @@ The offline API is implemented in
    `HOLDOUT_CRITERIA_NOT_MET_REVIEW_REQUIRED`, or
    `HOLDOUT_CRITERIA_MET_REVIEW_REQUIRED`. None is an approval state.
 6. Use `replay_pair_set` and `replay_evaluation_report` with read-only
-   connections to reproduce source pairs and the report.
+   connections to reproduce source pairs and the report. Obtain the exact report
+   pin with `evaluation_report_sha256(report)`.
 
 The condition artifact is canonical JSON with exactly `source`, `trade_date`,
 `as_of`, `available_at`, and sorted `tags`. Its bytes and hash are retained.
