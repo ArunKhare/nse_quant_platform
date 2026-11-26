@@ -679,7 +679,11 @@ is retained through the ADX 20–25 neutral band while direction remains aligned
 ADX < 20 is the documented trend exit. No unapproved numeric exit buffers were
 invented for the other states. Confidence is the minimum normalized distance of
 the deciding diagnostics from their thresholds; the configurable floor defaults
-to 0.0 because no empirical floor has been approved.
+to 0.0 because no empirical floor has been approved. Persistence currently means
+two consecutive available daily rows, not independently verified consecutive
+NSE sessions: historical holiday/session completeness is not established by
+this component. It validates OHLCV shape but does not independently prove that
+each daily candle contains a complete exchange session.
 
 The plugin now records the six canonical price-action tokens directly. It does
 not yet emit a composite canonical regime: the other v4 IV/term/skew components
