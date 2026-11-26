@@ -44,6 +44,12 @@ class ProxyPair:
     surface_mode: str = "observation"
     surface_decision_eligibility_asserted: bool = False
     underlying: str = "NIFTY"
+    vix_silver_revision_id: str = ""
+    surface_observation_id: str = ""
+    vix_available_at: datetime | None = None
+    surface_available_at: datetime | None = None
+    condition_tags: tuple[str, ...] = ()
+    condition_evidence_sha256: str | None = None
 
 
 def _utc(value: datetime, field: str) -> datetime:
@@ -180,6 +186,30 @@ def evaluate_india_vix_iv30_proxy(
         _positive(pair.surface_iv30, "SURFACE_IV30")
         _pin(pair.india_vix_revision_sha256, "INDIA_VIX_REVISION")
         _pin(pair.surface_batch_sha256, "SURFACE_BATCH")
+        if pair.condition_tags:
+            allowed = {"QUIET", "NORMAL", "ELEVATED_VOLATILITY", "EVENT", "EXPIRY", "STRUCTURAL"}
+            if (
+                type(pair.condition_tags) is not tuple
+                or pair.condition_tags != tuple(sorted(set(pair.condition_tags)))
+                or not set(pair.condition_tags) <= allowed
+                or pair.condition_evidence_sha256 is None
+            ):
+                raise ValueError("PINNED_MARKET_CONDITION_TAGS_REQUIRED")
+            _pin(pair.condition_evidence_sha256, "CONDITION_EVIDENCE")
+        elif pair.condition_evidence_sha256 is not None:
+            raise ValueError("CONDITION_EVIDENCE_WITHOUT_TAGS")
+        for field, value in (
+            ("VIX_AVAILABLE_AT", pair.vix_available_at),
+            ("SURFACE_AVAILABLE_AT", pair.surface_available_at),
+        ):
+            if value is not None and _utc(value, field) > as_of:
+                raise ValueError("SOURCE_NOT_AVAILABLE_AT_PAIR_AS_OF")
+        for field, value in (
+            ("VIX_SILVER_REVISION", pair.vix_silver_revision_id),
+            ("SURFACE_OBSERVATION", pair.surface_observation_id),
+        ):
+            if value:
+                _pin(value, field)
         normalized.append(pair)
 
     session_dates = sorted({pair.trade_date for pair in normalized})
@@ -199,6 +229,17 @@ def evaluate_india_vix_iv30_proxy(
         and sessions >= MINIMUM_SESSIONS
         and bool(calibration)
     )
+    condition_metrics = {}
+    condition_names = sorted({tag for pair in normalized for tag in pair.condition_tags})
+    for tag in condition_names:
+        tagged_calibration = [pair for pair in calibration if tag in pair.condition_tags]
+        tagged_holdout = [pair for pair in holdout if tag in pair.condition_tags]
+        condition_metrics[tag] = {
+            "calibration": _metrics(tagged_calibration) if tagged_calibration else None,
+            "holdout": _metrics(tagged_holdout) if tagged_holdout else None,
+            "calibration_sessions": len({pair.trade_date for pair in tagged_calibration}),
+            "holdout_sessions": len({pair.trade_date for pair in tagged_holdout}),
+        }
     return {
         "version": VERSION,
         "assessment_status": "DIAGNOSTIC_ONLY_REVIEW_REQUIRED" if sufficient else "INSUFFICIENT_EVIDENCE",
@@ -223,6 +264,7 @@ def evaluate_india_vix_iv30_proxy(
         "all_sample_metrics": _metrics(normalized),
         "calibration_metrics": _metrics(calibration) if calibration else None,
         "holdout_metrics": _metrics(holdout),
+        "condition_metrics": condition_metrics,
         "limitations": [
             "descriptive_proxy_comparison_not_model_approval",
             "source_pins_are_validated_but_source_artifacts_are_not_replayed_here",
