@@ -144,7 +144,6 @@ def _condition_artifact(raw: bytes, expected_sha256: str, pair_as_of: datetime) 
         or not doc["source"].strip()
         or not isinstance(doc["tags"], list)
         or any(type(tag) is not str for tag in doc["tags"])
-        or any(type(tag) is not str for tag in doc["tags"])
         or not doc["tags"]
         or doc["tags"] != sorted(set(doc["tags"]))
         or not set(doc["tags"]) <= set(CONDITIONS)
@@ -600,6 +599,8 @@ def persist_evaluation_report(
     actor_id: str,
     code_revision: str,
 ) -> dict[str, Any]:
+    _file_backed(conn)
+    vix.silver_target(conn)
     report = evaluate_pair_set(conn, pair_set_id, actor_id=actor_id, code_revision=code_revision)
     raw = _canonical(report)
     digest = base.sha(raw)
