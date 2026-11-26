@@ -50,6 +50,7 @@ class ProxyPair:
     surface_available_at: datetime | None = None
     condition_tags: tuple[str, ...] = ()
     condition_evidence_sha256: str | None = None
+    condition_evidence_json: str | None = None
 
 
 def _utc(value: datetime, field: str) -> datetime:
@@ -193,10 +194,15 @@ def evaluate_india_vix_iv30_proxy(
                 or pair.condition_tags != tuple(sorted(set(pair.condition_tags)))
                 or not set(pair.condition_tags) <= allowed
                 or pair.condition_evidence_sha256 is None
+                or type(pair.condition_evidence_json) is not str
             ):
                 raise ValueError("PINNED_MARKET_CONDITION_TAGS_REQUIRED")
             _pin(pair.condition_evidence_sha256, "CONDITION_EVIDENCE")
-        elif pair.condition_evidence_sha256 is not None:
+            import hashlib
+
+            if hashlib.sha256(pair.condition_evidence_json.encode()).hexdigest() != pair.condition_evidence_sha256:
+                raise ValueError("CONDITION_EVIDENCE_CONTENT_HASH_MISMATCH")
+        elif pair.condition_evidence_sha256 is not None or pair.condition_evidence_json is not None:
             raise ValueError("CONDITION_EVIDENCE_WITHOUT_TAGS")
         for field, value in (
             ("VIX_AVAILABLE_AT", pair.vix_available_at),
