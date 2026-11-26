@@ -463,6 +463,18 @@ class InstitutionalRegimeSettings(BaseModel):
         ge=0,
     )
 
+    price_action_daily_history_limit: int = Field(default=300, ge=266)
+    price_action_minimum_daily_bars: int = Field(default=266, ge=266)
+    price_action_confidence_floor: float = Field(default=0.0, ge=0.0, le=1.0)
+
+    @model_validator(mode="after")
+    def validate_price_action_history(self) -> Self:
+        if self.price_action_daily_history_limit < self.price_action_minimum_daily_bars:
+            raise ValueError(
+                "price_action_daily_history_limit must be >= price_action_minimum_daily_bars"
+            )
+        return self
+
     @model_validator(mode="after")
     def validate_iv_history(self) -> Self:
         if self.iv_history_limit < self.min_iv_history_observations:
