@@ -79,7 +79,14 @@ def test_report_handles_ready_inputs_but_still_requires_review() -> None:
         last_complete_session_age_days=1,
         max_daily_close_age_days=5,
         reason=None,
-        calibration={"samples": 35, "minimum_samples": 30, "absolute_error_p90": 0.02},
+        gate_eligible=True,
+        calibration_gate_eligible=True,
+        calibration={
+            "samples": 35,
+            "minimum_samples": 30,
+            "absolute_error_p90": 0.02,
+            "gate_margin_eligible": True,
+        },
     )
     vrp.update(
         available=True,
