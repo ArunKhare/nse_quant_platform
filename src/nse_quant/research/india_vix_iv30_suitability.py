@@ -13,8 +13,8 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from statistics import median
-from zoneinfo import ZoneInfo
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from nse_quant.analytics.constant_maturity_inputs import VERSION as SURFACE_VERSION
 
@@ -66,12 +66,7 @@ def _pin(value: str, field: str) -> None:
 
 
 def _positive(value: float, field: str) -> float:
-    if (
-        isinstance(value, bool)
-        or not isinstance(value, (int, float))
-        or not math.isfinite(value)
-        or value <= 0.0
-    ):
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or value <= 0.0:
         raise ValueError(f"{field}_FINITE_POSITIVE_REQUIRED")
     return float(value)
 
@@ -83,17 +78,10 @@ def _metrics(pairs: Sequence[ProxyPair]) -> dict[str, Any]:
     surface_values = [float(pair.surface_iv30) for pair in pairs]
     mean_x = sum(surface_values) / len(surface_values)
     mean_y = sum(vix_values) / len(vix_values)
-    covariance = sum(
-        (x - mean_x) * (y - mean_y)
-        for x, y in zip(surface_values, vix_values, strict=True)
-    )
+    covariance = sum((x - mean_x) * (y - mean_y) for x, y in zip(surface_values, vix_values, strict=True))
     variance_x = sum((x - mean_x) ** 2 for x in surface_values)
     variance_y = sum((y - mean_y) ** 2 for y in vix_values)
-    correlation = (
-        covariance / math.sqrt(variance_x * variance_y)
-        if variance_x > 0.0 and variance_y > 0.0
-        else None
-    )
+    correlation = covariance / math.sqrt(variance_x * variance_y) if variance_x > 0.0 and variance_y > 0.0 else None
     slope = covariance / variance_x if variance_x > 0.0 else None
     intercept = mean_y - slope * mean_x if slope is not None else None
     return {
