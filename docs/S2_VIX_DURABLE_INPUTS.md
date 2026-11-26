@@ -170,8 +170,9 @@ the time they become available cannot be backdated into a valid pair.
 
 A separate file-backed study journal retains an immutable preregistered numeric
 policy, source-pinned pair set, exact market-condition artifact bytes and audited
-evaluation report. The default condition coverage is QUIET, NORMAL,
-ELEVATED_VOLATILITY, EVENT, EXPIRY and STRUCTURAL; labels must come from
+evaluation report. The required condition coverage is QUIET, NORMAL,
+ELEVATED_VOLATILITY, EVENT, EXPIRY and STRUCTURAL; all six must be represented.
+Labels must come from
 reviewed, pinned external condition artifacts and are not inferred or
 authenticated by the study code. No numeric acceptance thresholds are
 defaulted. Pair and report replay APIs recompute against their original pins.
