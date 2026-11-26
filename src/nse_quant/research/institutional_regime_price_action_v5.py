@@ -280,11 +280,17 @@ def _classify(metrics: _Metrics, prior_state: str | None) -> tuple[str | None, f
         and (metrics.adx < 20.0 or metrics.chop14 > 61.8)
         and metrics.er20 < 0.22
     ):
-        chop_margin = (
-            (20.0 - metrics.adx) / 20.0
+        adx_chop_margin = (
+            _clip((20.0 - metrics.adx) / 20.0)
             if metrics.adx < 20.0
-            else (metrics.chop14 - 61.8) / (100.0 - 61.8)
+            else 0.0
         )
+        chop_index_margin = (
+            _clip((metrics.chop14 - 61.8) / (100.0 - 61.8))
+            if metrics.chop14 > 61.8
+            else 0.0
+        )
+        chop_margin = max(adx_chop_margin, chop_index_margin)
         confidence = min(
             _clip((metrics.atr_percentile - 70.0) / 30.0),
             _clip(chop_margin),
