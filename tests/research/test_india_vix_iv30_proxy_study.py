@@ -142,11 +142,31 @@ def test_policy_is_preregistered_before_immutable_pairset_and_report(stores):
         report = study.persist_evaluation_report(
             writer, pair_set_id, actor_id=OWNER, code_revision=REVISION
         )
+        report_sha256 = hashlib.sha256(study._canonical(report)).hexdigest()
     assert report["status"] == "INSUFFICIENT_EVIDENCE"
     assert report["suitability_asserted"] is False
     assert report["decision_eligibility_asserted"] is False
     assert report["publication_asserted"] is False
     assert report["preregistered_policy_id"] == policy_id
+    with (
+        duckdb.connect(str(bp), read_only=True) as vix_bronze,
+        duckdb.connect(str(sp), read_only=True) as vix_silver,
+        duckdb.connect(str(op), read_only=True) as option_bronze,
+        duckdb.connect(str(vp), read_only=True) as surface_silver,
+        duckdb.connect(str(journal), read_only=True) as reader,
+    ):
+        reproduced = study.replay_pair_set(
+            vix_bronze, vix_silver, option_bronze, surface_silver, reader, pair_set_id
+        )
+        replayed_report = study.replay_evaluation_report(
+            reader,
+            pair_set_id,
+            report_sha256,
+            actor_id=OWNER,
+            code_revision=REVISION,
+        )
+    assert len(reproduced) == 1
+    assert replayed_report == report
 
 
 def test_pair_rejects_invalid_condition_artifact_pin(stores):
