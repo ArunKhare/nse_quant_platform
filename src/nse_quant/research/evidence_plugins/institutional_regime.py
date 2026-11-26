@@ -488,7 +488,8 @@ class InstitutionalRegimePlugin(EvidencePlugin):
             "complete": False,
             "as_of": as_of.isoformat(),
             "symbol": context.symbol,
-            "classifier_version": "institutional_iv_term_components_v4",
+            "classifier_version": "institutional_iv_term_components_v4_with_daily_price_action_v5",
+            "price_action_classifier_version": PRICE_ACTION_CLASSIFIER_VERSION,
             "mode": "observation",
             "regime_label": None,
             "components": {
@@ -507,8 +508,10 @@ class InstitutionalRegimePlugin(EvidencePlugin):
                 "price_action": {
                     "available": False,
                     "complete": False,
-                    "state": "INSUFFICIENT_DATA",
+                    "state": None,
                     "reason": reason,
+                    "classifier_version": PRICE_ACTION_CLASSIFIER_VERSION,
+                    "decision_eligibility_asserted": False,
                 },
                 "term_structure": {
                     "available": False,
