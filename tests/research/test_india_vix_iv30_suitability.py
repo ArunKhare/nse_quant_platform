@@ -1,5 +1,6 @@
 """Research-only paired India VIX / NIFTY surface-IV30 proxy diagnostics."""
 
+import hashlib
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 
@@ -157,3 +158,23 @@ def test_trade_date_must_match_as_of_in_ist() -> None:
     pairs[0] = replace(pairs[0], trade_date=pairs[0].trade_date + timedelta(days=1))
     with pytest.raises(ValueError, match="TRADE_DATE_DOES_NOT_MATCH_AS_OF_IST"):
         evaluate_india_vix_iv30_proxy(pairs)
+
+
+
+def test_condition_metrics_use_the_global_session_holdout() -> None:
+    raw = b'{"tags":["NORMAL"]}'
+    digest = hashlib.sha256(raw).hexdigest()
+    pairs = [
+        replace(
+            pair,
+            condition_tags=("NORMAL",),
+            condition_evidence_sha256=digest,
+            condition_evidence_json=raw.decode(),
+        )
+        for pair in _pairs(MINIMUM_PAIRS)
+    ]
+    result = evaluate_india_vix_iv30_proxy(pairs)
+    condition = result["condition_metrics"]["NORMAL"]
+    assert condition["calibration"]["pairs"] == 40
+    assert condition["holdout"]["pairs"] == 20
+    assert condition["holdout_sessions"] == 20
