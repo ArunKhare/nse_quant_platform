@@ -216,8 +216,7 @@ def test_pairset_requires_preregistered_policy(stores):
             )
 
 
-
-def test_policy_cannot_omit_required_market_conditions():
+def test_policy_cannot_omit_required_market_conditions() -> None:
     policy = study.ProxyAcceptancePolicy(
         max_abs_bias=0.02,
         max_mae=0.02,
