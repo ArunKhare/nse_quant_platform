@@ -74,13 +74,9 @@ class AdmissionRequest:
             raise ValueError("EXPLICIT_SUPPORTED_ADMISSION_USE_CASE_REQUIRED")
         _clock(self.knowledge_cutoff)
         _clock(self.economic_at)
-        if self.use_case == ARCHIVED_RESEARCH and (
-            self.knowledge_cutoff is not None or self.economic_at is not None
-        ):
+        if self.use_case == ARCHIVED_RESEARCH and (self.knowledge_cutoff is not None or self.economic_at is not None):
             raise ValueError("ARCHIVAL_RESEARCH_IS_NOT_AN_ASOF_REQUEST")
-        if self.use_case == POINT_IN_TIME and (
-            self.knowledge_cutoff is None or self.economic_at is None
-        ):
+        if self.use_case == POINT_IN_TIME and (self.knowledge_cutoff is None or self.economic_at is None):
             raise ValueError("BOTH_POINT_IN_TIME_AXES_REQUIRED")
 
 
@@ -134,14 +130,9 @@ def _source_reason(source: object, publication_id: str) -> str | None:
         return "UNSUPPORTED_PUBLICATION_READER_VERSION"
     if source["publication_id"] != publication_id:
         return "PUBLICATION_PIN_MISMATCH"
-    if not isinstance(source["reason_code"], str) or not re.fullmatch(
-        r"[A-Z0-9_]{1,128}", source["reason_code"]
-    ):
+    if not isinstance(source["reason_code"], str) or not re.fullmatch(r"[A-Z0-9_]{1,128}", source["reason_code"]):
         return "PUBLICATION_READER_CONTRACT_MISMATCH"
-    if (
-        source["status"] != "verified_research_snapshot"
-        or source["research_publication_verified"] is not True
-    ):
+    if source["status"] != "verified_research_snapshot" or source["research_publication_verified"] is not True:
         return "PUBLICATION_SNAPSHOT_NOT_VERIFIED"
     if (
         source["purpose"] != "RESEARCH_ONLY"
@@ -164,10 +155,7 @@ def _source_reason(source: object, publication_id: str) -> str | None:
     if (
         not isinstance(jobs, list)
         or not 1 <= len(jobs) <= 1000
-        or any(
-            not isinstance(job, str) or not re.fullmatch(r"[A-Za-z0-9_-]{1,128}", job)
-            for job in jobs
-        )
+        or any(not isinstance(job, str) or not re.fullmatch(r"[A-Za-z0-9_-]{1,128}", job) for job in jobs)
         or len(set(jobs)) != len(jobs)
     ):
         return "PUBLICATION_ATTEMPT_EVIDENCE_MISSING"
@@ -316,9 +304,7 @@ def assess_publication_use(
 def encode_admission_receipt(receipt: AdmissionReceipt) -> bytes:
     """Validate deterministic content, not original source authenticity/authority."""
     expected = _receipt_for_input(receipt.frozen_input_json)
-    if _canonical(_payload(receipt)) != _canonical(_payload(expected)) or receipt.receipt_id != (
-        expected.receipt_id
-    ):
+    if _canonical(_payload(receipt)) != _canonical(_payload(expected)) or receipt.receipt_id != (expected.receipt_id):
         raise ValueError("ADMISSION_RECEIPT_RESULT_MISMATCH")
     return _canonical(_payload(receipt)).encode()
 
@@ -340,9 +326,12 @@ def replay_admission_receipt(raw: bytes, *, expected_receipt_id: str) -> Admissi
             raise ValueError("ADMISSION_RECEIPT_SCHEMA_OR_CANONICAL_MISMATCH")
         if not isinstance(value["reason_codes"], list):
             raise ValueError("ADMISSION_REASON_SCHEMA_MISMATCH")
-        receipt = AdmissionReceipt(
-            **dict(value, reason_codes=tuple(value["reason_codes"]), receipt_id=expected_receipt_id)
-        )
+        fields: dict[str, Any] = {
+            **value,
+            "reason_codes": tuple(value["reason_codes"]),
+            "receipt_id": expected_receipt_id,
+        }
+        receipt = AdmissionReceipt(**fields)
         encode_admission_receipt(receipt)
         return receipt
     except (
