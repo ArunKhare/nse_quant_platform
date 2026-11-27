@@ -14,39 +14,77 @@ class FeatureStore:
 
     def save(self, run_id: str, features: MarketFeatures) -> str:
         feature_id = f"{features.underlying}:{features.expiry}:{features.ts.isoformat()}"
+        columns = [
+            "feature_id",
+            "ts",
+            "run_id",
+            "underlying",
+            "expiry",
+            "spot",
+            "atm_iv",
+            "iv_rank",
+            "iv_percentile",
+            "realized_vol",
+            "iv_rv_spread",
+            "pcr",
+            "total_call_oi",
+            "total_put_oi",
+            "max_pain",
+            "liquidity_score",
+        ]
+        values: list[Any] = [
+            feature_id,
+            features.ts,
+            run_id,
+            features.underlying,
+            features.expiry,
+            features.spot,
+            features.atm_iv,
+            features.iv_rank,
+            features.iv_percentile,
+            features.realized_vol,
+            features.iv_rv_spread,
+            features.pcr,
+            features.total_call_oi,
+            features.total_put_oi,
+            features.max_pain,
+            features.liquidity_score,
+        ]
 
-        self.conn.execute(
-            """
-            INSERT OR REPLACE INTO feature_snapshots (feature_id, ts, run_id, underlying, expiry, spot, atm_iv, iv_rank, iv_percentile, realized_vol, iv_rv_spread, pcr, total_call_oi, total_put_oi, max_pain, liquidity_score, intraday_shape, short_momentum, straddle_price, expected_move_pct, expected_move_points, diagnostics) VALUES (
-                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
-            )
-            """,
+        # Older retained feature_snapshots tables have the legacy "regime"
+        # column but no "intraday_shape" column. Do not write intraday shape
+        # into that legacy field: the two vocabularies are intentionally distinct.
+        schema_columns = {
+            row[1] for row in self.conn.execute("PRAGMA table_info('feature_snapshots')").fetchall()
+        }
+        if "intraday_shape" in schema_columns:
+            columns.append("intraday_shape")
+            values.append(features.intraday_shape.value)
+
+        columns.extend(
             [
-                feature_id,
-                features.ts,
-                run_id,
-                features.underlying,
-                features.expiry,
-                features.spot,
-                features.atm_iv,
-                features.iv_rank,
-                features.iv_percentile,
-                features.realized_vol,
-                features.iv_rv_spread,
-                features.pcr,
-                features.total_call_oi,
-                features.total_put_oi,
-                features.max_pain,
-                features.liquidity_score,
-                features.intraday_shape.value,
+                "short_momentum",
+                "straddle_price",
+                "expected_move_pct",
+                "expected_move_points",
+                "diagnostics",
+            ]
+        )
+        values.extend(
+            [
                 features.short_momentum,
                 features.straddle_price,
                 features.expected_move_pct,
                 features.expected_move_points,
                 _json(features.diagnostics),
-            ],
+            ]
         )
-
+        column_sql = ", ".join(f'"{column}"' for column in columns)
+        placeholders = ", ".join("?" for _ in values)
+        self.conn.execute(
+            f"INSERT OR REPLACE INTO feature_snapshots ({column_sql}) VALUES ({placeholders})",
+            values,
+        )
         return feature_id
 
     def latest(self, underlying: str) -> MarketFeatures | None:
