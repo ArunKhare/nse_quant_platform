@@ -22,7 +22,7 @@ def observations(count: int = 486) -> list[CalibrationObservation]:
         rows.append(
             CalibrationObservation(
                 session=session,
-                ivp=float(45 + (index % 80)),
+                ivp=float(45 + (index % 56)),
                 iv30_minus_iv90=-0.01 if index % 4 else 0.001,
                 rr25=-0.04 + (index % 25) * 0.001,
                 adx14=35.0,

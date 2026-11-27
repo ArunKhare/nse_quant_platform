@@ -34,7 +34,7 @@ The runner consumes a prepared NIFTY daily CSV. Each row represents one complete
 | change20, sma20_slope | Directional diagnostics used by price-action classification |
 | realized_variance | Daily 5-minute intraday plus overnight realized variance, decimal squared |
 
-The caller is responsible for producing point-in-time features with no future observations, consistent source series, completed sessions, and valid upstream lineage. The runner records the CSV SHA-256 and can include an upstream source manifest. It does not fetch data, calculate the IV surface, or reconstruct indicators from raw bars.
+The caller is responsible for producing point-in-time features with no future observations, consistent source series, completed sessions, consecutive available NSE-session rows, and valid upstream lineage. The report's two-close persistence follows consecutive available rows; it does not independently reconstruct the exchange calendar or prove that an omitted date was a holiday rather than a data gap. The runner records the CSV SHA-256 and can include an upstream source manifest. It does not fetch data, calculate the IV surface, or reconstruct indicators from raw bars.
 
 ## Fold design
 

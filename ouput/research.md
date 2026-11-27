@@ -733,7 +733,7 @@ Implemented a diagnostic-only report engine for the provisional thresholds in se
 - Added a typed NIFTY completed-session input contract for IVP, IV30–IV90, RR25, daily price-action diagnostics, and daily 5-minute-plus-overnight realized variance.
 - Added rolling fixed-length train/test folds (default 360 training sessions, 63 test sessions, 63-session step). Test windows do not overlap.
 - Each fold reports training-window p10/p25/p50/p75/p90 distributions for the relevant diagnostics and the frozen provisional thresholds.
-- Each fold applies the provisional IVP hysteresis, term-structure band, point-in-time trailing-252-session RR25 p10/p50 skew bands, and existing v5 price-action classifier to the later test window. State counts/fractions and unavailable price-action sessions are reported.
+- Each fold applies the provisional IVP hysteresis, term-structure band, point-in-time trailing-252-session RR25 p10/p50 skew bands, and existing v5 price-action classifier to the later test window. State counts/fractions, price-action confidence quantiles, and unavailable price-action sessions are reported. The two-close persistence check follows consecutive available rows; the CSV producer must guarantee NSE-session continuity.
 - Integrated the existing HAR-RV rolling-origin calibration within each training window and separately evaluated the 21-session HAR-RV forecast against the subsequent test window.
 - HAR-RV calibration sufficiency is retained as a diagnostic only; its gate-margin eligibility is explicitly suppressed in the S6 report.
 - Added a CSV runner that records input SHA-256, accepts an optional upstream source manifest, and writes Markdown plus JSON reports.

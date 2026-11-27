@@ -41,6 +41,7 @@ PRICE_ACTION_THRESHOLDS = {
     "range_position_boundary": 0.5,
     "confidence_floor": 0.0,
     "persistence_closes": 2,
+    "persistence_basis": "consecutive_available_rows",
 }
 
 
