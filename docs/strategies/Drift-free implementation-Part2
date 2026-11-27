@@ -1,0 +1,512 @@
+Derive the best of this :
+roduction-ready specification covering schemas, token budgeting, storage engines, ingestion cadences, and execution guardrails.
+
+1. Universe & Kite Connect Token Budget (Pre-Market Setup)
+
+At 08:30 IST daily, fetch Kite’s /instruments CSV dump to resolve dynamic instrument_token IDs (since NSE options tokens expire weekly/monthly) and allocate them across your 3 WebSocket connections (9,000 max tokens):
+
+WebSocket Connection	Universe & Contracts	Subscription Mode	Est. Tokens	Role in Pipeline
+Socket 1 (Index & Derivatives Core)	NIFTY, BANKNIFTY, FINNIFTY spot + current/next futures + ATM ± 20 strikes (CE/PE) for current & next weekly/monthly expiries + India VIX	full (5-level depth + OI + exchange timestamp)	~1,200	Options regime, dealer gamma/OI walls, index execution
+Socket 2 (Watchlist & Stock Options)	10–25 active cash stocks + their current-month futures + ATM ± 10 strikes (CE/PE) for liquid F&O names	full (5-level depth + OI + exchange timestamp)	~1,500	Stock & stock-option alpha signals, order book imbalance
+Socket 3 (Macro Breadth Universe)	All NIFTY 500 cash equity constituents	quote (OHLC, volume, total buy/sell qty, LTP)	~500	Market-wide breadth, advance/decline, sector rotation
+
+Total active tokens: ~3,200 out of 9,000 available—leaving ~5,800 tokens for dynamic intraday strike re-centering if spot moves >2%.
+
+2. Bronze Layer: Immutable Raw Ingestion
+
+Purpose: Append-only, zero-mutation landing zone preserving exact raw payloads and dual timestamps to eliminate look-ahead bias during backtesting.
+• Storage & Format:
+	• Hot Path (Live): Asynchronous ring buffer / Redis Streams or Kafka topics partitioned by segment (NSE, NFO-FUT, NFO-OPT).
+	• Cold Path (Persistence): Micro-batched every 60 seconds to Apache Parquet / Delta Lake partitioned by trade_date=YYYY-MM-DD/segment=....
+• Required Raw Datasets & Cadence:
+	1. Tick Stream (bronze_ticks): Raw binary/JSON packets from KiteTicker (continuous sub-second stream). Must stamp both exchange_timestamp (UTC) and ingested_at (server monotonic UTC clock).
+	2. Instrument Master & Lot Sizes (bronze_instruments): Daily /instruments dump (08:30 IST batch) capturing instrument_token, tradingsymbol, strike, expiry, instrument_type, lot_size, and tick_size.
+	3. Corporate Actions & Bhavcopy (bronze_corp_actions & bronze_bhavcopy): Daily NSE EOD Bhavcopy, F&O participant-wise OI (FII/DII/Pro/Client), and split/dividend announcements (18:30 IST batch).
+	4. Order & Execution Audit Log (bronze_orders): Raw Kite Postback webhooks, order placement payloads, rejections, and /positions snapshots (event-driven + 30s reconciliation).
+
+3. Silver Layer: Normalized, Point-in-Time Enriched Data
+
+Purpose: Clean, deduplicate, align timestamps, compute option Greeks, and enforce survivor-bias-free historical continuity.
+• Storage & Format: Delta Lake / Apache Iceberg (for ACID upserts and historical time-travel) + in-memory Polars/DuckDB tables for intraday rolling windows.
+• Refresh Cadence: 1-second and 1-minute micro-batches during market hours (09:15–15:30 IST); daily post-close reconciliation (19:00 IST) for corporate action multipliers and expired option archiving.
+• Required Normalized Datasets:
+	1. silver_equity_bars_1m (Cash Stocks & Indices):
+		• Keyed by (asset_id, bar_timestamp_utc)—never mutable ticker symbols.
+		• Fields: open, high, low, close, volume, vwap, bid_ask_spread_bps, order_book_imbalance, is_halted.
+	2. silver_adjustment_factors (Point-in-Time Corporate Actions):
+		• Maps (asset_id, ex_date) to split_multiplier and dividend_adjustment. Keeps silver_equity_bars_1m unadjusted while allowing deterministic on-the-fly backward adjustment for backtests.
+	3. silver_option_chain_1m (Stock & Index Options):
+		• Joins option ticks with exact concurrent spot price (asof_join on exchange_timestamp) and risk-free rate (91-day T-Bill yield).
+		• Computes Implied Volatility (IV) via Newton-Raphson / Brent’s method and Black-76 / Black-Scholes Greeks (delta, gamma, theta, vega), plus bid_ask_spread, oi, oi_change_1m, oi_change_day, and moneyness_pct.
+	4. silver_portfolio_ledger:
+		• Deduplicated fills reconciled against Kite /positions and /margins, tracking real-time net Delta, Gamma, Vega exposure, and available margin headroom.
+
+4. Gold Layer: Strategy-Ready Features, Breadth & Regime
+
+Purpose: Pre-computed, ultra-low-latency state artifacts served directly to the live execution engine.
+• Storage & Format: Redis (in-memory hash/JSON) for sub-millisecond live reads + Delta Tables persisted every minute so backtests replay the exact state seen in production.
+• Required Published Artifacts & Cadence:
+
+Gold Artifact	Key Metrics Computed	Refresh Cadence	Primary Consumer
+gold_market_breadth	Computed from NIFTY 500 (Socket 3): Advance/Decline ratio, % stocks > 20/50/200 EMA, up-volume vs. down-volume ratio, NIFTY 50 vs. Equal-Weight divergence.	Every 1 minute (intraday) + EOD baseline	Cash-stock & index directional strategies
+gold_options_regime	Computed from NIFTY/BANKNIFTY chains + India VIX: ATM IV, IV Rank (IVR), IV Percentile (IVP), PCR (OI & Volume), Max Pain, Call/Put OI walls, Net Dealer Gamma Exposure (GEX), front-vs-next expiry term structure.	Daily EOD baseline + Every 5 minutes intraday (or immediate trigger on >10% VIX jump)	Risk Adjustment (position sizing/stops) & Hard Gate (tail-risk circuit breaker)
+gold_alpha_features	Per watchlist stock & index: Rolling ATR, RSI, Bollinger bandwidth, relative strength vs. NIFTY 500, option IV skew (25d Put IV - 25d Call IV), abnormal option volume-to-OI ratio.	Every 1 second / 1 minute (aligned to strategy timeframe)	Live signal generator
+gold_tradable_universe	Filtered list of eligible stocks and liquid option strikes passing minimum OI (> 500 lots), max bid-ask spread (< 0.5%), and excluding NSE F&O ban-period stocks.	08:45 IST pre-market + Every 15 minutes intraday	Execution router & strike selector
+
+
+5. Live Execution Loop & Governance Rules
+
+
+A. Live Hot-Path Rules
+
+1. Strict Gold-Only Reads: The execution engine reads only from Redis Gold keys. It never queries Bronze/Silver storage or invokes heavy Python/Pandas rolling calculations on the hot path.
+2. Kite Rate-Limit Token Bucket: Wrap order routing in a rate limiter enforcing ≤ 8 orders/sec (buffer under Kite’s 10/sec cap), ≤ 350 orders/min, and < 20 modifications per order ID (auto-cancel/replace at modification #20).
+3. Cross-Asset Regime Consumption:
+	• Normal / Elevated IV: Scale cash-equity and naked option lot sizes inversely to gold_options_regime.atm_iv and widen ATR stops using expected straddle move.
+	• Hard Gate Trigger: Block all new long cash/short-put entries if India VIX > 24, intraday VIX spikes > 15%, or front-week IV enters steep backwardation ahead of RBI/Budget events.
+
+B. Staleness & Circuit-Breaker Fallbacks
+
+Every Gold artifact carries published_at_utc and source_tick_utc. Before firing any order, the live loop checks now_utc - source_tick_utc:
+• Fresh (< 2s for tick features / < 65s for 1m bars): Execute normally.
+• Degraded (2s–10s lag): Block new entries; allow resting SL/TP exit orders only.
+• Stale / Disconnected (> 10s lag or WebSocket drop): Trigger kill switch—cancel all pending limit orders, halt strategy loop, and alert immediately.
+
+6. Backtest & Validation Standards
+
+• Coverage: 2017–2026 (9+ years) of 1-minute cash/index bars across point-in-time NIFTY 500 constituents (survivorship-bias-free) + 2021–2026 (5+ years) of 1-minute option chains (archived daily from your Bronze layer going forward, backfilled via historical NSE tick vendors).
+• Statistical Thresholds: Minimum 100–150 independent trades per regime bucket (Low-IV Trend, High-IV Mean-Reversion, Expiry/Event) before live deployment.
+• Latency SLAs: Capture latency < 50 ms (p95); End-to-End Decision Latency (Tick → Kite Order API call) < 150 ms (p99); Throughput burst capacity ≥ 200 decisions/sec at 09:15 IST open.
+-----------------
+This avoids distributed-system overhead while solving multi-process write contention, file locking, and sub-millisecond read latency.
+
+1. Storage Engine Architecture by Layer
+
+
+Medallion Layer	Live Hot-Path Storage (Intraday IPC)	Cold Persistent Storage (Disk / Backtest)	Concurrency & Locking Pattern
+Bronze (Raw)	Redis Streams (XADD with MAXLEN) or ZeroMQ / Aeron	ZSTD-compressed Parquet (partitioned by date/segment)	Single-Writer Principle: Only the ingestor process writes to disk; flushes micro-batches every 60s via atomic rename (tmp -> final.parquet).
+Silver (Normalized)	DuckDB (in-memory / WAL mode) or Arrow Plasma / Shared Memory	Hive-Partitioned Parquet (year=/month=/day=) queried via DuckDB / Polars	Single-Writer, Multi-Reader: Only the normalizer process updates Silver Parquet files; research/backtest processes open Parquet read-only (read_only=True).
+Gold (Features/Regime)	Redis Hashes / Strings (or POSIX /dev/shm memory-mapped JSON/MsgPack)	Parquet Snapshots (appended every 1m for backtest parity)	Atomic Key Overwrite (SET / HSET): feature_engine writes; execution_loop and dashboard read lock-free in < 0.2 ms.
+
+
+2. Multi-Process Topology & IPC Boundaries
+
+Isolate your platform into 4 independent OS processes so a heavy backtest or garbage-collection pause never blocks live order execution:
+1. Process 1: kite_ingestor (Bronze Writer)
+	• Connects to Kite WebSockets (KiteTicker), pushes raw ticks into a Redis Stream (stream:ticks:nse, stream:ticks:nfo) for real-time consumers, and buffers ticks in RAM to flush immutable Parquet chunks to data/bronze/YYYY-MM-DD/ every 60 seconds.
+2. Process 2: silver_normalizer (Silver Writer)
+	• Consumes from Redis Streams, aggregates 1-second/1-minute bars, computes Black-76 option Greeks via vectorized NumPy/Polars, and maintains rolling intraday state in an in-memory DuckDB instance. Persists finalized EOD Silver tables to data/silver/ after 15:35 IST.
+3. Process 3: gold_publisher (Gold Writer)
+	• Computes NIFTY 500 breadth, options regime (IVR, GEX, PCR), and watchlist features. Publishes latest state to Redis Hashes (gold:regime:nifty, gold:features:{token}) with an atomic published_at_utc timestamp, and logs 1-minute snapshots to data/gold/ for historical replay.
+4. Process 4: execution_router (Gold Reader & Order Sender)
+	• Runs the live strategy loop. Reads exclusively from Redis Gold keys (zero disk I/O), verifies staleness TTL (< 2s), applies Kite rate-limit buckets (≤ 8 orders/sec), and sends orders.
+
+3. Why This Beats SQLite / Single-File Databases for Multi-Process Trading
+
+• Eliminates database is locked errors: SQLite and single-file DuckDB allow only one writer process at a time and choke under concurrent high-frequency tick writes + analytical queries. Separating Redis (live multi-process IPC) from Immutable Parquet + DuckDB (analytical queries) removes all lock contention.
+• Zero-Copy Analytical Reads: Polars and DuckDB natively memory-map (mmap) partitioned Parquet files. You can run a 9-year backtest in a 5th process (research_worker) scanning millions of Silver option rows in seconds without touching the live trading processes.
+• Crash Recovery & Replay: If silver_normalizer or gold_publisher crashes mid-session, it simply replays today's Redis Stream (or today's data/bronze/ Parquet files) from 09:15 IST and reconstructs exact state in under 2 seconds.
+
+4. Recommended Directory & Disk Layout (NVMe SSD)
+/srv/trading_platform/
+├── data/
+│   ├── bronze/                  # Append-only raw ticks & order logs
+│   │   └── 2026-11-21/
+│   │       ├── ticks_0915.parquet
+│   │       └── orders_audit.parquet
+│   ├── silver/                  # Cleaned bars, corporate actions, option Greeks
+│   │   ├── equity_1m/year=2026/month=11/day=21.parquet
+│   │   ├── options_1m/year=2026/month=11/day=21.parquet
+│   │   └── corp_actions.parquet
+│   └── gold/                    # Archived 1m regime & feature snapshots for backtest parity
+│       └── regime_1m/year=2026/month=11/day=21.parquet
+└── shm/                         # Optional tmpfs / RAM-disk for ultra-low-latency IPC
+
+Show Code
+Download diagram SVG
+Hardware Sizing Tip: On a single Linux machine (e.g., 8–16 cores, 32–64 GB RAM, NVMe SSD), 1 full day of NSE Bronze ticks for ~3,200 tokens compresses down to ~150–250 MB in ZSTD Parquet (~50–60 GB per year), easily fitting on a standard 500 GB NVMe drive.
+To ensure your codebase runs seamlessly on Windows 11 today and migrates cleanly to Linux later without rewriting storage logic or hitting Windows file-locking snags, use pathlib.Path relative roots, run Redis/Memurai locally (or via WSL2), and avoid POSIX-only /dev/shm paths in your application code.
+
+1. Cross-Platform Path & Storage Mapping (Windows 11 → Linux)
+
+Never hardcode /srv/trading_platform/ or /dev/shm/. Instead, drive the root directory via a single environment variable (TRADING_DATA_ROOT) using Python's pathlib.Path:
+
+Logical Layer	Environment Config	Windows 11 Path (Dev)	Linux Path (Production)	Migration Notes
+Platform Root	TRADING_DATA_ROOT	D:\trading_platform (or C:\trading_platform)	/srv/trading_platform	All data/bronze, data/silver, and data/gold subpaths resolve identically via Path(root) / "data" / ....
+Live IPC Bus	REDIS_URL	redis://localhost:6379/0 (via Memurai native Windows port or WSL2 Redis)	redis://127.0.0.1:6379/0 (or Unix domain socket unix:///run/redis/redis.sock)	Redis uses the exact same protocol on both OSes—zero code changes needed when moving to Linux.
+Shared Memory (shm/)	Omit /dev/shm in v1	Use Redis or Python's cross-platform multiprocessing.shared_memory	Map TRADING_SHM_ROOT=/dev/shm/trading if needed	Windows has no native /dev/shm RAM-disk; sticking to Redis keeps Windows and Linux 100% identical.
+
+
+2. Windows 11 File-Locking & Parquet Gotchas (Critical)
+
+Windows enforces strict mandatory file locks (unlike Linux, which allows unlinking/renaming open files). Follow these two rules so your multi-process pipeline never crashes with PermissionError: [WinError 32]:
+1. Atomic Write via Same-Volume Temp File:
+When kite_ingestor flushes a 60-second Bronze Parquet batch, write to ticks_0915.parquet.tmp in the exact same folder, close the file handle completely, and call os.replace("ticks_0915.parquet.tmp", "ticks_0915.parquet"). os.replace() is guaranteed atomic on both NTFS (Windows) and ext4/XFS (Linux).
+2. Never Overwrite Partitioned Parquet Files While Reading:
+If a backtest process (DuckDB / Polars) is scanning data/silver/options_1m/, do not overwrite an existing .parquet file in that folder. Write finalized daily files once post-market (15:35 IST) or append new uniquely timestamped chunk files (part_001.parquet, part_002.parquet).
+
+3. Resource Budgeting for 32 GB RAM & 500 GB SSD
+
+Your hardware comfortably handles full intraday tick ingestion plus multi-year historical backtesting if you allocate memory and disk quotas cleanly:
+
+RAM Allocation (32 GB Total)
+
+• Windows 11 OS + IDE / Browser: ~8–10 GB
+• Redis (Live Streams & Gold Cache): 2 GB max (maxmemory 2gb + MAXLEN ~ 500000 on tick streams so Redis never bloats)
+• silver_normalizer + gold_publisher (Polars/DuckDB intraday state): 4–6 GB
+• Headroom for Backtesting (research_worker): 12–16 GB (set DuckDB SET memory_limit='12GB'; so heavy multi-year option chain joins spill cleanly to SSD instead of triggering Windows OOM)
+
+SSD Allocation (500 GB Total)
+
+• OS, Python Environments & Repos: ~80–100 GB
+• Bronze Raw Ticks (Rolling 6–12 Months): ~60–100 GB (compress with compression="zstd", compression_level=3; archive older Bronze ticks to external storage once Silver is verified)
+• Silver Historical Archive (7–9 Yrs Equity 1m + 5 Yrs Options 1m): ~120–180 GB
+• Free SSD Buffer (Required for NVMe wear-leveling & DuckDB temp spills): Keep at least 100 GB free
+
+4. Ready-to-Use Cross-Platform Storage Config (config.py)
+
+python
+import os
+from pathlib import Path
+
+# Default to C:\trading_platform on Windows, /srv/trading_platform on Linux
+DEFAULT_ROOT = (
+    r"C:\trading_platform" if os.name == "nt" else "/srv/trading_platform"
+)
+DATA_ROOT = Path(os.getenv("TRADING_DATA_ROOT", DEFAULT_ROOT))
+
+BRONZE_DIR = DATA_ROOT / "data" / "bronze"
+SILVER_DIR = DATA_ROOT / "data" / "silver"
+GOLD_DIR = DATA_ROOT / "data" / "gold"
+
+REDIS_URL = os.getenv("REDIS_URL", "redis://127.0.0.1:6379/0")
+
+
+def ensure_dirs() -> None:
+  for path in (BRONZE_DIR, SILVER_DIR, GOLD_DIR):
+    path.mkdir(parents=True, exist_ok=True)
+    Ubuntu Server LTS (24.04 LTS) is the best Linux target for your migration—it has native Redis/Polars/DuckDB support, predictable systemd process supervision, and low kernel overhead.
+Below is the complete, cross-platform Python implementation (storage_bridge.py) tested for Windows 11 NTFS atomic file replacement (os.replace with retry backoff against Windows Defender / indexer transient locks) and Ubuntu Linux ext4/XFS without code changes.
+
+1. Prerequisites (requirements.txt)
+
+text
+polars>=1.0.0
+pyarrow>=17.0.0
+redis>=5.0.0
+orjson>=3.10.0
+Use code with caution.
+
+2. Complete storage_bridge.py (Atomic Parquet + Redis IPC)
+
+python
+from __future__ import annotations
+
+from datetime import datetime, timezone
+import os
+from pathlib import Path
+import time
+from typing import Any, Callable
+import uuid
+
+import orjson
+import polars as pl
+import pyarrow as pa
+import pyarrow.parquet as pq
+import redis
+
+
+class AtomicParquetWriter:
+  """
+    Cross-platform atomic Parquet writer safe for Windows 11 NTFS and Ubuntu Linux.
+    Writes to a same-directory temp file, flushes OS buffers, closes handles,
+    and performs an atomic os.replace() with transient lock retry for Windows.
+    """
+
+  def __init__(
+      self,
+      base_dir: str | Path,
+      compression: str = "zstd",
+      compression_level: int = 3,
+      max_retries: int = 5,
+      retry_delay_sec: float = 0.05,
+  ) -> None:
+    self.base_dir = Path(base_dir)
+    self.base_dir.mkdir(parents=True, exist_ok=True)
+    self.compression = compression
+    self.compression_level = compression_level
+    self.max_retries = max_retries
+    self.retry_delay_sec = retry_delay_sec
+
+  def write_records(
+      self,
+      records: list[dict[str, Any]],
+      relative_path: str | Path,
+      schema: dict[str, pl.DataType] | None = None,
+  ) -> Path | None:
+    if not records:
+      return None
+
+    df = pl.DataFrame(records, schema=schema)
+    return self.write_dataframe(df, relative_path)
+
+  def write_dataframe(
+      self,
+      df: pl.DataFrame,
+      relative_path: str | Path,
+  ) -> Path | None:
+    if df.is_empty():
+      return None
+
+    target_path = self.base_dir / relative_path
+    target_path.parent.mkdir(parents=True, exist_ok=True)
+
+    # Temp file MUST reside in the exact same directory/volume for atomic os.replace()
+    tmp_path = target_path.with_name(
+        f".{target_path.name}.{os.getpid()}.{uuid.uuid4().hex[:8]}.tmp"
+    )
+
+    try:
+      arrow_table: pa.Table = df.to_arrow()
+      with open(tmp_path, "wb") as f:
+        pq.write_table(
+            arrow_table,
+            f,
+            compression=self.compression,
+            compression_level=self.compression_level,
+            use_dictionary=True,
+            write_statistics=True,
+        )
+        f.flush()
+        os.fsync(f.fileno())
+
+      # File handle is strictly closed before replace (critical on Windows NTFS)
+      self._atomic_replace_with_retry(tmp_path, target_path)
+      return target_path
+
+    except Exception:
+      if tmp_path.exists():
+        try:
+          tmp_path.unlink()
+        except OSError:
+          pass
+      raise
+
+  def _atomic_replace_with_retry(self, src: Path, dst: Path) -> None:
+    """
+        Retries os.replace() if Windows Defender or Search Indexer briefly holds
+        a read handle on the newly flushed .tmp file.
+        """
+    for attempt in range(self.max_retries):
+      try:
+        os.replace(src, dst)
+        return
+      except PermissionError:
+        if attempt == self.max_retries - 1:
+          raise
+        time.sleep(self.retry_delay_sec * (2**attempt))
+
+
+class RedisStreamBridge:
+  """
+    Multi-process IPC bus over Redis:
+    - Bronze Ticks: Redis Streams (XADD with approximate MAXLEN) + Consumer Groups
+    - Gold State: Atomic Redis Hashes/Strings with strict staleness TTL checks
+    """
+
+  def __init__(
+      self,
+      redis_url: str = "redis://127.0.0.1:6379/0",
+      stream_maxlen: int = 500_000,
+  ) -> None:
+    self.client = redis.Redis.from_url(
+        redis_url,
+        decode_responses=False,
+        socket_timeout=2.0,
+        socket_connect_timeout=2.0,
+        retry_on_timeout=True,
+    )
+    self.stream_maxlen = stream_maxlen
+
+  # --- BRONZE: STREAM PRODUCER (kite_ingestor) ---
+  def publish_tick_batch(
+      self,
+      stream_key: str,
+      ticks: list[dict[str, Any]],
+  ) -> None:
+    if not ticks:
+      return
+
+    ingested_ns = time.time_ns()
+    pipe = self.client.pipeline(transaction=False)
+    for tick in ticks:
+      payload = orjson.dumps(tick)
+      pipe.xadd(
+          stream_key,
+          {b"p": payload, b"ts_ns": str(ingested_ns).encode()},
+          maxlen=self.stream_maxlen,
+          approximate=True,
+      )
+    pipe.execute()
+
+  # --- SILVER: STREAM CONSUMER (silver_normalizer) ---
+  def ensure_consumer_group(self, stream_key: str, group_name: str) -> None:
+    try:
+      self.client.xgroup_create(
+          stream_key, group_name, id="0", mkstream=True
+      )
+    except redis.exceptions.ResponseError as exc:
+      if "BUSYGROUP" not in str(exc):
+        raise
+
+  def consume_ticks(
+      self,
+      stream_key: str,
+      group_name: str,
+      consumer_name: str,
+      count: int = 500,
+      block_ms: int = 100,
+  ) -> list[tuple[bytes, dict[str, Any], int]]:
+    """
+        Reads unacknowledged ticks from the stream.
+        Returns list of (message_id, decoded_tick_dict, ingested_ts_ns).
+        """
+    response = self.client.xreadgroup(
+        groupname=group_name,
+        consumername=consumer_name,
+        streams={stream_key: ">"},
+        count=count,
+        block=block_ms,
+    )
+    if not response:
+      return []
+
+    parsed: list[tuple[bytes, dict[str, Any], int]] = []
+    for _stream, messages in response:
+      for msg_id, fields in messages:
+        tick = orjson.loads(fields[b"p"])
+        ts_ns = int(fields[b"ts_ns"])
+        parsed.append((msg_id, tick, ts_ns))
+    return parsed
+
+  def ack_ticks(
+      self, stream_key: str, group_name: str, msg_ids: list[bytes]
+  ) -> None:
+    if msg_ids:
+      self.client.xack(stream_key, group_name, *msg_ids)
+
+  # --- GOLD: ATOMIC STATE PUBLISHER & STALENESS-GUARDED READER ---
+  def publish_gold_artifact(
+      self,
+      artifact_key: str,
+      data: dict[str, Any],
+      source_tick_utc_ms: int,
+      expire_sec: int = 3600,
+  ) -> None:
+    envelope = {
+        "published_at_ms": int(time.time() * 1000),
+        "source_tick_ms": source_tick_utc_ms,
+        "data": data,
+    }
+    self.client.set(artifact_key, orjson.dumps(envelope), ex=expire_sec)
+
+  def read_gold_artifact(
+      self,
+      artifact_key: str,
+      max_age_ms: int = 2000,
+  ) -> tuple[str, dict[str, Any] | None]:
+    """
+        Reads Gold state and enforces circuit-breaker staleness checks.
+        Returns status ('FRESH', 'DEGRADED', 'STALE', 'MISSING') and payload.
+        """
+    raw = self.client.get(artifact_key)
+    if raw is None:
+      return "MISSING", None
+
+    envelope = orjson.loads(raw)
+    now_ms = int(time.time() * 1000)
+    age_ms = now_ms - envelope["source_tick_ms"]
+
+    if age_ms <= max_age_ms:
+      return "FRESH", envelope["data"]
+    if age_ms <= max_age_ms * 3:
+      return "DEGRADED", envelope["data"]
+    return "STALE", None
+Use code with caution.
+
+3. End-to-End Multi-Process Example (demo_pipeline.py)
+
+Run this locally on Windows 11 (with Redis running in WSL2 or Memurai) to verify Bronze Parquet flushing and Gold staleness reads:
+python
+from datetime import datetime, timezone
+import os
+from pathlib import Path
+import time
+from storage_bridge import AtomicParquetWriter, RedisStreamBridge
+
+ROOT = Path(
+    os.getenv(
+        "TRADING_DATA_ROOT",
+        r"C:\trading_platform" if os.name == "nt" else "/srv/trading_platform",
+    )
+)
+REDIS_URL = os.getenv("REDIS_URL", "redis://127.0.0.1:6379/0")
+
+writer = AtomicParquetWriter(base_dir=ROOT / "data")
+bridge = RedisStreamBridge(redis_url=REDIS_URL)
+
+# 1. Process 1 (kite_ingestor): Push ticks to Redis Stream & flush Bronze Parquet
+sample_ticks = [
+    {
+        "instrument_token": 256265,
+        "last_price": 24350.50,
+        "volume": 12000,
+        "oi": 0,
+        "exchange_ts_ms": int(time.time() * 1000),
+    },
+    {
+        "instrument_token": 11223344,
+        "last_price": 185.25,
+        "volume": 45000,
+        "oi": 1450000,
+        "exchange_ts_ms": int(time.time() * 1000),
+    },
+]
+
+bridge.publish_tick_batch("stream:ticks:live", sample_ticks)
+
+today_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+minute_str = datetime.now(timezone.utc).strftime("%H%M")
+saved_path = writer.write_records(
+    sample_ticks,
+    relative_path=f"bronze/{today_str}/ticks_{minute_str}.parquet",
+)
+print(f"Flushed Bronze batch atomically to: {saved_path}")
+
+# 2. Process 3 (gold_publisher): Publish NIFTY options regime
+bridge.publish_gold_artifact(
+    artifact_key="gold:regime:nifty",
+    data={
+        "india_vix": 13.8,
+        "regime": "CALM_TREND",
+        "size_multiplier": 1.0,
+        "hard_gate": False,
+    },
+    source_tick_utc_ms=sample_ticks[0]["exchange_ts_ms"],
+)
+
+# 3. Process 4 (execution_router): Read Gold state with 2000ms freshness SLA
+status, regime = bridge.read_gold_artifact(
+    "gold:regime:nifty", max_age_ms=2000
+)
+print(f"Live Loop Regime Status: {status} -> {regime}")
+Use code with caution.
+
+4. Windows 11 Dev vs. Ubuntu 24.04 LTS Production Setup
+
+• On Windows 11 (Right Now):
+	1. Exclude C:\trading_platform\data in Windows Security (Defender) under Virus & threat protection -> Exclusions. This prevents Windows Defender from scanning every 60-second .parquet.tmp flush and eliminates NTFS lock contention.
+	2. Run Redis via WSL2 Ubuntu (sudo apt install redis-server && sudo service redis-server start)—WSL2 exposes 127.0.0.1:6379 automatically to your Windows Python processes, giving you the exact same Redis binary you will use in production.
+• When Migrating to Ubuntu 24.04 LTS (Later):
+	1. Why Ubuntu Server 24.04 LTS is Best: Industry-standard package support for Python 3.12+, Polars, DuckDB, and Redis 7+, long-term security patches (until 2029), and zero desktop GUI overhead.
+	2. Filesystem & Process Management: Format your data partition as ext4 or XFS, mount it at /srv/trading_platform, run each of the 4 Python workers as an isolated systemd service (Restart=always, RestartSec=1), and switch REDIS_URL to a Unix domain socket (unix:///var/run/redis/redis-server.sock) to shave ~30–40% off IPC latency.

@@ -1,0 +1,44 @@
+To maximize throughput and keep end-to-end decision latency under 150 ms on your 32 GB RAM workstation without hitting Python's Global Interpreter Lock (GIL), assign each concurrency paradigm (multiprocessing, threading, asyncio, and C/Rust vectorization) to the exact workload bottleneck it solves.
+
+1. Where to Use Each Concurrency Tool
+
+
+Paradigm	Where to Implement in Your Platform	Why It Wins Here
+multiprocessing (Process Isolation)	Top-level OS workers:
+1. quack_server / Redis IPC
+2. kite_ingestor
+3. silver_gold_worker
+4. execution_router
+5. dash_ui / vectorbt_backtester	Bypasses the Python GIL completely and isolates memory. A garbage-collection pause or heavy Plotly/backtest query in dash_ui will never stall live WebSocket ingestion or order placement.
+threading (Background I/O & Timers)	Inside kite_ingestor and execution_router:
+• 3 daemon threads for the 3 KiteTicker WebSocket connections
+• 1 background thread draining the queue.Queue to flush Bronze Parquet every 60s
+• APScheduler background threads for 1m Silver/Gold rollups	KiteTicker (Twisted-based) and disk fsync writes are I/O-bound and release the GIL while waiting on network/SSD, letting threads share an in-memory queue.Queue with zero serialization overhead.
+asyncio (Concurrent REST / Rate-Limited I/O)	Historical Backfills & Order Status Polling:
+• Chunked historical candle downloads (3 req/sec)
+• Concurrent /orders, /positions, and /margins reconciliation calls (httpx / aiohttp)	Handles dozens of concurrent HTTP requests on a single thread with near-zero context-switching cost while waiting on Zerodha's REST API responses.
+C / Rust Vectorization (Zero-GIL Compute)	Inside silver_gold_worker:
+• Polars (multi-threaded Rust engine) for 1m bar rollups and NIFTY 500 breadth
+• DuckDB (multi-threaded C++ engine) for ASOF JOIN and GEX/Max Pain queries
+• NumPy / SciPy (ndtr) for Black-76 IV & Greeks	Both Polars and DuckDB release the Python GIL and automatically saturate all physical CPU cores in compiled Rust/C++. Never write Python for loops over ticks or option strikes.
+
+
+2. Five High-Impact Performance Optimizations for Your Stack
+
+1. Zero-Copy Arrow Transfers (DuckDB \(\leftrightarrow \) Polars):
+Never convert DuckDB results to Pandas (.df()) or Python dicts (.fetchall()) in your live Silver/Gold pipeline. Always use con.sql(...).pl(), which passes memory pointers directly via Apache Arrow with zero serialization overhead.
+2. Pre-Allocated Ring Buffers & orjson:
+Use orjson (written in Rust, ~5–10x faster than standard json) for all Redis Stream payloads and Gold state envelopes, and bound every queue.Queue (maxsize=250_000) and Redis Stream (MAXLEN ~ 500000) so a network burst never triggers an Out-of-Memory crash on your 32 GB machine.
+3. Disable Python Garbage Collection on the Hot Execution Path:
+In execution_router.py, call gc.disable() after startup initialization and trigger manual gc.collect() only during quiet 1-minute boundaries (or between 15:30 and 09:15 IST). This eliminates random 10–30 ms stop-the-world GC pauses right as a breakout order fires.
+4. CPU Core Pinning (When Migrating to Ubuntu Linux):
+On Ubuntu 24.04 LTS, set CPUAffinity= in your systemd unit files to pin kite_ingestor and execution_router onto dedicated physical CPU cores, preventing OS scheduler cache misses during market-open (09:15 IST) tick bursts.
+5. Pytest Parallelization (pytest-xdist):
+You already have pytest-xdist>=3.8.0 installed—always run your test suite with uv run pytest -n auto so test workers spawn across all CPU cores simultaneously.
+
+3. What Not to Mix (Common Python Concurrency Pitfalls)
+
+• Never combine fork with multi-threaded libraries (Polars, DuckDB, NumPy): Always keep mp.set_start_method("spawn", force=True) (which we added in main.py). Using Linux's default fork after DuckDB or Polars spawns its internal C++/Rust thread pools causes silent deadlocks.
+• Never use ProcessPoolExecutor inside the live 1-second hot path: Spawning processes or pickling large DataFrames across process boundaries takes 15–50 ms—keep hot-path state in Redis (or a single-process memory cache) and reserve multiprocessing for long-lived top-level workers and parallel backtest sweeps.
+If you'd like to implement any of these performance upgrades next, let me know whether you want:
+An async historical backfill & reconciliation worker (asyncio + tenacity) tailored to Kite's 3 req/sec historical candle limitA gc-controlled, zero-allocation hot-path wrapper for execution_router.py with latency telemetry (p50, p95, p99 histograms logged via structlog)

@@ -1,0 +1,1087 @@
+production-ready modules built directly on your pyproject.toml stack (kiteconnect, duckdb, polars, tenacity, structlog) and compatible with Windows 11 today and Ubuntu Linux later.
+
+Part 1: kite_bronze_ingestor.py (Process 1 — Live WebSocket & Atomic Bronze Writer)
+
+This ingestor splits your universe across 3 KiteTicker WebSocket connections (up to 9,000 tokens total), uses tenacity for resilient pre-market instrument dumps and automatic reconnection backoff, buffers incoming binary ticks in thread-safe queues, and flushes immutable ZSTD Parquet files every 60 seconds via AtomicParquetWriter.
+python
+from __future__ import annotations
+
+from datetime import datetime, timezone
+import os
+from pathlib import Path
+import queue
+import signal
+import threading
+import time
+from typing import Any
+
+from kiteconnect import KiteConnect, KiteTicker
+import polars as pl
+from pydantic_settings import BaseSettings, SettingsConfigDict
+import structlog
+from tenacity import retry, stop_after_attempt, wait_exponential
+
+from storage_bridge import AtomicParquetWriter
+
+logger = structlog.get_logger(__name__)
+
+
+class KiteIngestorSettings(BaseSettings):
+  model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+
+  kite_api_key: str
+  kite_access_token: str
+  trading_data_root: Path = Path(
+      r"C:\trading_platform" if os.name == "nt" else "/srv/trading_platform"
+  )
+  flush_interval_sec: int = 60
+
+
+class KiteBronzeIngestor:
+  """
+    Manages up to 3 concurrent KiteTicker WebSocket connections (9,000 tokens max),
+    captures raw ticks with monotonic ingestion timestamps, and flushes atomic
+    Bronze Parquet partitions every `flush_interval_sec`.
+    """
+
+  def __init__(self, settings: KiteIngestorSettings | None = None) -> None:
+    self.settings = settings or KiteIngestorSettings()
+    self.data_dir = self.settings.trading_data_root / "data"
+    self.writer = AtomicParquetWriter(base_dir=self.data_dir)
+    self.kite = KiteConnect(api_key=self.settings.kite_api_key)
+    self.kite.set_access_token(self.settings.kite_access_token)
+
+    self._tick_queue: queue.Queue[dict[str, Any]] = queue.Queue(maxsize=250_000)
+    self._stop_event = threading.Event()
+    self._tickers: list[KiteTicker] = []
+
+  @retry(
+      stop=stop_after_attempt(5),
+      wait=wait_exponential(multiplier=1, min=2, max=30),
+      reraise=True,
+  )
+  def sync_daily_instruments(self) -> pl.DataFrame:
+    """
+        Fetches daily NSE & NFO instrument master dumps at 08:30 IST and writes
+        them atomically to Bronze so token-to-strike/expiry mapping is point-in-time.
+        """
+    today_utc = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    logger.info("fetching_kite_instruments", trade_date=today_utc)
+
+    nse_list = self.kite.instruments("NSE")
+    nfo_list = self.kite.instruments("NFO")
+    combined = nse_list + nfo_list
+
+    records = [
+        {
+            "instrument_token": int(row["instrument_token"]),
+            "exchange_token": int(row["exchange_token"]),
+            "tradingsymbol": str(row["tradingsymbol"]),
+            "name": str(row.get("name") or ""),
+            "strike": float(row.get("strike") or 0.0),
+            "expiry": str(row.get("expiry") or ""),
+            "instrument_type": str(row.get("instrument_type") or ""),
+            "segment": str(row.get("segment") or ""),
+            "lot_size": int(row.get("lot_size") or 1),
+            "tick_size": float(row.get("tick_size") or 0.05),
+        }
+        for row in combined
+    ]
+
+    df = pl.DataFrame(records)
+    self.writer.write_dataframe(
+        df, relative_path=f"bronze/{today_utc}/instruments.parquet"
+    )
+    logger.info("instruments_synced", count=df.height)
+    return df
+
+  def _spawn_socket_worker(
+      self,
+      socket_id: int,
+      tokens: list[int],
+      mode: str,
+  ) -> None:
+    """
+        Runs an isolated KiteTicker WebSocket loop for up to 3,000 tokens.
+        """
+    if not tokens:
+      return
+    if len(tokens) > 3000:
+      raise ValueError(
+          f"Socket {socket_id} exceeded Kite 3,000 token limit: {len(tokens)}"
+      )
+
+    kws = KiteTicker(
+        api_key=self.settings.kite_api_key,
+        access_token=self.settings.kite_access_token,
+        reconnect=True,
+        reconnect_max_tries=50,
+        reconnect_max_delay=30,
+    )
+    self._tickers.append(kws)
+
+    def on_connect(ws: Any, _response: Any) -> None:
+      logger.info(
+          "kite_ws_connected",
+          socket_id=socket_id,
+          token_count=len(tokens),
+          mode=mode,
+      )
+      ws.subscribe(tokens)
+      ws.set_mode(mode, tokens)
+
+    def on_ticks(_ws: Any, ticks: list[dict[str, Any]]) -> None:
+      ingested_ms = int(time.time() * 1000)
+      for t in ticks:
+        ex_ts = t.get("exchange_timestamp")
+        ex_ts_ms = (
+            int(ex_ts.timestamp() * 1000)
+            if isinstance(ex_ts, datetime)
+            else ingested_ms
+        )
+        depth = t.get("depth") or {}
+        best_bid = (
+            depth["buy"][0]["price"] if depth.get("buy") else 0.0
+        )
+        best_ask = (
+            depth["sell"][0]["price"] if depth.get("sell") else 0.0
+        )
+
+        record = {
+            "socket_id": socket_id,
+            "instrument_token": int(t["instrument_token"]),
+            "last_price": float(t.get("last_price") or 0.0),
+            "volume": int(t.get("volume_traded") or 0),
+            "oi": int(t.get("oi") or 0),
+            "total_buy_qty": int(t.get("total_buy_quantity") or 0),
+            "total_sell_qty": int(t.get("total_sell_quantity") or 0),
+            "best_bid": float(best_bid),
+            "best_ask": float(best_ask),
+            "exchange_ts_ms": ex_ts_ms,
+            "ingested_ts_ms": ingested_ms,
+        }
+        try:
+          self._tick_queue.put_nowait(record)
+        except queue.Full:
+          logger.error("bronze_tick_queue_overflow", socket_id=socket_id)
+
+    def on_error(_ws: Any, code: int, reason: str) -> None:
+      logger.error(
+          "kite_ws_error", socket_id=socket_id, code=code, reason=reason
+      )
+
+    def on_close(_ws: Any, code: int, reason: str) -> None:
+      logger.warning(
+          "kite_ws_closed", socket_id=socket_id, code=code, reason=reason
+      )
+
+    kws.on_connect = on_connect
+    kws.on_ticks = on_ticks
+    kws.on_error = on_error
+    kws.on_close = on_close
+
+    # Blocking call inside dedicated daemon thread
+    kws.connect(threaded=False)
+
+  def _flush_loop(self) -> None:
+    """
+        Drains the in-memory tick queue every `flush_interval_sec` and writes
+        an immutable Parquet file atomically to `data/bronze/YYYY-MM-DD/`.
+        """
+    while not self._stop_event.is_set():
+      self._stop_event.wait(self.settings.flush_interval_sec)
+      self._drain_and_write()
+
+  def _drain_and_write(self) -> None:
+    batch: list[dict[str, Any]] = []
+    while True:
+      try:
+        batch.append(self._tick_queue.get_nowait())
+      except queue.Empty:
+        break
+
+    if not batch:
+      return
+
+    now_utc = datetime.now(timezone.utc)
+    day_str = now_utc.strftime("%Y-%m-%d")
+    ts_str = now_utc.strftime("%H%M%S_%f")[:10]
+    rel_path = f"bronze/{day_str}/ticks_{ts_str}.parquet"
+
+    saved = self.writer.write_records(batch, relative_path=rel_path)
+    logger.info("bronze_batch_flushed", rows=len(batch), path=str(saved))
+
+  def start(
+      self,
+      socket_1_index_tokens: list[int],
+      socket_2_stock_opt_tokens: list[int],
+      socket_3_nifty500_tokens: list[int],
+  ) -> None:
+    """
+        Launches 3 WebSocket threads + 1 atomic disk flusher thread.
+        """
+    socket_configs = (
+        (1, socket_1_index_tokens, KiteTicker.MODE_FULL),
+        (2, socket_2_stock_opt_tokens, KiteTicker.MODE_FULL),
+        (3, socket_3_nifty500_tokens, KiteTicker.MODE_QUOTE),
+    )
+
+    for sock_id, tokens, mode in socket_configs:
+      t = threading.Thread(
+          target=self._spawn_socket_worker,
+          args=(sock_id, tokens, mode),
+          name=f"kite-ws-{sock_id}",
+          daemon=True,
+      )
+      t.start()
+
+    flusher = threading.Thread(
+        target=self._flush_loop,
+        name="bronze-parquet-flusher",
+        daemon=True,
+    )
+    flusher.start()
+    logger.info("kite_bronze_ingestor_running")
+
+  def stop(self) -> None:
+    logger.info("shutting_down_ingestor")
+    self._stop_event.set()
+    for kws in self._tickers:
+      try:
+        kws.close()
+      except Exception:
+        pass
+    self._drain_and_write()
+    logger.info("ingestor_shutdown_complete")
+
+
+if __name__ == "__main__":
+  ingestor = KiteBronzeIngestor()
+  instruments = ingestor.sync_daily_instruments()
+
+  # Example: subscribe NIFTY 50 (256265) & India VIX (264969) on Socket 1
+  signal.signal(signal.SIGINT, lambda *_: ingestor.stop())
+  ingestor.start(
+      socket_1_index_tokens=[256265, 264969],
+      socket_2_stock_opt_tokens=[],
+      socket_3_nifty500_tokens=[],
+  )
+  while not ingestor._stop_event.is_set():
+    time.sleep(1)
+Use code with caution.
+
+Part 2: gold_regime_aggregator.py (Process 3 — Gold Breadth, GEX, Max Pain & IVR)
+
+This module queries your Silver tables via QuackEngine (DuckDB 2.0) using .sql(...).pl(), computes Net Dealer Gamma Exposure (GEX), Max Pain strike, ATM IV & IV Rank (IVR), Put-Call Ratio (PCR), and NIFTY 500 Market Breadth, and outputs the unified Gold Regime artifact ready for both Parquet persistence and live Redis publishing.
+
+Mathematical Conventions Used
+
+• Dealer GEX (Standard Market-Maker Convention): Dealers are assumed net long Calls (+Gamma) and net short Puts (-Gamma):
+\(\text{GEX}_{\text{strike}}=\left(\text{OI}_{\text{CE}}\cdot \Gamma _{\text{CE}}-\text{OI}_{\text{PE}}\cdot \Gamma _{\text{PE}}\right)\times \text{LotSize}\times \text{Spot}^{2}\times 0.01\)
+(Positive Net GEX = volatility dampening / dealer mean-reversion hedging; Negative Net GEX = volatility amplifying / trend acceleration).
+• Max Pain: The candidate expiry strike \(K^{*}\) that minimizes total intrinsic payout across all open Call and Put contracts:
+\(K^{*}=\arg \min _{K}\sum _{i}\left[\text{OI}_{\text{CE},i}\cdot \max (0,K-K_{i})+\text{OI}_{\text{PE},i}\cdot \max (0,K_{i}-K)\right]\)
+python
+from __future__ import annotations
+
+from datetime import datetime, timezone
+from typing import Any
+
+import numpy as np
+import polars as pl
+import structlog
+
+from quack_engine import QuackEngine
+
+logger = structlog.get_logger(__name__)
+
+
+class GoldRegimeAggregator:
+  """
+    Computes Gold-layer Market Breadth (NIFTY 500) and NIFTY Options Regime
+    (ATM IV, IVR, PCR, Net Dealer GEX, Max Pain, and Risk-Adjustment / Hard-Gate flags)
+    from Silver Parquet layers via DuckDB 2.0.
+    """
+
+  def __init__(self, quack: QuackEngine) -> None:
+    self.quack = quack
+
+  def compute_nifty500_breadth(
+      self,
+      bar_timestamp_utc: datetime,
+      nifty500_tokens: list[int],
+  ) -> dict[str, Any]:
+    """
+        Computes market-wide breadth across NIFTY 500 cash stocks at `bar_timestamp_utc`.
+        Requires `silver_equity_1m` with columns: instrument_token, bar_timestamp_utc,
+        close, prev_day_close, volume, ema_20, ema_50, ema_200.
+        """
+    if not nifty500_tokens:
+      return {}
+
+    ts_iso = bar_timestamp_utc.isoformat()
+    tokens_csv = ",".join(str(int(t)) for t in nifty500_tokens)
+
+    sql = f"""
+            SELECT
+                COUNT(*) AS total_stocks,
+                SUM(CASE WHEN close > prev_day_close THEN 1 ELSE 0 END) AS advances,
+                SUM(CASE WHEN close < prev_day_close THEN 1 ELSE 0 END) AS declines,
+                SUM(CASE WHEN close > ema_20 THEN 1 ELSE 0 END) AS above_ema20,
+                SUM(CASE WHEN close > ema_50 THEN 1 ELSE 0 END) AS above_ema50,
+                SUM(CASE WHEN close > ema_200 THEN 1 ELSE 0 END) AS above_ema200,
+                SUM(CASE WHEN close > prev_day_close THEN volume ELSE 0 END) AS up_volume,
+                SUM(CASE WHEN close < prev_day_close THEN volume ELSE 0 END) AS down_volume
+            FROM silver_equity_1m
+            WHERE bar_timestamp_utc = TIMESTAMP '{ts_iso}'
+              AND instrument_token IN ({tokens_csv})
+        """
+    df = self.quack.con.sql(sql).pl()
+    if df.is_empty() or df["total_stocks"] == 0:
+      return {}
+
+    row = df.row(0, named=True)
+    total = max(int(row["total_stocks"]), 1)
+    declines = max(int(row["declines"]), 1)
+    down_vol = max(float(row["down_volume"] or 0.0), 1.0)
+
+    return {
+        "breadth_universe_count": int(row["total_stocks"]),
+        "advances": int(row["advances"]),
+        "declines": int(row["declines"]),
+        "ad_ratio": round(int(row["advances"]) / declines, 3),
+        "pct_above_ema20": round(100.0 * int(row["above_ema20"]) / total, 2),
+        "pct_above_ema50": round(100.0 * int(row["above_ema50"]) / total, 2),
+        "pct_above_ema200": round(100.0 * int(row["above_ema200"]) / total, 2),
+        "up_down_volume_ratio": round(
+            float(row["up_volume"] or 0.0) / down_vol, 3
+        ),
+    }
+
+  def compute_options_regime(
+      self,
+      underlying_name: str,
+      nearest_expiry: str,
+      bar_timestamp_utc: datetime,
+      india_vix: float,
+      vix_day_change_pct: float,
+      trailing_1y_atm_ivs: list[float] | None = None,
+  ) -> dict[str, Any]:
+    """
+        Computes ATM IV, IV Rank (IVR), PCR, Net Dealer GEX, Max Pain strike,
+        and dynamic sizing / hard-gate circuit breakers for cash & options execution.
+        """
+    ts_iso = bar_timestamp_utc.isoformat()
+
+    sql = f"""
+            SELECT
+                o.strike,
+                o.option_type,
+                o.oi,
+                o.cum_volume,
+                o.spot_close,
+                o.iv_close,
+                o.gamma,
+                i.lot_size
+            FROM silver_options_1m o
+            JOIN bronze_instruments i
+              ON o.instrument_token = i.instrument_token
+            WHERE o.bar_timestamp_utc = TIMESTAMP '{ts_iso}'
+              AND i.name = '{underlying_name}'
+              AND i.expiry = '{nearest_expiry}'
+              AND o.oi > 0
+        """
+    chain = self.quack.con.sql(sql).pl()
+    if chain.is_empty():
+      logger.warning(
+          "empty_option_chain_for_gold",
+          underlying=underlying_name,
+          ts=ts_iso,
+      )
+      return {}
+
+    spot = float(chain["spot_close"])
+
+    # 1. ATM Strike & ATM IV (average of nearest CE & PE IV)
+    atm_row = (
+        chain.with_columns(
+            (pl.col("strike") - spot).abs().alias("dist_to_spot")
+        )
+        .sort("dist_to_spot")
+        .head(2)
+    )
+    atm_strike = float(atm_row["strike"])
+    atm_iv = float(atm_row["iv_close"].drop_nulls().mean() or 0.0)
+
+    # 2. IV Rank (IVR) against trailing 252-day ATM IV range
+    ivr = 50.0
+    if trailing_1y_atm_ivs and len(trailing_1y_atm_ivs) >= 10:
+      iv_min = min(trailing_1y_atm_ivs)
+      iv_max = max(trailing_1y_atm_ivs)
+      if iv_max > iv_min:
+        ivr = round(
+            100.0 * np.clip((atm_iv - iv_min) / (iv_max - iv_min), 0.0, 1.0), 2
+        )
+
+    # 3. Put-Call Ratio (PCR) & Net Dealer Gamma Exposure (GEX in INR Crores)
+    calls = chain.filter(pl.col("option_type") == "CE")
+    puts = chain.filter(pl.col("option_type") == "PE")
+
+    total_call_oi = float(calls["oi"].sum() or 0.0)
+    total_put_oi = float(puts["oi"].sum() or 0.0)
+    pcr_oi = round(total_put_oi / max(total_call_oi, 1.0), 3)
+
+    # GEX per 1% spot move in INR Crores (1e7)
+    call_gex = float(
+        (
+            calls["oi"]
+            * calls["gamma"].fill_null(0.0)
+            * calls["lot_size"]
+            * (spot**2)
+            * 0.01
+        ).sum()
+        or 0.0
+    )
+    put_gex = float(
+        (
+            puts["oi"]
+            * puts["gamma"].fill_null(0.0)
+            * puts["lot_size"]
+            * (spot**2)
+            * 0.01
+        ).sum()
+        or 0.0
+    )
+    net_gex_cr = round((call_gex - put_gex) / 1e7, 2)
+
+    # 4. Vectorized Max Pain Calculation across all strikes
+    strike_oi = (
+        chain.group_by(["strike", "option_type"])
+        .agg(pl.col("oi").sum())
+        .pivot(on="option_type", index="strike", values="oi")
+        .fill_null(0.0)
+        .sort("strike")
+    )
+    strikes_arr = strike_oi["strike"].to_numpy()
+    ce_oi_arr = (
+        strike_oi["CE"].to_numpy()
+        if "CE" in strike_oi.columns
+        else np.zeros_like(strikes_arr)
+    )
+    pe_oi_arr = (
+        strike_oi["PE"].to_numpy()
+        if "PE" in strike_oi.columns
+        else np.zeros_like(strikes_arr)
+    )
+
+    # Matrix [candidate_expiry_spot, strike]
+    diff_matrix = strikes_arr[:, None] - strikes_arr[None, :]
+    call_pain = np.maximum(diff_matrix, 0.0) @ ce_oi_arr
+    put_pain = np.maximum(-diff_matrix, 0.0) @ pe_oi_arr
+    max_pain_strike = float(strikes_arr[int(np.argmin(call_pain + put_pain))])
+
+    # 5. Cash & Options Execution Regime Classification (Risk Adjustment vs Hard Gate)
+    hard_gate_block_entries = (india_vix >= 24.0) or (vix_day_change_pct >= 15.0)
+
+    if hard_gate_block_entries:
+      regime_label = "TAIL_RISK_HARD_GATE"
+      position_size_mult = 0.0
+    elif india_vix >= 17.0 or net_gex_cr < 0.0:
+      regime_label = "ELEVATED_VOL_NEGATIVE_GEX"
+      position_size_mult = 0.50
+    elif india_vix <= 14.0 and net_gex_cr > 0.0:
+      regime_label = "CALM_POSITIVE_GEX"
+      position_size_mult = 1.00
+    else:
+      regime_label = "NEUTRAL_BALANCED"
+      position_size_mult = 0.75
+
+    return {
+        "underlying": underlying_name,
+        "expiry": nearest_expiry,
+        "spot_close": round(spot, 2),
+        "atm_strike": atm_strike,
+        "atm_iv_pct": round(atm_iv * 100.0, 2),
+        "ivr": ivr,
+        "india_vix": round(india_vix, 2),
+        "vix_day_change_pct": round(vix_day_change_pct, 2),
+        "pcr_oi": pcr_oi,
+        "net_gex_cr": net_gex_cr,
+        "max_pain_strike": max_pain_strike,
+        "regime_label": regime_label,
+        "position_size_multiplier": position_size_mult,
+        "hard_gate_block_entries": hard_gate_block_entries,
+    }
+
+  def build_gold_snapshot(
+      self,
+      bar_timestamp_utc: datetime,
+      nifty500_tokens: list[int],
+      nearest_nifty_expiry: str,
+      india_vix: float,
+      vix_day_change_pct: float,
+      trailing_1y_atm_ivs: list[float] | None = None,
+  ) -> pl.DataFrame:
+    """
+        Combines NIFTY 500 Breadth + NIFTY Options Regime into a single Gold row
+        ready for AtomicParquetWriter (`gold/regime_1m/...`) and Quack/Redis serving.
+        """
+    breadth = self.compute_nifty500_breadth(bar_timestamp_utc, nifty500_tokens)
+    options_regime = self.compute_options_regime(
+        underlying_name="NIFTY",
+        nearest_expiry=nearest_nifty_expiry,
+        bar_timestamp_utc=bar_timestamp_utc,
+        india_vix=india_vix,
+        vix_day_change_pct=vix_day_change_pct,
+        trailing_1y_atm_ivs=trailing_1y_atm_ivs,
+    )
+
+    snapshot = {
+        "bar_timestamp_utc": bar_timestamp_utc,
+        "published_at_utc": datetime.now(timezone.utc),
+        **breadth,
+        **options_regime,
+    }
+    return pl.DataFrame([snapshot])
+Use code with caution.
+
+How the End-to-End Loop Connects
+
+1. kite_bronze_ingestor.py runs continuously from 09:00 to 15:35 IST, writing data/bronze/YYYY-MM-DD/ticks_*.parquet atomically every 60 seconds.
+2. Silver Normalizer runs every 1 minute (APScheduler), joins option ticks to spot via QuackEngine.asof_join_options_to_spot(), calculates Greeks via compute_silver_options_greeks(), and writes data/silver/options_1m/... and data/silver/equity_1m/....
+3. GoldRegimeAggregator immediately calls build_gold_snapshot(...), publishing the resulting 1-row regime state to your Quack server (CALL quack_serve(...)) and archiving it to data/gold/regime_1m/... so your live execution router and VectorBT backtester read the exact same signals.
+If you'd like to complete the final execution leg of the platform, let me know whether you want:
+Process 4 (execution_router.py): The live strategy & order execution engine reading from your Quack server with staleness kill-switches and Kite's 10 orders/sec token-bucket rate limiterA unified Windows 11 / Ubuntu orchestrator script (main.py) that launches and monitors all 4 processes cleanly
+
+Process 4 (execution_router.py): The live strategy & order execution engine reading from your Quack server with staleness kill-switches and Kite's 10 orders/sec token-bucket rate limiterA unified Windows 11 / Ubuntu orchestrator script (main.py) that launches and monitors all 4 processes cleanly
+
+Here are the final two pieces of your multi-process Medallion trading platform: execution_router.py (Process 4) and main.py (the cross-platform Windows 11 / Ubuntu Linux process supervisor).
+
+Part 1: execution_router.py (Process 4 — Live Execution & Guardrails)
+
+This process reads exclusively from your local DuckDB 2.0 Quack server (quack:127.0.0.1:9494), validates artifact freshness against strict staleness circuit breakers, scales order quantities using position_size_multiplier, enforces hard_gate_block_entries, and routes orders through a thread-safe Token-Bucket Rate Limiter capped safely below Zerodha Kite Connect's 10 orders/sec, 400 orders/min, and 5,000 orders/day quotas.
+python
+from __future__ import annotations
+
+from collections import deque
+from datetime import datetime, timezone
+import os
+from pathlib import Path
+import signal
+import threading
+import time
+from typing import Any
+
+import duckdb
+from duckdb_extensions import import_extension
+from kiteconnect import KiteConnect
+from pydantic_settings import BaseSettings, SettingsConfigDict
+import structlog
+
+logger = structlog.get_logger(__name__)
+
+
+class ExecutionSettings(BaseSettings):
+  model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+
+  kite_api_key: str
+  kite_access_token: str
+  quack_uri: str = "quack:127.0.0.1:9494"
+  quack_token: str = "local_secret"
+
+  # Staleness SLAs (milliseconds)
+  fresh_max_age_ms: int = 65_000  # 1m bar + 5s processing budget
+  degraded_max_age_ms: int = 180_000  # 3m max before full kill switch
+
+  # Kite Rate-Limit Safety Caps (buffered below 10/s, 400/m, 5000/day)
+  max_orders_per_sec: int = 8
+  max_orders_per_min: int = 350
+  max_orders_per_day: int = 4500
+  max_modifications_per_order: int = 20  # Kite hard cap is 25
+
+  dry_run: bool = True  # Set False in .env for live order firing
+
+
+class KiteRateLimiter:
+  """
+    Thread-safe sliding-window rate limiter enforcing Kite Connect's
+    per-second, per-minute, and daily order placement quotas, plus per-order
+    modification tracking.
+    """
+
+  def __init__(
+      self,
+      max_per_sec: int = 8,
+      max_per_min: int = 350,
+      max_per_day: int = 4500,
+      max_mods: int = 20,
+  ) -> None:
+    self.max_per_sec = max_per_sec
+    self.max_per_min = max_per_min
+    self.max_per_day = max_per_day
+    self.max_mods = max_mods
+
+    self._sec_window: deque[float] = deque()
+    self._min_window: deque[float] = deque()
+    self._daily_count: int = 0
+    self._mod_counts: dict[str, int] = {}
+    self._lock = threading.Lock()
+
+  def acquire_order_slot(self, timeout_sec: float = 2.0) -> bool:
+    deadline = time.monotonic() + timeout_sec
+    while time.monotonic() < deadline:
+      with self._lock:
+        now = time.monotonic()
+
+        if self._daily_count >= self.max_per_day:
+          logger.critical(
+              "kite_daily_order_quota_exhausted", count=self._daily_count
+          )
+          return False
+
+        while self._sec_window and (now - self._sec_window) >= 1.0:
+          self._sec_window.popleft()
+        while self._min_window and (now - self._min_window) >= 60.0:
+          self._min_window.popleft()
+
+        if (
+            len(self._sec_window) < self.max_per_sec
+            and len(self._min_window) < self.max_per_min
+        ):
+          self._sec_window.append(now)
+          self._min_window.append(now)
+          self._daily_count += 1
+          return True
+
+      time.sleep(0.02)
+
+    logger.warning("kite_rate_limit_timeout")
+    return False
+
+  def can_modify_order(self, order_id: str) -> bool:
+    with self._lock:
+      count = self._mod_counts.get(order_id, 0)
+      if count >= self.max_mods:
+        return False
+      self._mod_counts[order_id] = count + 1
+      return True
+
+
+class ExecutionRouter:
+  """
+    Live Strategy & Order Execution Engine (Process 4).
+    Reads Gold artifacts exclusively from DuckDB 2.0 Quack server, applies
+    staleness circuit-breakers and options regime sizing, and routes orders.
+    """
+
+  def __init__(self, settings: ExecutionSettings | None = None) -> None:
+    self.settings = settings or ExecutionSettings()
+    self.kite = KiteConnect(api_key=self.settings.kite_api_key)
+    self.kite.set_access_token(self.settings.kite_access_token)
+    self.limiter = KiteRateLimiter(
+        max_per_sec=self.settings.max_orders_per_sec,
+        max_per_min=self.settings.max_orders_per_min,
+        max_per_day=self.settings.max_orders_per_day,
+        max_mods=self.settings.max_modifications_per_order,
+    )
+    self._stop_event = threading.Event()
+    self._kill_switch_engaged = False
+
+    import_extension("quack")
+    self.con = duckdb.connect(":memory:")
+    self.con.execute("LOAD quack;")
+    self._connect_quack()
+
+  def _connect_quack(self) -> None:
+    self.con.execute(
+        f"CONNECT '{self.settings.quack_uri}' (TOKEN"
+        f" '{self.settings.quack_token}');"
+    )
+    logger.info("execution_connected_to_quack", uri=self.settings.quack_uri)
+
+  def fetch_latest_gold_state(self) -> tuple[str, dict[str, Any] | None]:
+    """
+        Reads the latest published Gold regime & feature snapshot from Quack
+        and evaluates its age against staleness SLAs.
+        Returns ('FRESH' | 'DEGRADED' | 'STALE' | 'MISSING', row_dict).
+        """
+    try:
+      rel = self.con.sql("""
+                SELECT *
+                FROM gold_regime_latest
+                ORDER BY published_at_utc DESC
+                LIMIT 1
+            """)
+      df = rel.pl()
+    except Exception as exc:
+      logger.error("quack_read_failed", error=str(exc))
+      return "MISSING", None
+
+    if df.is_empty():
+      return "MISSING", None
+
+    row = df.row(0, named=True)
+    pub_ts: datetime = row["published_at_utc"]
+    if pub_ts.tzinfo is None:
+      pub_ts = pub_ts.replace(tzinfo=timezone.utc)
+
+    age_ms = int(
+        (datetime.now(timezone.utc) - pub_ts).total_seconds() * 1000
+    )
+
+    if age_ms <= self.settings.fresh_max_age_ms:
+      return "FRESH", row
+    if age_ms <= self.settings.degraded_max_age_ms:
+      return "DEGRADED", row
+    return "STALE", row
+
+  def engage_kill_switch(self, reason: str) -> None:
+    if self._kill_switch_engaged:
+      return
+    self._kill_switch_engaged = True
+    logger.critical("KILL_SWITCH_ENGAGED", reason=reason)
+
+    if self.settings.dry_run:
+      logger.warning("dry_run_kill_switch_simulated")
+      return
+
+    try:
+      orders = self.kite.orders()
+      for order in orders:
+        if order.get("status") in ("OPEN", "TRIGGER PENDING"):
+          self.kite.cancel_order(
+              variety=order["variety"],
+              order_id=order["order_id"],
+          )
+          logger.warning("cancelled_open_order", order_id=order["order_id"])
+    except Exception as exc:
+      logger.exception("kill_switch_cancel_failed", error=str(exc))
+
+  def place_managed_order(
+      self,
+      tradingsymbol: str,
+      exchange: str,
+      transaction_type: str,
+      base_quantity: int,
+      lot_size: int,
+      order_type: str,
+      product: str,
+      price: float | None = None,
+      is_exit: bool = False,
+      gold_state: dict[str, Any] | None = None,
+  ) -> str | None:
+    """
+        Executes an entry or exit order after applying Hard Gate blocks,
+        options-regime position sizing, and Kite rate-limit checks.
+        """
+    # 1. Entry Guardrails (Exits are always permitted unless kill switch is active)
+    if not is_exit:
+      if self._kill_switch_engaged:
+        logger.warning("entry_blocked_kill_switch", symbol=tradingsymbol)
+        return None
+      if gold_state and gold_state.get("hard_gate_block_entries", False):
+        logger.warning(
+            "entry_blocked_options_hard_gate",
+            symbol=tradingsymbol,
+            vix=gold_state.get("india_vix"),
+        )
+        return None
+
+      mult = float(
+          gold_state.get("position_size_multiplier", 1.0)
+          if gold_state
+          else 1.0
+      )
+      scaled_qty = int((base_quantity * mult) // lot_size) * lot_size
+      if scaled_qty <= 0:
+        logger.info("entry_skipped_zero_scaled_qty", symbol=tradingsymbol)
+        return None
+    else:
+      scaled_qty = base_quantity
+
+    # 2. Enforce Kite Rate Limits
+    if not self.limiter.acquire_order_slot():
+      logger.error("order_dropped_rate_limit", symbol=tradingsymbol)
+      return None
+
+    # 3. Fire Order (or Log in Dry-Run Mode)
+    if self.settings.dry_run:
+      fake_id = f"DRY_{int(time.time() * 1000)}"
+      logger.info(
+          "dry_run_order_placed",
+          order_id=fake_id,
+          symbol=tradingsymbol,
+          side=transaction_type,
+          qty=scaled_qty,
+          price=price,
+      )
+      return fake_id
+
+    order_id = self.kite.place_order(
+        variety=self.kite.VARIETY_REGULAR,
+        exchange=exchange,
+        tradingsymbol=tradingsymbol,
+        transaction_type=transaction_type,
+        quantity=scaled_qty,
+        product=product,
+        order_type=order_type,
+        price=price,
+    )
+    logger.info(
+        "live_order_placed",
+        order_id=order_id,
+        symbol=tradingsymbol,
+        side=transaction_type,
+        qty=scaled_qty,
+    )
+    return str(order_id)
+
+  def run_loop(self, poll_interval_sec: float = 0.5) -> None:
+    logger.info(
+        "execution_router_started", dry_run=self.settings.dry_run
+    )
+    while not self._stop_event.is_set():
+      status, gold = self.fetch_latest_gold_state()
+
+      if status in ("STALE", "MISSING"):
+        self.engage_kill_switch(reason=f"Gold state is {status}")
+      elif status == "DEGRADED":
+        logger.warning(
+            "gold_state_degraded_entries_paused",
+            regime=gold.get("regime_label") if gold else None,
+        )
+        # Allow exit/stop-loss management only; skip new entries
+      elif status == "FRESH" and gold is not None:
+        # Reset kill switch automatically once fresh Gold data resumes
+        if self._kill_switch_engaged:
+          logger.info("fresh_gold_restored_clearing_kill_switch")
+          self._kill_switch_engaged = False
+
+        # --- Plug your strategy signal evaluation here ---
+        # Example: evaluate signals using `gold` and call `self.place_managed_order(...)`
+
+      self._stop_event.wait(poll_interval_sec)
+
+  def stop(self) -> None:
+    self._stop_event.set()
+    self.con.close()
+    logger.info("execution_router_stopped")
+
+
+if __name__ == "__main__":
+  router = ExecutionRouter()
+  signal.signal(signal.SIGINT, lambda *_: router.stop())
+  signal.signal(signal.SIGTERM, lambda *_: router.stop())
+  router.run_loop()
+Use code with caution.
+
+Part 2: main.py (Unified Windows 11 & Ubuntu Process Orchestrator)
+
+Because Windows 11 uses spawn (instead of Linux fork) for multiprocessing, all worker targets must be top-level importable functions guarded by if __name__ == "__main__":. This orchestrator launches all 4 processes in dependency order (starting the Quack server first so clients attach cleanly), monitors heartbeats every 2 seconds, auto-restarts crashed workers with backoff, and handles graceful shutdown on Ctrl+C (SIGINT) or SIGTERM.
+python
+from __future__ import annotations
+
+import multiprocessing as mp
+import os
+from pathlib import Path
+import signal
+import sys
+import time
+from typing import Callable
+
+import duckdb
+from duckdb_extensions import import_extension
+import structlog
+
+logger = structlog.get_logger(__name__)
+
+
+# --- TOP-LEVEL WORKER ENTRYPOINTS (Required for Windows 11 'spawn' compatibility) ---
+
+
+def run_quack_storage_server(
+    data_root: str, quack_uri: str, quack_token: str
+) -> None:
+  """
+    Process 0/Core: Owns medallion.duckdb in read/write mode and exposes
+    the DuckDB 2.0 Quack protocol on localhost for concurrent worker access.
+    """
+  import_extension("quack")
+  db_path = Path(data_root) / "data" / "medallion.duckdb"
+  db_path.parent.mkdir(parents=True, exist_ok=True)
+
+  con = duckdb.connect(str(db_path))
+  con.execute("LOAD quack;")
+  con.execute("""
+        CREATE TABLE IF NOT EXISTS gold_regime_latest (
+            bar_timestamp_utc TIMESTAMPTZ,
+            published_at_utc TIMESTAMPTZ,
+            underlying VARCHAR,
+            expiry VARCHAR,
+            spot_close DOUBLE,
+            atm_strike DOUBLE,
+            atm_iv_pct DOUBLE,
+            ivr DOUBLE,
+            india_vix DOUBLE,
+            vix_day_change_pct DOUBLE,
+            pcr_oi DOUBLE,
+            net_gex_cr DOUBLE,
+            max_pain_strike DOUBLE,
+            regime_label VARCHAR,
+            position_size_multiplier DOUBLE,
+            hard_gate_block_entries BOOLEAN
+        );
+    """)
+  logger.info("starting_quack_server", db_path=str(db_path), uri=quack_uri)
+  # Blocks while serving Quack clients over TCP localhost
+  con.execute(f"CALL quack_serve('{quack_uri}', token = '{quack_token}');")
+
+
+def run_bronze_ingestor() -> None:
+  """Process 1: KiteTicker WebSocket capture & atomic Bronze Parquet flusher."""
+  from kite_bronze_ingestor import KiteBronzeIngestor
+
+  ingestor = KiteBronzeIngestor()
+  ingestor.sync_daily_instruments()
+  # Populate your token lists from daily instruments before starting
+  ingestor.start(
+      socket_1_index_tokens=,  # NIFTY 50 & India VIX
+      socket_2_stock_opt_tokens=[],
+      socket_3_nifty500_tokens=[],
+  )
+  try:
+    while True:
+      time.sleep(1)
+  except KeyboardInterrupt:
+    ingestor.stop()
+
+
+def run_silver_and_gold_pipeline() -> None:
+  """Processes 2 & 3: 1-minute Silver ASOF/Greeks & Gold Breadth/GEX publisher."""
+  from apscheduler.schedulers.blocking import BlockingScheduler
+
+  scheduler = BlockingScheduler(timezone="Asia/Kolkata")
+
+  def minute_job() -> None:
+    logger.info("running_silver_gold_1m_cycle")
+    # Invoke QuackEngine.asof_join_options_to_spot() -> compute_silver_options_greeks()
+    # -> GoldRegimeAggregator.build_gold_snapshot() -> INSERT INTO gold_regime_latest
+
+  # Trigger at second :02 of every minute during NSE market hours (09:15 - 15:30 IST)
+  scheduler.add_job(
+      minute_job,
+      "cron",
+      day_of_week="mon-fri",
+      hour="9-15",
+      minute="*",
+      second="2",
+  )
+  try:
+    scheduler.start()
+  except (KeyboardInterrupt, SystemExit):
+    scheduler.shutdown()
+
+
+def run_execution_router() -> None:
+  """Process 4: Live strategy & rate-limited order execution engine."""
+  from execution_router import ExecutionRouter
+
+  router = ExecutionRouter()
+  try:
+    router.run_loop(poll_interval_sec=0.5)
+  except KeyboardInterrupt:
+    router.stop()
+
+
+# --- CROSS-PLATFORM SUPERVISOR ---
+
+
+class PlatformOrchestrator:
+
+  def __init__(self) -> None:
+    self.data_root = os.getenv(
+        "TRADING_DATA_ROOT",
+        r"C:\trading_platform" if os.name == "nt" else "/srv/trading_platform",
+    )
+    self.quack_uri = os.getenv("QUACK_URI", "quack:127.0.0.1:9494")
+    self.quack_token = os.getenv("QUACK_TOKEN", "local_secret")
+    self._shutdown = False
+    self._processes: dict[str, mp.Process] = {}
+    self._specs: dict[str, tuple[Callable[..., None], tuple[object, ...]]] = {
+        "quack_server": (
+            run_quack_storage_server,
+            (self.data_root, self.quack_uri, self.quack_token),
+        ),
+        "bronze_ingestor": (run_bronze_ingestor, ()),
+        "silver_gold_worker": (run_silver_and_gold_pipeline, ()),
+        "execution_router": (run_execution_router, ()),
+    }
+
+  def _start_worker(self, name: str) -> None:
+    target, args = self._specs[name]
+    proc = mp.Process(target=target, args=args, name=name, daemon=False)
+    proc.start()
+    self._processes[name] = proc
+    logger.info("worker_started", worker=name, pid=proc.pid)
+
+  def start_all(self) -> None:
+    # Start Quack server first and allow 1.5s bind time before clients attach
+    self._start_worker("quack_server")
+    time.sleep(1.5)
+
+    for name in ("bronze_ingestor", "silver_gold_worker", "execution_router"):
+      self._start_worker(name)
+
+  def supervise(self) -> None:
+    self.start_all()
+    while not self._shutdown:
+      for name, proc in list(self._processes.items()):
+        if not proc.is_alive() and not self._shutdown:
+          logger.error(
+              "worker_crashed_restarting",
+              worker=name,
+              exitcode=proc.exitcode,
+          )
+          time.sleep(2.0)
+          self._start_worker(name)
+      time.sleep(2.0)
+
+  def stop_all(self) -> None:
+    if self._shutdown:
+      return
+    self._shutdown = True
+    logger.info("stopping_all_platform_workers")
+
+    # Shut down execution first, Quack server last
+    shutdown_order = (
+        "execution_router",
+        "silver_gold_worker",
+        "bronze_ingestor",
+        "quack_server",
+    )
+    for name in shutdown_order:
+      proc = self._processes.get(name)
+      if proc and proc.is_alive():
+        proc.terminate()
+        proc.join(timeout=5.0)
+        if proc.is_alive():
+          logger.warning("force_killing_worker", worker=name)
+          proc.kill()
+        logger.info("worker_stopped", worker=name)
+
+
+if __name__ == "__main__":
+  # Enforce 'spawn' explicitly so Windows 11 and Ubuntu behave identically
+  mp.set_start_method("spawn", force=True)
+
+  orchestrator = PlatformOrchestrator()
+
+  def _handle_sig(_signum: int, _frame: object) -> None:
+    orchestrator.stop_all()
+    sys.exit(0)
+
+  signal.signal(signal.SIGINT, _handle_sig)
+  signal.signal(signal.SIGTERM, _handle_sig)
+
+  orchestrator.supervise()
+Use code with caution.

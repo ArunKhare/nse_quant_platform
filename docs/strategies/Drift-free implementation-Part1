@@ -1,0 +1,225 @@
+1. Confirm the target architecture
+Please confirm this is the agreed target:
+
+text
+Operational path
+Kite capture → DuckDB → features/evidence → decision loop → paper orders
+
+Medallion path
+Capture → Bronze → Silver → Gold → versioned regime/policy artifacts
+
+Live decision path
+Fresh DuckDB data + latest published Gold artifact → decision → audit/replay
+Also confirm:
+
+Live trading remains disabled; paper trading only.
+
+The decision loop remains 15 seconds.
+
+Option-chain capture remains 30 seconds.
+
+NIFTY is the only tradable underlying for now.
+
+Cash stocks, stock options, index options, spreads, and multi-leg strategies remain disabled until their contexts are implemented.
+
+2. Confirm the regime contract
+Please confirm the canonical regime contract:
+
+Four components: IV state, term structure, skew, price action.
+
+108 possible regimes.
+
+Iron-condor eligibility uses the full institutional regime_label.
+
+Daily BULL|NORMAL remains market context only, never an iron-condor eligibility regime.
+
+Multi-timeframe BULLISH / BEARISH / MIXED remains trend evidence, not a regime.
+
+Realized volatility remains a separate risk/filter input, not a regime axis.
+
+
+3. Confirm evidence-plugin scope
+For the first production-ready stage, confirm which plugins must be enabled:
+
+Plugin	Required for stage 1?
+multi_timeframe	Yes / No
+event_risk	Yes / No
+technical_indicator	Yes / No
+volumeflow	Yes / No
+option_positioning	Yes / No
+market_structure	Yes / No
+market_context	Yes / No
+execution_quality	Yes / No
+institutional_regime	Yes / No
+Also state whether each enabled plugin is:
+
+A hard entry gate.
+
+A risk-sizing input.
+
+Observation-only evidence.
+
+Deferred until a later stage.
+
+3. Keep it configurable at runtime:
+For now Observation-only
+Should be used as hard entry gate and risk-sizing input
+
+4. Confirm cash-stock boundary
+Confirm the minimum cash-stock scope:
+
+Cash stocks are research/context-only initially, or fully tradeable later?
+
+Which strategies will eventually run on cash stocks?
+
+Should cash-stock data initially be limited to daily candles?
+
+Should sector indices and NIFTY 500 be captured now?
+
+Should market breadth be computed from your ten-stock watchlist, all NIFTY constituents, or another universe?
+
+Should cash-stock decisions consume NIFTY options regime as a hard gate, risk adjustment, or observation-only context?
+
+4. fully tradeable later, Should helip in reseach and context
+Strategy:
+
+Swing Cash Strategies
+
+• Swing & Pullback Trading: Hold stocks for a few days to several weeks to capture intermediate trends or pullbacks toward support/moving averages.
+• Breakout & Momentum Trading: Buy stocks breaking out of consolidation or multi-period bases with strong relative strength and volume.
+
+
+Intraday Cash Strategies
+
+• Opening Range Breakout (ORB) / Gap and Go: Trade high-volume stocks breaking out of their early session range (such as the first 5–15 minutes after market open) backed by strong volume and pre-market or news catalysts.
+• VWAP & Moving Average Pullbacks: Enter in the direction of the intraday trend when price pulls back to Volume Weighted Average Price (VWAP) or key moving averages and shows confirmation.
+• Range & Reversal Trading: Buy near established intraday support and sell near resistance—or look for momentum/RSI/MACD divergences—while exiting if price breaks cleanly past boundaries
+
+cash-stock data: daily and 1 min : so that the rest time intervals: 4h, 1h, 15m as and when required
+
+sector indices and NIFTY 500?  yes
+Compute market breadth from a broad index universe like the NIFTY 500 or NIFTY 200
+ cash-stock decisions consume NIFTY options regime as a hard gate, risk adjustment, or observation-only context
+
+How to Structure Breadth in Your Medallion Architecture
+
+If you want to keep your live streaming pipeline lightweight while maintaining accurate breadth, split your ingestion across two tiers:
+
+Tier	Universe	Ingestion & Refresh Cadence	Role in Gold Layer
+Macro Breadth Universe	NIFTY 500 (or All NSE F&O Stocks)	1-minute or 5-minute snapshots (or NSE market-wide advance/decline feed)	Powers your Market Regime artifact (e.g., Advance/Decline Ratio, % of stocks above 20/50/200 DMA, McClellan Oscillator).
+Execution Universe	10-Stock Watchlist + NIFTY / BANKNIFTY Indices	Sub-second tick / WebSocket stream	Powers real-time Options Chain Greeks, IV Rank, Order Book Imbalance, and Entry/Exit Triggers.
+
+
+NIFTY Options Regime to Cash-Stock Execution
+
+In the Indian market, NIFTY options data (India VIX, ATM IV percentile, Put-Call Ratio, and dealer gamma exposure/OI concentration) acts as a real-time institutional fear and liquidity gauge. Here is how to structure the three consumption modes in your Gold layer:
+
+a. Risk Adjustment (Default — 90% of Trading Days)
+
+Use the options regime to continuously scale your exposure rather than turning strategies on and off binary-style:
+• Position Sizing: Scale share quantity inversely to NIFTY ATM Implied Volatility (IV) or India VIX (e.g., cut cash-equity position size by 30–50% when India VIX spikes above 18–20 or ATM IV jumps >25% intraday).
+• Stop-Loss & Target Widening: Adjust ATR-based stop distances using expected intraday moves derived from the NIFTY ATM straddle price so normal volatility noise does not stop you out early.
+• Directional Tilt: If NIFTY options show heavy Call writing overhead (strong resistance at a major strike) with falling PCR, tighten trailing stops on long cash-equity breakouts.
+
+b. Hard Gate (Tail-Risk & Event Circuit Breakers Only)
+
+Use a binary block on new long entries only when the options market signals acute structural stress or binary event risk:
+• Extreme Volatility Spike: India VIX surges rapidly (e.g., >15–20% single-day jump) or crosses an extreme threshold (e.g., VIX > 24–25), indicating disorderly institutional hedging and wide cash bid-ask spreads.
+• Major Binary Events: Ahead of RBI policy announcements, Union Budget, or major election results where NIFTY front-week IV is severely inverted relative to next-week IV (backwardation), creating gap-risk that stop-losses cannot protect against.
+• Liquidity Dry-Up / Expiry Pinning: On monthly NIFTY expiry afternoons (post 2:00 PM IST), heavy gamma pinning in index heavyweights can cause artificial whipsaws in correlated cash stocks.
+
+c. Observation-Only Context (Avoid for Live Sizing, Use for Post-Trade Attribution)
+
+Treat options regime data as observation-only only when trading idiosyncratic, non-index-correlated catalysts (e.g., a pharma stock reacting to a USFDA approval or a mid-cap reacting to an earnings surprise), or during backtest diagnostics to measure how much drawdown your cash strategy suffers across different IV buckets before enforcing automated sizing rules.
+
+
+Summary Decision Matrix for Your Gold Layer
+
+
+NIFTY Options Regime State	Example Triggers (NSE Context)	Cash-Stock Consumption Mode	Execution Rule
+Calm / Low IV	India VIX < 14, stable OI	Risk Adjustment (Normal)	100% base capital allocation; standard ATR stops.
+Elevated IV / Hedging	VIX 15–22, rising Put buying, IV skew steepening	Risk Adjustment (Defensive)	Cut position size by 30–50%; require higher relative strength vs. NIFTY 500.
+Event Backwardation / Panic	VIX > 24 or +15% intraday spike; pre-RBI/Budget IV surge	Hard Gate (Block Entries)	Block new cash entries; tighten stops or hedge existing holdings.
+Idiosyncratic Catalyst	Stock-specific earnings/regulatory news (low beta to NIFTY)	Observation-Only	Log regime tag for analytics; execute based on stock-specific volume/price.
+
+
+5. Confirm Medallion scope as decided earlier or as you can research  and conclude
+
+6. Confirm non-functional requirements
+Single user, Multi processes - from different terminal at a time
+Preferred database:
+Required retention period for raw and derived data. as may be needed? research  and tell.
+Required alerting channels: Telegram
+ dashboard priority. High
+
+1. Required Backtest Coverage
+
+To avoid overfitting to a single market cycle or SEBI regulatory regime, your Silver/Gold historical replay layer should meet these baselines:
+• Date Range (Minimum 7–10 Years: 2017–2026):
+	• Why 2017+: Captures multiple full market cycles—including the 2018 mid-cap correction, the March 2020 COVID crash (extreme VIX > 80 tail risk), the 2020–2021 low-IV bull run, the 2022 global rate-hike sideways grind, and the post-2024/2025 SEBI F&O regulatory changes (weekly expiry rationalization, increased contract sizes, and upfront margin rules).
+	• Intraday vs. EOD split: Keep 7–10 years of 1-minute OHLCV for cash stocks and index futures, and at least 4–5 years of 1-minute option chain snapshots (post-2021, when NSE weekly options liquidity became structurally representative of current market microstructure).
+• Universe (Point-in-Time Survivor-Bias-Free):
+	• Breadth & Regime Universe: Historical constituents of the NIFTY 500 (including delisted, merged, or excluded stocks on each historical date to prevent survivorship bias).
+	• Tradable Execution Universe: Historical NSE F&O eligible stocks (~180–220 names) plus NIFTY and BANKNIFTY index spot, futures, and weekly/monthly option chains (filtering strikes within ± 15% of spot to keep Bronze/Silver storage manageable).
+• Minimum Number of Trades per Regime:
+	• Statistical Floor: 100–150 independent trades per regime bucket (e.g., Low VIX Trending, High VIX Mean-Reverting, Event/Expiry) per strategy. Fewer than 50 trades leaves your Sharpe ratio and max drawdown vulnerable to 2–3 lucky outliers.
+	• Tail-Risk / Hard-Gate Regime: At least 30–50 historical trigger events across distinct calendar years to verify that your circuit-breaker rules actually save capital rather than just blocking profitable bounce trades.
+
+2. Required Performance & Latency Targets
+
+Because you are trading via standard broker/institutional APIs (non-colocated HFT), your architecture should optimize for deterministic consistency (p99 latency) rather than raw microsecond speed:
+
+Metric	Intraday / Options Execution Target	Swing / Positional Target	Architectural Requirement
+Decisions per Second (Throughput)	50 – 500 decisions/sec (burst capacity at market open 09:15 IST & 15:00 IST)	1 – 20 decisions/sec	Vectorized evaluation (Polars/NumPy) over your active watchlist + active option strikes simultaneously.
+Capture Latency (Exchange → Bronze)	< 50 ms (p95) / < 150 ms (p99)	< 1,000 ms	Async WebSocket consumer writing directly to an in-memory ring buffer / Kafka before disk persistence.
+End-to-End Decision Latency (Tick → Order Sent)	< 150 – 250 ms (p99)	< 2 – 5 seconds	Live loop reads pre-computed Gold features from Redis/shared memory; never query disk/Parquet on the hot path.
+
+
+Practical Safeguards for Options & Multi-Asset Execution
+
+• Slippage & Liquidity Modeling in Backtests: Enforce a minimum open interest (OI) and bid-ask spread filter in your Silver option chain table; apply at least 1–2 ticks of slippage on index options and 3–5 ticks on stock options, as stock option spreads widen sharply during VIX spikes.
+• Timestamp Synchronization (Clock Drift): Sync your ingestion servers via NTP/PTP against IST exchange timestamps so Bronze event_time vs. ingested_at accurately flags feed lag before your live loop fires an options order on stale spot prices.
+
+7. Confirm rollout and safety
+Every stage: Only very critcal stage would require test(Minimun)
+Paper-trading validation is the best
+rest points agreed
+
+8.  Provide these artifacts: uploaded in sources files
+
+1. REST API & Order Execution Quotas
+
+Data and general endpoint limits are enforced per API key, while order placement limits are enforced at the client account level (using multiple API keys on the same Zerodha account does not multiply your order quota):
+
+Endpoint / Action	Per-Second Limit	Per-Minute / Daily Cap	Notes & Architectural Impact
+Order Placement	10 orders/sec	400 orders/min
+5,000 orders/day	Applies across all segments and varieties. Rejected/invalid orders still count toward your daily 5,000 cap.
+Order Modifications	10 req/sec (shared)	Max 25 modifications per order	After 25 modifications on a single order ID, you must cancel and place a fresh order.
+Quote API (/quote)	1 req/sec	None documented	Can batch up to 500 instruments per call; avoid polling this in your live loop—use WebSockets instead.
+Historical Candles	3 req/sec	Max days per request:
+• minute: 30 days
+• 3m–10m: 90 days
+• 15m–30m: 180 days
+• 60m: 365 days
+• day: 2,000 days	Included in the ₹500/month Connect subscription. Requires chunked sequential fetching for multi-year Silver backfills.
+All Other Endpoints	10 req/sec	None documented	Shared pool across /orders, /positions, /holdings, /margins, and GTT endpoints.
+
+
+2. WebSocket Streaming Quotas (Bronze Ingestion)
+
+For live market data, Kite Connect uses binary WebSockets (KiteTicker) rather than REST polling:
+• Concurrent Connections: Up to 3 WebSocket connections per API key.
+• Instruments per Connection: Maximum 3,000 instrument tokens per WebSocket connection.
+• Total Live Capacity: Up to 9,000 instruments simultaneously across 3 connections on a single paid API key (₹500/month).
+• Streaming Modes:
+	• ltp (Last Traded Price — lightest payload)
+	• quote (OHLC, volume, buy/sell quantities, last trade)
+	• full (Adds timestamp, OI, and 5-level market depth — required for options OI tracking and order book imbalance)
+
+3. How This Impacts Your Medallion Architecture
+
+• Fitting Your Universe into 9,000 Tokens: You have plenty of headroom on a single API key. Subscribing to all NIFTY 500 cash stocks (500 tokens) + NIFTY/BANKNIFTY spot & futures (~10 tokens) + ATM ± 15 strikes for index and active watchlist stock options (~1,500–2,500 tokens) uses only ~2,000–3,000 tokens—fitting inside 1 to 2 WebSocket connections.
+• Bronze Backfill Bottleneck (3 req/sec): Pulling 7 years of 1-minute historical candles via Kite's Historical API at 30 days per call requires ~85 requests per symbol. For 500 stocks, that is ~42,500 calls (~4 hours of continuous rate-limited fetching). Note: Kite Historical API does not provide expired options contracts—you must capture live option chain ticks into your own Bronze layer daily or source expired options data from an external vendor (e.g., Truedata, Global Datafeeds, or NSE Bhavcopy/tick archives).
+• SEBI 10 OPS Threshold: Operating at or below Zerodha's 10 orders per second cap keeps your individual algo within standard retail API execution limits without triggering exchange high-frequency algo registration requirements.
+
+----------------------------------------
