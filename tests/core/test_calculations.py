@@ -91,4 +91,4 @@ def test_atm_iv_selects_nearest_positive_finite_iv():
 def test_intraday_shape_classification():
     assert classify_intraday_shape(spot=100, fast_sma=101, slow_sma=100, realized_volatility=0.2).value == "TREND_UP"
     assert classify_intraday_shape(spot=100, fast_sma=99, slow_sma=100, realized_volatility=0.2).value == "TREND_DOWN"
-    assert classify_market_regime(spot=100, fast_sma=100, slow_sma=100, realized_volatility=0.4).value == "VOLATILE"
+    assert classify_intraday_shape(spot=100, fast_sma=100, slow_sma=100, realized_volatility=0.4).value == "VOLATILE"
