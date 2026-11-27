@@ -10,6 +10,9 @@ from typing import Any
 import duckdb
 import pytest
 
+import json
+from nse_quant.research.regime_risk_policy import RegimeRiskLimits
+
 from nse_quant.data_platform import legacy_daily_rv_bronze as common
 from nse_quant.data_platform import legacy_regime_policies as codec
 from nse_quant.data_platform import legacy_regime_policy_bronze as bronze_api
@@ -49,8 +52,21 @@ def _bronze(tmp_path: Path, layout_id: str, maximum_status: str | None = None) -
                 test_end=date(2025, 7, 31),
                 policy=policy,
             )
-            legacy.save_regime_policy(**args, risk_limits={"max_lots": 1})
-            legacy.save_regime_policy(**args, risk_limits={"max_lots": 2})
+            limits = RegimeRiskLimits(
+                regime=regime,
+                allowed=True,
+                max_lots_per_order=1,
+                max_open_positions=2,
+                max_notional_exposure=100_000.0,
+                max_portfolio_vega=10_000.0,
+                max_daily_loss=5_000.0,
+                reason="synthetic fixture",
+            )
+            legacy.save_regime_policy(**args, risk_limits={regime: asdict(limits)})
+            legacy.save_regime_policy(
+                **args,
+                risk_limits={regime: asdict(replace(limits, max_lots_per_order=2))},
+            )
         finally:
             legacy.close()
     else:
@@ -169,7 +185,22 @@ def test_actual_both_layout_native_chains(tmp_path: Path, layout_id: str) -> Non
         first = docs[0]["stored_fields"]
         assert first["regime_metrics"] == OPAQUE
         assert first["selection_status"] == "READY"
-        assert first["risk_limits"] in ('{"max_lots":2}', '{"max_lots": 2}')
+        assert json.loads(first["risk_limits"]) == {
+            "HIGH_IV_CONTANGO_NORMAL_SKEW_RANGE_HIGH": {
+                **asdict(
+                    RegimeRiskLimits(
+                        regime="HIGH_IV_CONTANGO_NORMAL_SKEW_RANGE_HIGH",
+                        allowed=True,
+                        max_lots_per_order=2,
+                        max_open_positions=2,
+                        max_notional_exposure=100_000.0,
+                        max_portfolio_vega=10_000.0,
+                        max_daily_loss=5_000.0,
+                        reason="synthetic fixture",
+                    )
+                )
+            }
+        }
         assert first["created_at"] is not None
         assert first["train_start"] == "2025-01-01"
         assert [d["stored_fields"]["allowed_regimes"] for d in docs[1:]] == [None, "null", "[]"]
