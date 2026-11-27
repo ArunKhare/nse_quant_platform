@@ -75,7 +75,11 @@ class FeatureStore:
     ) -> list[MarketFeatures]:
         rows = self.conn.execute(
             """
-            SELECT *
+            SELECT feature_id, ts, run_id, underlying, expiry, spot, atm_iv,
+                   iv_rank, iv_percentile, realized_vol, iv_rv_spread, pcr,
+                   total_call_oi, total_put_oi, max_pain, liquidity_score,
+                   intraday_shape, short_momentum, straddle_price,
+                   expected_move_pct, expected_move_points, diagnostics
             FROM feature_snapshots
             WHERE underlying = ?
               AND (? IS NULL OR ts >= ?)
