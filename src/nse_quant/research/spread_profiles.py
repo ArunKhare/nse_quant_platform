@@ -29,7 +29,7 @@ class SpreadProfile:
             "structure": self.structure,
             "risk_per_trade_pct": self.risk_per_trade_pct,
             "max_concurrent_positions": self.max_concurrent_positions,
-            "allowed_regimes": list(self.allowed_regimes),
+            "market_tags": list(self.market_tags),
             "description": self.description,
             "decision_eligibility_asserted": self.decision_eligibility_asserted,
         }
@@ -44,7 +44,7 @@ PROFILES: tuple[SpreadProfile, ...] = (
         structure="bull_call_spread",
         risk_per_trade_pct=0.5,
         max_concurrent_positions=2,
-        allowed_regimes=("TREND", "HIGH_VOL"),
+        market_tags=("TREND", "HIGH_VOL"),
         description="Intraday NIFTY bull call spread; defined-risk debit structure "
         "for bullish regimes.",
     ),
@@ -56,7 +56,7 @@ PROFILES: tuple[SpreadProfile, ...] = (
         structure="bull_call_spread",
         risk_per_trade_pct=0.75,
         max_concurrent_positions=3,
-        allowed_regimes=("TREND", "HIGH_VOL", "RANGE"),
+        market_tags=("TREND", "HIGH_VOL", "RANGE"),
         description="Swing NIFTY bull call spread; multi-day defined-risk debit structure.",
     ),
     SpreadProfile(
@@ -67,7 +67,7 @@ PROFILES: tuple[SpreadProfile, ...] = (
         structure="bull_call_spread",
         risk_per_trade_pct=1.0,
         max_concurrent_positions=2,
-        allowed_regimes=("TREND", "HIGH_VOL", "RANGE"),
+        market_tags=("TREND", "HIGH_VOL", "RANGE"),
         description="Positional NIFTY bull call spread; multi-week defined-risk debit structure.",
     ),
     SpreadProfile(
@@ -78,7 +78,7 @@ PROFILES: tuple[SpreadProfile, ...] = (
         structure="bear_put_spread",
         risk_per_trade_pct=0.5,
         max_concurrent_positions=2,
-        allowed_regimes=("TREND", "HIGH_VOL"),
+        market_tags=("TREND", "HIGH_VOL"),
         description="Intraday NIFTY bear put spread; defined-risk debit structure"
         " for bearish regimes.",
     ),
@@ -90,7 +90,7 @@ PROFILES: tuple[SpreadProfile, ...] = (
         structure="bear_put_spread",
         risk_per_trade_pct=0.75,
         max_concurrent_positions=3,
-        allowed_regimes=("TREND", "HIGH_VOL", "RANGE"),
+        market_tags=("TREND", "HIGH_VOL", "RANGE"),
         description="Swing NIFTY bear put spread; multi-day defined-risk debit structure.",
     ),
     SpreadProfile(
@@ -101,7 +101,7 @@ PROFILES: tuple[SpreadProfile, ...] = (
         structure="bear_put_spread",
         risk_per_trade_pct=1.0,
         max_concurrent_positions=2,
-        allowed_regimes=("TREND", "HIGH_VOL", "RANGE"),
+        market_tags=("TREND", "HIGH_VOL", "RANGE"),
         description="Positional NIFTY bear put spread; multi-week defined-risk debit structure.",
     ),
 )

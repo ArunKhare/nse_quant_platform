@@ -129,7 +129,13 @@ class DuckDBStore:
         )
 
         self.conn.execute("ALTER TABLE feature_snapshots ADD COLUMN IF NOT EXISTS intraday_shape VARCHAR")
-        self.conn.execute("UPDATE feature_snapshots SET intraday_shape = regime WHERE intraday_shape IS NULL")
+        self.conn.execute(
+            """
+            UPDATE feature_snapshots
+            SET intraday_shape = COALESCE(regime, 'UNKNOWN')
+            WHERE intraday_shape IS NULL
+            """
+        )
 
         self.conn.execute(
             """

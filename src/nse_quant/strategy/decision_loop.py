@@ -262,7 +262,6 @@ class DecisionLoop:
             as_of=datetime.now(UTC),
         )
 
-        current_regime = "UNKNOWN"
         regime_policy: dict[str, Any] | None = None
         total_stale_marks = 0
         persisted_rows = 0

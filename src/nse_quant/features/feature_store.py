@@ -52,7 +52,11 @@ class FeatureStore:
     def latest(self, underlying: str) -> MarketFeatures | None:
         row = self.conn.execute(
             """
-            SELECT *
+            SELECT feature_id, ts, run_id, underlying, expiry, spot, atm_iv,
+                   iv_rank, iv_percentile, realized_vol, iv_rv_spread, pcr,
+                   total_call_oi, total_put_oi, max_pain, liquidity_score,
+                   intraday_shape, short_momentum, straddle_price,
+                   expected_move_pct, expected_move_points, diagnostics
             FROM feature_snapshots
             WHERE underlying = ?
             ORDER BY ts DESC
@@ -101,7 +105,7 @@ class FeatureStore:
             total_put_oi=int(row[13]) if row[13] is not None else None,
             max_pain=row[14],
             liquidity_score=row[15],
-            intraday_shape=IntradayShape(row[16]),
+            intraday_shape=IntradayShape(row[16] or "UNKNOWN"),
             short_momentum=row[17],
             straddle_price=row[18],
             expected_move_pct=row[19],

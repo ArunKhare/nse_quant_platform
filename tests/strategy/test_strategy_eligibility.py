@@ -15,12 +15,12 @@ from nse_quant.execution.broker import PaperBroker
 from nse_quant.strategy.iron_condor import IronCondorMonitor
 
 
-def make_features(iv_rank=None):
+def make_features(iv_rank=None, expiry=None):
     return MarketFeatures(
         ts=__import__("datetime").datetime.now(__import__("datetime").UTC),
         underlying="NIFTY",
         spot=25000,
-        expiry=__import__("datetime").date.today(),
+        expiry=expiry or __import__("datetime").date.today(),
         iv_rank=iv_rank,
     )
 
@@ -60,7 +60,7 @@ def build_valid_iron_condor_proposal(
         "evaluate",
         lambda *_args, **_kwargs: [GateResult(gate="test", passed=True, reason="Test gate passed")],
     )
-    proposal, _ = monitor.evaluate(snapshot, make_features())
+    proposal, _ = monitor.evaluate(snapshot, make_features(expiry=expiry))
 
     assert proposal is not None
     return proposal
