@@ -16,7 +16,6 @@ from nse_quant.data_platform import legacy_market_regime_silver_store as silver
 from nse_quant.data_platform import legacy_market_regimes as codec
 from nse_quant.data_platform.audit import AuditLedger, JobState
 from nse_quant.data_platform.bronze import BronzeEventStore
-from nse_quant.persistence.duckdb_store import DuckDBStore
 
 AT = datetime(2026, 1, 1, tzinfo=UTC)
 REVISION = "a" * 40
