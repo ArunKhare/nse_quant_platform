@@ -742,3 +742,12 @@ Implemented a diagnostic-only report engine for the provisional thresholds in se
 The report is explicitly diagnostic-only: thresholds are neither optimized nor changed; no threshold is promoted; no classifier configuration, decision eligibility, paper-trading approval, risk limit, or execution permission is modified. The runner requires a source-pinned, point-in-time NIFTY export; it does not fetch or reconstruct upstream market data.
 
 Focused tests have been added in tests/research/test_institutional_regime_calibration.py. QA is pending. The assistant has not executed the tests, Ruff, mypy, or the report against a production NIFTY export. S6 is not accepted until operator QA and review of a real source-pinned report are complete.
+
+
+## 2026-11-27 — Legacy feature-snapshot writer compatibility correction
+
+The native legacy feature-snapshot Bronze/Silver integration tests exposed a schema-compatibility defect in `FeatureStore.save`: it unconditionally inserted the S5 `intraday_shape` column into a legacy `feature_snapshots` table whose governed retained schema still contains the historical `regime` column and does not contain `intraday_shape`.
+
+Updated `src/nse_quant/features/feature_store.py` to inspect the existing table columns and include `intraday_shape` only when that column exists. The writer deliberately does not copy `intraday_shape` into legacy `regime`; those vocabularies remain distinct. All other feature fields continue to be written using explicit column names.
+
+The reported failures are consistent with this root cause. The focused native legacy feature-snapshot tests have not yet been rerun after the correction, and no test, Ruff, or mypy pass is claimed.
