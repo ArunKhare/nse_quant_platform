@@ -14,7 +14,6 @@ from nse_quant.data_platform import legacy_market_regime_bronze as native
 from nse_quant.data_platform import legacy_market_regimes as codec
 from nse_quant.data_platform.audit import AuditLedger, JobState
 from nse_quant.data_platform.bronze import BronzeEventStore
-from nse_quant.persistence.duckdb_store import DuckDBStore
 
 AT = datetime(2026, 1, 1, tzinfo=UTC)
 REVISION = "a" * 40
@@ -22,25 +21,44 @@ OPAQUE = '{ "eligible":true, "eligible":false, "authorized":true, "unknown":[1,n
 
 
 def _source(path: Path) -> None:
-    legacy = DuckDBStore(path=path)
+    legacy = duckdb.connect(str(path))
     try:
-        local = AT.astimezone(timezone(timedelta(hours=5, minutes=30)))
-        args: dict[str, Any] = dict(
-            symbol="NIFTY",
-            trend_regime="unreviewed-trend",
-            volatility_regime="HIGH",
-            iv_regime="opaque-iv",
-            regime="arbitrary-regime",
-            features={"clock": AT},
+        # Preserve the exact seven-column reviewed legacy contract. DuckDBStore
+        # initialization now migrates this table by adding regime_vocabulary,
+        # which is intentionally outside the retained Bronze source boundary.
+        legacy.execute(
+            """
+            CREATE TABLE market_regimes (
+                symbol VARCHAR,
+                ts TIMESTAMPTZ,
+                trend_regime VARCHAR,
+                volatility_regime VARCHAR,
+                iv_regime VARCHAR,
+                regime VARCHAR,
+                features JSON,
+                PRIMARY KEY (symbol, ts)
+            )
+            """
         )
-        legacy.write_market_regime(ts=local, **args)
-        legacy.write_market_regime(ts=AT, **(args | dict(trend_regime="replacement-label")))
-        legacy.write_market_regime(ts=AT + timedelta(seconds=1), **args)
-        table = common.name(legacy.conn, "main", codec.TABLE)
-        # Opaque nested-key boundary through real retained SQL, not authenticated policy evidence.
-        legacy.conn.execute(f"UPDATE {table} SET features=? WHERE ts=?", [OPAQUE, AT])
-        legacy.conn.execute(
-            f"INSERT INTO {table} (symbol,ts) VALUES (?,?)", ["NULL", AT + timedelta(seconds=2)]
+        local = AT.astimezone(timezone(timedelta(hours=5, minutes=30)))
+        values = ["NIFTY", "unreviewed-trend", "HIGH", "opaque-iv", "arbitrary-regime", '{"clock":"2026-01-01T00:00:00+00:00"}']
+        # Retained legacy writer semantics: INSERT OR REPLACE on (symbol, ts).
+        legacy.execute(
+            "INSERT OR REPLACE INTO market_regimes VALUES (?,?,?,?,?,?,?)",
+            ["NIFTY", local, *values[1:]],
+        )
+        legacy.execute(
+            "INSERT OR REPLACE INTO market_regimes VALUES (?,?,?,?,?,?,?)",
+            ["NIFTY", AT, "replacement-label", *values[2:]],
+        )
+        legacy.execute(
+            "INSERT OR REPLACE INTO market_regimes VALUES (?,?,?,?,?,?,?)",
+            ["NIFTY", AT + timedelta(seconds=1), *values[1:]],
+        )
+        # Opaque nested-key boundary through retained SQL, not authenticated policy evidence.
+        legacy.execute("UPDATE market_regimes SET features=? WHERE ts=?", [OPAQUE, AT])
+        legacy.execute(
+            "INSERT INTO market_regimes (symbol,ts) VALUES (?,?)", ["NULL", AT + timedelta(seconds=2)]
         )
     finally:
         legacy.close()
