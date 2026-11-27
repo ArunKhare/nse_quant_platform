@@ -177,7 +177,7 @@ class BacktestEngine:
                 "realized_vol": features.realized_vol,
                 "iv_rv_spread": features.iv_rv_spread,
                 "expected_move_points": features.expected_move_points,
-                "regime": features.regime.value,
+                "intraday_shape": features.intraday_shape.value,
                 "liquidity_score": features.liquidity_score,
                 "proposal": (proposal.model_dump(mode="json") if proposal else None),
                 "gates": [gate.model_dump(mode="json") for gate in gates],

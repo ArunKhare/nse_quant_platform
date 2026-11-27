@@ -16,7 +16,7 @@ class SpreadProfile:
     structure: str
     risk_per_trade_pct: float
     max_concurrent_positions: int
-    allowed_regimes: tuple[str, ...]
+    market_tags: tuple[str, ...]
     description: str
     decision_eligibility_asserted: bool = False
 

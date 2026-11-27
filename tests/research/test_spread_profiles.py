@@ -60,7 +60,7 @@ def test_profile_summary_shape():
     assert summary["profile_id"] == "nifty_swing_bear_put_spread"
     assert summary["direction"] == "BEARISH"
     assert summary["decision_eligibility_asserted"] is False
-    assert "allowed_regimes" in summary
+    assert "market_tags" in summary
 
 
 def test_all_profiles_summary_shape():

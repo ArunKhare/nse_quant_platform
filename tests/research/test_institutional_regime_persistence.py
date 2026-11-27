@@ -59,6 +59,7 @@ def _target():
                             True,
                             "{}",
                             datetime(2026, 1, 1, tzinfo=UTC),
+                            "legacy_daily_v0",
                         )
                     },
                 )()
@@ -73,6 +74,7 @@ def test_first_write_succeeds():
     result = persist_regime_evidence(
         target, payload=_payload(), actor_id="reviewer", code_revision="a" * 40
     )
+    assert result["regime_vocabulary"] == "legacy_daily_v0"
     assert result["decision_eligibility_asserted"] is False
     assert result["regime_label"] == "HIGH_IV_CONTANGO_NORMAL_SKEW_RANGE_UPPER"
     assert target.payload_json is not None
@@ -112,6 +114,7 @@ def test_read_roundtrip():
     read = read_regime_evidence(target, evidence_id=written["evidence_id"])
     assert read["regime_label"] == written["regime_label"]
     assert read["complete"] is True
+    assert read["regime_vocabulary"] == written["regime_vocabulary"]
 
 
 def test_missing_payload_field_refused():

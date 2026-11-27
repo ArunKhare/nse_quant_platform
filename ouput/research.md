@@ -708,3 +708,19 @@ uv run mypy src/nse_quant/research/institutional_regime_price_action_v5.py src/n
 
 git diff --check
 ```
+
+
+## 2026-11-27 — S5 regime-vocabulary and risk-boundary implementation
+
+Implementation changes committed on `feat/medallion-feature-store`:
+
+- The decision-loop risk-limit path now uses configured strategy risk limits when no READY `canonical_v1` learned policy is available. This fallback applies only after the supplied regime label passes the exact canonical registry check. Missing, unknown, and noncanonical labels continue to receive zero-entry limits.
+- The canonical policy lookup is restricted to rows tagged `canonical_v1`; historical policy rows are retained and tagged `legacy_daily_v0`. The persisted policy lookup returns its vocabulary and training metrics, and preserves READY/STALE status.
+- The former `MarketRegime` / `MarketFeatures.regime` vocabulary is renamed to `IntradayShape` / `MarketFeatures.intraday_shape`. It describes spot-feature shape only and is not used as the institutional regime label.
+- Spread profiles now expose descriptive `market_tags`, not `allowed_regimes`. These tags are not canonical regime allowlists.
+- Persistence contracts now carry `regime_vocabulary`: `canonical_v1` for exact canonical institutional labels/policies, `legacy_daily_v0` for historical daily context and noncanonical evidence, and `iv_daily_v0` for daily IV observations.
+- Daily IV observations are written/read through the separate `daily_iv_regime` table. Existing IV rows are copied non-destructively from `market_regimes`; original rows are retained and tagged. Legacy market-context readers, trade-outcome joins, coverage reports, loop status, and warehouse exports filter to `legacy_daily_v0`.
+- The physical institutional evidence table remains `institutional_regime_evidence`; no duplicate observations table is introduced. Existing records are retained and tagged during migration.
+- Eligibility evidence and dashboard presentation distinguish the canonical regime label, legacy daily trend/vol context, and intraday shape.
+
+Validation status: implementation and focused tests have been updated, but the assistant has not executed the repository test suite, Ruff, or mypy. QA remains pending. In particular, run the feature-store, regime-policy, institutional-persistence, and decision-loop focused tests, then the full configured quality gates. This entry records code changes only; it does not assert paper-trading acceptance or alter live-trading authority.

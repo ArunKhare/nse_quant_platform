@@ -58,6 +58,7 @@ def main() -> int:
             SELECT ts, regime
             FROM market_regimes
             WHERE symbol = ?
+              AND regime_vocabulary = 'legacy_daily_v0'
             ORDER BY ts
             """,
             [args.symbol],

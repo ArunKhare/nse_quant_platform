@@ -13,7 +13,7 @@ from nse_quant.core.calculations import (
     atm_iv as canonical_atm_iv,
 )
 from nse_quant.core.calculations import (
-    classify_market_regime,
+    classify_intraday_shape as canonical_intraday_shape,
 )
 from nse_quant.core.calculations import (
     iv_percentile as canonical_iv_percentile,
@@ -27,8 +27,8 @@ from nse_quant.core.calculations import (
 from nse_quant.core.models import (
     ChainSnapshot,
     IVAnalytics,
+    IntradayShape,
     MarketFeatures,
-    MarketRegime,
     OptionType,
 )
 from nse_quant.core.settings import settings
@@ -80,14 +80,14 @@ def iv_percentile(
     )
 
 
-def classify_regime(
+def classify_intraday_shape(
     spot: float,
     fast: float | None,
     slow: float | None,
     rv: float | None,
-) -> MarketRegime:
-    """Compatibility wrapper around the canonical market-regime primitive."""
-    return classify_market_regime(
+) -> IntradayShape:
+    """Classify descriptive intraday spot structure; not an institutional regime."""
+    return canonical_intraday_shape(
         spot=spot,
         fast_sma=fast,
         slow_sma=slow,
@@ -193,7 +193,7 @@ def build_features(
         total_put_oi=put_oi,
         max_pain=max_pain,
         liquidity_score=liquidity_score(snapshot),
-        regime=classify_regime(snapshot.spot, fast, slow, rv),
+        intraday_shape=classify_intraday_shape(snapshot.spot, fast, slow, rv),
         short_momentum=momentum,
         straddle_price=straddle,
         expected_move_pct=(emp / snapshot.spot * 100 if emp and snapshot.spot > 0 else None),

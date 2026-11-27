@@ -509,14 +509,17 @@ class DecisionLoop:
                 symbol=symbol,
                 ts=features.ts,
             )
-            daily_regime = market_regime.get("regime") if market_regime else None
-
-            if daily_regime and daily_regime != "UNKNOWN":
-                current_regime = daily_regime
-                regime_source = "daily_market_regime"
-            else:
-                current_regime = features.regime.value
-                regime_source = "live_spot_features"
+            trend_regime = market_regime.get("trend_regime") if market_regime else None
+            volatility_regime = market_regime.get("volatility_regime") if market_regime else None
+            market_context_daily_trend_vol = (
+                f"{trend_regime}|{volatility_regime}"
+                if trend_regime and volatility_regime
+                else None
+            )
+            market_context_source = (
+                "daily_market_regime" if market_context_daily_trend_vol else "unavailable"
+            )
+            market_context_vocabulary = market_regime.get("regime_vocabulary") if market_regime else None
 
             regime_policy = self.store.latest_regime_policy(
                 symbol=symbol,
@@ -545,12 +548,14 @@ class DecisionLoop:
                 profile=profile,
                 features=features,
                 iv_history_count=iv_history_count,
-                current_regime=eligibility_regime or "UNKNOWN",
+                regime_label=eligibility_regime or "UNKNOWN",
                 regime_allowed=regime_allowed,
                 regime_policy=regime_policy,
                 regime_source="institutional_regime",
-                market_context_regime=current_regime,
-                market_context_source=regime_source,
+                effective_regimes=effective_regimes,
+                market_context_daily_trend_vol=market_context_daily_trend_vol,
+                market_context_source=market_context_source,
+                market_context_vocabulary=market_context_vocabulary,
                 classifier_version=institutional["classifier_version"],
             )
 
@@ -1336,10 +1341,39 @@ class DecisionLoop:
         current_regime: str,
         regime_policy: dict[str, Any] | None,
     ) -> RegimeRiskLimits:
+        if not is_canonical_regime_label(current_regime):
+            return RegimeRiskLimits(
+                regime="UNKNOWN",
+                allowed=False,
+                max_lots_per_order=0,
+                max_open_positions=0,
+                max_notional_exposure=0.0,
+                max_portfolio_vega=0.0,
+                max_daily_loss=0.0,
+                reason="non_canonical_regime",
+            )
+
+        configured_limits = self.settings.get_effective_risk_settings("iron_condor_monitor")
+        if (
+            not isinstance(regime_policy, dict)
+            or regime_policy.get("selection_status") != "READY"
+            or regime_policy.get("regime_vocabulary") != "canonical_v1"
+        ):
+            return RegimeRiskLimits(
+                regime=current_regime,
+                allowed=True,
+                max_lots_per_order=configured_limits.max_lots_per_order,
+                max_open_positions=configured_limits.max_open_positions,
+                max_notional_exposure=configured_limits.max_notional_exposure,
+                max_portfolio_vega=configured_limits.max_portfolio_vega,
+                max_daily_loss=configured_limits.max_daily_loss,
+                reason="STATIC_CONFIGURED_FALLBACK",
+            )
+
         rejection = canonical_risk_rejection(current_regime, regime_policy)
         if rejection is not None:
             return RegimeRiskLimits(
-                regime=current_regime if is_canonical_regime_label(current_regime) else "UNKNOWN",
+                regime=current_regime,
                 allowed=False,
                 max_lots_per_order=0,
                 max_open_positions=0,
@@ -1383,7 +1417,7 @@ class DecisionLoop:
 
         return RegimePolicy(
             allowed_regimes=frozenset(regime_policy["allowed_regimes"]),
-            regime_metrics={},
+            regime_metrics=regime_policy.get("regime_metrics", {}),
             selection_status=regime_policy["selection_status"],
         )
 
@@ -1393,12 +1427,14 @@ class DecisionLoop:
         profile: IronCondorProfileSettings,
         features: MarketFeatures,
         iv_history_count: int,
-        current_regime: str,
+        regime_label: str,
         regime_allowed: bool,
         regime_policy: dict[str, Any] | None,
         regime_source: str,
-        market_context_regime: str | None = None,
+        market_context_daily_trend_vol: str | None = None,
         market_context_source: str | None = None,
+        market_context_vocabulary: str | None = None,
+        effective_regimes: list[str] | None = None,
         classifier_version: str | None = None,
     ) -> GateResult:
         iv_rank = features.iv_rank
@@ -1413,13 +1449,18 @@ class DecisionLoop:
             "strategy_id": "iron_condor_monitor",
             "profile_enabled": profile.enabled,
             "underlying_allowed": (self.settings.market_data.default_symbol in profile.underlyings),
-            "current_regime": current_regime,
-            "regime_source": regime_source,
+            "regime_label": regime_label,
+            "regime_label_source": regime_source,
             "regime_allowed": regime_allowed,
+            "allowed_regimes": sorted(effective_regimes or []),
             "regime_classifier_version": classifier_version,
             "regime_registry_version": REGIME_REGISTRY_VERSION,
-            "market_context_regime": market_context_regime,
-            "market_context_source": market_context_source,
+            "market_context": {
+                "daily_trend_vol": market_context_daily_trend_vol,
+                "source": market_context_source,
+                "regime_vocabulary": market_context_vocabulary,
+            },
+            "intraday_shape": features.intraday_shape.value,
             "iv_history_count": iv_history_count,
             "minimum_iv_history": minimum_iv_history,
             "iv_history_available": iv_history_count >= minimum_iv_history,
@@ -1443,7 +1484,7 @@ class DecisionLoop:
             reasons.append("underlying not allowed by strategy profile")
 
         if not regime_allowed:
-            reasons.append(f"IV regime not allowed: {current_regime}")
+            reasons.append(f"IV regime not allowed: {regime_label}")
 
         if require_iv_rank and not iv_rank_available:
             reasons.append("IV rank unavailable")

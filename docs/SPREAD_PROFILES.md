@@ -13,4 +13,4 @@
 
 - Research registry only; no execution authority, no admission, no decision eligibility.
 - `decision_eligibility_asserted=False` is a real dataclass field defaulting to False on every profile.
-- Profiles reference allowed regimes but do not grant or gate anything.
+- Profiles carry descriptive `market_tags`; these tags are not canonical regime labels and do not grant or gate decision eligibility.

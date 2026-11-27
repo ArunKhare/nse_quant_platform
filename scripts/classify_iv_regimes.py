@@ -5,7 +5,7 @@
   -> daily IV summary
   -> IV regime classification
   -> CSV report
-  -> optional market_regimes persistence
+  -> optional daily_iv_regime persistence
 
    -> IV-only regime
 Use:  for a quick, legacy-DB IV-regime classification and optional persistence.
@@ -56,7 +56,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--persist",
         action="store_true",
-        help="Persist daily IV regimes to market_regimes",
+        help="Persist daily IV regimes to daily_iv_regime",
     )
     return parser.parse_args()
 

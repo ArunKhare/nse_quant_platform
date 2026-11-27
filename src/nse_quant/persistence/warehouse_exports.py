@@ -104,6 +104,7 @@ def export_market_regimes(
         """
         SELECT CAST(ts AS DATE) AS trading_date FROM market_regimes
         WHERE symbol = ? AND CAST(ts AS DATE) BETWEEN ? AND ?
+          AND regime_vocabulary = 'legacy_daily_v0'
         GROUP BY 1 ORDER BY 1
         """,
         [underlying, start_date, end_date],

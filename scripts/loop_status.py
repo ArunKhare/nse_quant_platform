@@ -118,6 +118,7 @@ def main() -> int:
         SELECT ts, regime, trend_regime, volatility_regime, iv_regime
         FROM market_regimes
         WHERE symbol = ?
+          AND regime_vocabulary = 'legacy_daily_v0'
         ORDER BY ts DESC
         LIMIT 1
         """,

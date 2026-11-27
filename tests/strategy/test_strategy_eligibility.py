@@ -9,6 +9,7 @@ from nse_quant.core.models import (
     OrderSide,
     OrderStatus,
 )
+from nse_quant.core.regime_registry import is_canonical_regime_label
 from nse_quant.core.settings import Settings
 from nse_quant.execution.broker import PaperBroker
 from nse_quant.strategy.iron_condor import IronCondorMonitor
@@ -77,7 +78,7 @@ def test_eligibility_rejects_unknown_regime(decision_loop_environment):
         profile=profile,
         features=make_features(iv_rank=50),
         iv_history_count=50,
-        current_regime="UNKNOWN",
+        regime_label="UNKNOWN",
         regime_allowed=False,
         regime_policy=None,
         regime_source="test",
@@ -85,6 +86,10 @@ def test_eligibility_rejects_unknown_regime(decision_loop_environment):
 
     assert gate.passed is False
     assert gate.reason == "IV regime not allowed: UNKNOWN"
+    assert gate.details["regime_label"] == "UNKNOWN"
+    assert gate.details["intraday_shape"] == "UNKNOWN"
+    assert gate.details["market_context"]["daily_trend_vol"] is None
+    assert "current_regime" not in gate.details
 
 
 def test_eligibility_rejects_missing_iv_rank(
@@ -103,7 +108,7 @@ def test_eligibility_rejects_missing_iv_rank(
         profile=profile,
         features=make_features(iv_rank=None),
         iv_history_count=50,
-        current_regime=allowed_regime,
+        regime_label=allowed_regime,
         regime_allowed=True,
         regime_policy=None,
         regime_source="test",
@@ -208,3 +213,38 @@ def test_paper_broker_marks_remaining_credit(
     assert marked is position
     assert position.current_price == remaining_credit
     assert position.unrealized_pnl == proposal.entry_limit_price - remaining_credit
+
+
+def test_regime_risk_uses_static_configured_limits_until_canonical_policy_ready(
+    decision_loop_environment,
+):
+    loop = decision_loop_environment.build_loop(
+        SimpleNamespace(),
+        enforce_strategy_eligibility=True,
+    )
+    configured_regimes = loop.settings.get_strategy_profile("iron_condor_monitor").regime_policy.allowed_regimes
+    regime = next(label for label in configured_regimes if is_canonical_regime_label(label))
+    configured = loop.settings.get_effective_risk_settings("iron_condor_monitor")
+
+    limits = loop._apply_regime_limits(current_regime=regime, regime_policy=None)
+
+    assert limits.allowed is True
+    assert limits.reason == "STATIC_CONFIGURED_FALLBACK"
+    assert limits.max_lots_per_order == configured.max_lots_per_order
+    assert limits.max_open_positions == configured.max_open_positions
+    assert limits.max_notional_exposure == configured.max_notional_exposure
+
+
+def test_regime_risk_static_fallback_still_fails_closed_for_noncanonical_label(
+    decision_loop_environment,
+):
+    loop = decision_loop_environment.build_loop(
+        SimpleNamespace(),
+        enforce_strategy_eligibility=True,
+    )
+
+    limits = loop._apply_regime_limits(current_regime="RANGE|HIGH", regime_policy=None)
+
+    assert limits.allowed is False
+    assert limits.reason == "non_canonical_regime"
+    assert limits.max_lots_per_order == 0

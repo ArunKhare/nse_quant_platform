@@ -18,6 +18,7 @@ from nse_quant.analytics.implied_volatility import (
 )
 from nse_quant.core.constants import IST
 from nse_quant.core.models import ChainSnapshot, Instrument, OptionType
+from nse_quant.core.regime_registry import is_canonical_regime_label, validate_regime_labels
 from nse_quant.core.settings import get_settings
 from nse_quant.market_data import chain
 
@@ -126,6 +127,9 @@ class DuckDBStore:
             )
             """
         )
+
+        self.conn.execute("ALTER TABLE feature_snapshots ADD COLUMN IF NOT EXISTS intraday_shape VARCHAR")
+        self.conn.execute("UPDATE feature_snapshots SET intraday_shape = regime WHERE intraday_shape IS NULL")
 
         self.conn.execute(
             """
@@ -361,6 +365,48 @@ class DuckDBStore:
             """
         )
 
+        self.conn.execute("ALTER TABLE market_regimes ADD COLUMN IF NOT EXISTS regime_vocabulary VARCHAR")
+        self.conn.execute(
+            """
+            UPDATE market_regimes
+            SET regime_vocabulary = CASE
+                WHEN json_extract_string(features, '$.iv_level') IS NOT NULL THEN 'iv_daily_v0'
+                ELSE 'legacy_daily_v0'
+            END
+            WHERE regime_vocabulary IS NULL
+            """
+        )
+        self.conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS daily_iv_regime (
+                symbol VARCHAR NOT NULL,
+                trade_date DATE NOT NULL,
+                iv_level VARCHAR NOT NULL,
+                iv_term_regime VARCHAR NOT NULL,
+                iv_skew_regime VARCHAR NOT NULL,
+                iv_regime VARCHAR NOT NULL,
+                metrics JSON,
+                regime_vocabulary VARCHAR NOT NULL,
+                PRIMARY KEY (symbol, trade_date)
+            )
+            """
+        )
+        self.conn.execute(
+            """
+            INSERT OR IGNORE INTO daily_iv_regime
+                (symbol, trade_date, iv_level, iv_term_regime, iv_skew_regime,
+                 iv_regime, metrics, regime_vocabulary)
+            SELECT symbol, CAST(ts AS DATE),
+                   json_extract_string(features, '$.iv_level'),
+                   json_extract_string(features, '$.iv_term_regime'),
+                   json_extract_string(features, '$.iv_skew_regime'),
+                   iv_regime, features, 'iv_daily_v0'
+            FROM market_regimes
+            WHERE regime_vocabulary = 'iv_daily_v0'
+              AND json_extract_string(features, '$.iv_level') IS NOT NULL
+            """
+        )
+
         self.conn.execute(
             """
             CREATE INDEX IF NOT EXISTS idx_market_regimes_symbol_ts
@@ -401,6 +447,31 @@ class DuckDBStore:
                 ALTER TABLE regime_policies
                 ADD COLUMN risk_limits JSON
                 """
+            )
+
+        self.conn.execute("ALTER TABLE regime_policies ADD COLUMN IF NOT EXISTS regime_vocabulary VARCHAR")
+        legacy_policy_rows = self.conn.execute(
+            """
+            SELECT policy_id, allowed_regimes, regime_metrics, risk_limits
+            FROM regime_policies
+            WHERE regime_vocabulary IS NULL
+            """
+        ).fetchall()
+        for policy_row in legacy_policy_rows:
+            allowed = _as_json_object(policy_row[1])
+            metrics = _as_json_object(policy_row[2])
+            risk_limits = _as_json_object(policy_row[3])
+            labels = list(allowed) if isinstance(allowed, list) else []
+            canonical = (
+                all(is_canonical_regime_label(label) for label in labels)
+                and isinstance(metrics, dict)
+                and all(is_canonical_regime_label(label) for label in metrics)
+                and isinstance(risk_limits, dict)
+                and all(is_canonical_regime_label(label) for label in risk_limits)
+            )
+            self.conn.execute(
+                "UPDATE regime_policies SET regime_vocabulary = ? WHERE policy_id = ?",
+                ["canonical_v1" if canonical else "legacy_daily_v0", policy_row[0]],
             )
 
         IV_OBSERVATIONS_SQL = """
@@ -847,6 +918,7 @@ class DuckDBStore:
                 FROM market_regimes
                 WHERE symbol = ?
                 AND CAST(ts AS DATE) = ?
+                AND regime_vocabulary = 'legacy_daily_v0'
                 QUALIFY row_number() OVER (
                     PARTITION BY symbol
                     ORDER BY ts DESC
@@ -1115,9 +1187,10 @@ class DuckDBStore:
     ) -> None:
         self.conn.execute(
             """
-            INSERT OR REPLACE INTO market_regimes VALUES (
-                ?, ?, ?, ?, ?, ?, ?
-            )
+            INSERT OR REPLACE INTO market_regimes (
+                symbol, ts, trend_regime, volatility_regime, iv_regime,
+                regime, features, regime_vocabulary
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, 'legacy_daily_v0')
             """,
             [
                 symbol,
@@ -1142,10 +1215,12 @@ class DuckDBStore:
                 volatility_regime,
                 iv_regime,
                 regime,
-                features
+                features,
+                regime_vocabulary
             FROM market_regimes
             WHERE symbol = ?
               AND ts <= ?
+              AND regime_vocabulary = 'legacy_daily_v0'
             ORDER BY ts DESC
             LIMIT 1
             """,
@@ -1161,6 +1236,7 @@ class DuckDBStore:
             "iv_regime": row[2],
             "regime": row[3],
             "features": json.loads(row[4]) if row[4] else {},
+            "regime_vocabulary": row[5],
         }
 
     def save_regime_policy(
@@ -1175,12 +1251,22 @@ class DuckDBStore:
         policy: Any,
         risk_limits: dict[str, Any] | None = None,
     ) -> None:
+        allowed_labels = validate_regime_labels(
+            list(policy.allowed_regimes), context="regime_policy.allowed_regimes"
+        )
+        metrics = policy.regime_metrics
+        if not isinstance(metrics, dict) or any(not is_canonical_regime_label(k) for k in metrics):
+            raise ValueError("regime_policy.regime_metrics must use canonical_v1 labels")
+        risk_limits = risk_limits or {}
+        if not isinstance(risk_limits, dict) or any(not is_canonical_regime_label(k) for k in risk_limits):
+            raise ValueError("regime_policy.risk_limits must use canonical_v1 labels")
         self.conn.execute(
             """
             INSERT OR REPLACE INTO regime_policies (
                 policy_id, symbol, train_start, train_end, test_start, test_end,
-                allowed_regimes, regime_metrics, selection_status, risk_limits, created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                allowed_regimes, regime_metrics, selection_status, risk_limits, created_at,
+                regime_vocabulary
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'canonical_v1')
             """,
             [
                 policy_id,
@@ -1189,10 +1275,10 @@ class DuckDBStore:
                 train_end,
                 test_start,
                 test_end,
-                json.dumps(sorted(policy.allowed_regimes)),
-                json.dumps(policy.regime_metrics, default=str),
+                json.dumps(sorted(allowed_labels)),
+                json.dumps(metrics, default=str),
                 policy.selection_status,
-                json.dumps(risk_limits or {}, default=str),
+                json.dumps(risk_limits, default=str),
                 datetime.now(UTC),
             ],
         )
@@ -1211,9 +1297,12 @@ class DuckDBStore:
                 allowed_regimes,
                 selection_status,
                 test_end,
-                risk_limits
+                risk_limits,
+                regime_metrics,
+                regime_vocabulary
             FROM regime_policies
             WHERE symbol = ?
+              AND regime_vocabulary = 'canonical_v1'
               AND test_start <= ?
               AND test_end >= ?
             ORDER BY test_start DESC
@@ -1223,7 +1312,7 @@ class DuckDBStore:
         ).fetchone()
 
         if row is not None:
-            status = row[1]
+            status = row[2]
         else:
             row = self.conn.execute(
                 """
@@ -1232,9 +1321,12 @@ class DuckDBStore:
                     allowed_regimes,
                     selection_status,
                     test_end,
-                    risk_limits
+                    risk_limits,
+                    regime_metrics,
+                    regime_vocabulary
                 FROM regime_policies
                 WHERE symbol = ?
+                  AND regime_vocabulary = 'canonical_v1'
                   AND test_end < ?
                 ORDER BY test_end DESC
                 LIMIT 1
@@ -1248,6 +1340,7 @@ class DuckDBStore:
 
         allowed_regimes = _as_json_object(row[1])
         risk_limits = _as_json_object(row[4])
+        regime_metrics = _as_json_object(row[5])
 
         if isinstance(allowed_regimes, str):
             allowed_regimes = _as_json_object(allowed_regimes)
@@ -1258,6 +1351,8 @@ class DuckDBStore:
             "selection_status": status,
             "test_end": row[3],
             "risk_limits": (risk_limits if isinstance(risk_limits, dict) else {}),
+            "regime_metrics": regime_metrics if isinstance(regime_metrics, dict) else {},
+            "regime_vocabulary": row[6],
         }
 
     def write_underlying_iv_observation(
@@ -1410,26 +1505,19 @@ class DuckDBStore:
         """Persist one daily IV regime observation."""
         self.conn.execute(
             """
-            INSERT OR REPLACE INTO market_regimes VALUES (
-                ?, ?, ?, ?, ?, ?, ?
-            )
+            INSERT OR REPLACE INTO daily_iv_regime (
+                symbol, trade_date, iv_level, iv_term_regime, iv_skew_regime,
+                iv_regime, metrics, regime_vocabulary
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, 'iv_daily_v0')
             """,
             [
                 underlying,
                 trade_date,
-                "neutral",
                 iv_level,
+                iv_term_regime,
+                iv_skew_regime,
                 iv_regime,
-                iv_regime,
-                json.dumps(
-                    {
-                        "iv_level": iv_level,
-                        "iv_term_regime": iv_term_regime,
-                        "iv_skew_regime": iv_skew_regime,
-                        **metrics,
-                    },
-                    default=str,
-                ),
+                json.dumps(metrics, default=str),
             ],
         )
 
@@ -1447,15 +1535,17 @@ class DuckDBStore:
         row = self.conn.execute(
             """
             SELECT
-                ts,
-                trend_regime,
-                volatility_regime,
+                trade_date,
+                iv_level,
+                iv_term_regime,
+                iv_skew_regime,
                 iv_regime,
-                features
-            FROM market_regimes
+                metrics
+            FROM daily_iv_regime
             WHERE symbol = ?
-              AND CAST(ts AS DATE) <= ?
-            ORDER BY ts DESC
+              AND trade_date <= ?
+              AND regime_vocabulary = 'iv_daily_v0'
+            ORDER BY trade_date DESC
             LIMIT 1
             """,
             [underlying, as_of],
@@ -1466,10 +1556,11 @@ class DuckDBStore:
 
         return {
             "trade_date": row[0],
-            "trend_regime": row[1],
-            "volatility_regime": row[2],
-            "iv_regime": row[3],
-            "features": (json.loads(row[4]) if row[4] else {}),
+            "iv_level": row[1],
+            "iv_term_regime": row[2],
+            "iv_skew_regime": row[3],
+            "iv_regime": row[4],
+            "metrics": _as_json_object(row[5]),
         }
 
     def refresh_latest_spot_feature(

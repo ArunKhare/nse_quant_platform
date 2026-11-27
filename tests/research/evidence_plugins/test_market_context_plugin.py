@@ -85,6 +85,39 @@ def write_regime(
     )
 
 
+def test_legacy_iv_rows_do_not_override_market_context(
+    store: DuckDBStore,
+) -> None:
+    write_regime(
+        store,
+        ts=DECISION_TS - timedelta(seconds=120),
+        regime="TREND_UP",
+    )
+    store.conn.execute(
+        """
+        INSERT INTO market_regimes (
+            symbol, ts, trend_regime, volatility_regime, iv_regime,
+            regime, features, regime_vocabulary
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, 'iv_daily_v0')
+        """,
+        [
+            "NIFTY",
+            DECISION_TS - timedelta(seconds=30),
+            "UNKNOWN",
+            "UNKNOWN",
+            "HIGH_IV",
+            "HIGH_IV_CONTANGO_NORMAL_SKEW",
+            "{}",
+        ],
+    )
+
+    result = build_plugin(store).build(build_context())
+    index = result["context_indices"]["NIFTY"]
+
+    assert index["regime"] == "TREND_UP"
+    assert index["regime_vocabulary"] == "legacy_daily_v0"
+
+
 def test_no_observations_are_unavailable(
     store: DuckDBStore,
 ) -> None:

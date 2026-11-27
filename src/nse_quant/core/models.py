@@ -28,7 +28,7 @@ class OrderStatus(StrEnum):
     CANCELLED = "CANCELLED"
 
 
-class MarketRegime(StrEnum):
+class IntradayShape(StrEnum):
     TREND_UP = "TREND_UP"
     TREND_DOWN = "TREND_DOWN"
     RANGE = "RANGE"
@@ -127,7 +127,7 @@ class MarketFeatures(BaseModel):
     total_put_oi: int | None = None
     max_pain: float | None = None
     liquidity_score: float | None = None
-    regime: MarketRegime = MarketRegime.UNKNOWN
+    intraday_shape: IntradayShape = IntradayShape.UNKNOWN
     short_momentum: float | None = None
     straddle_price: float | None = None
     expected_move_pct: float | None = None

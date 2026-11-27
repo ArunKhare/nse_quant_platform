@@ -11,6 +11,8 @@ import json
 from datetime import UTC, datetime
 from typing import Any
 
+from nse_quant.core.regime_registry import is_canonical_regime_label
+
 TABLE = "institutional_regime_evidence"
 VERSION = "institutional-regime-evidence@1"
 
@@ -45,8 +47,11 @@ def initialize(target: Any) -> None:
         "regime_label VARCHAR,"
         "complete BOOLEAN NOT NULL,"
         "payload_json VARCHAR NOT NULL,"
-        "recorded_at TIMESTAMPTZ NOT NULL)"
+        "recorded_at TIMESTAMPTZ NOT NULL,"
+        "regime_vocabulary VARCHAR)"
     )
+    target.execute(f"ALTER TABLE {TABLE} ADD COLUMN IF NOT EXISTS regime_vocabulary VARCHAR")
+    target.execute(f"UPDATE {TABLE} SET regime_vocabulary='legacy_daily_v0' WHERE regime_vocabulary IS NULL")
 
 
 def evidence_id(
@@ -105,6 +110,7 @@ def persist_regime_evidence(
     ).fetchone():
         raise PersistenceRejected("REGIME_EVIDENCE_FIRST_WRITE_ONLY")
 
+    regime_vocabulary = "canonical_v1" if is_canonical_regime_label(payload.get("regime_label")) else "legacy_daily_v0"
     payload_json = json.dumps(
         payload,
         sort_keys=True,
@@ -114,7 +120,9 @@ def persist_regime_evidence(
     )
     recorded_at = _clock(datetime.now(UTC))
     target.execute(
-        f"INSERT INTO {TABLE} VALUES (?,?,?,?,?,?,?,?)",
+        f"INSERT INTO {TABLE} (evidence_id,as_of,symbol,classifier_version,"
+        "regime_label,complete,payload_json,recorded_at,regime_vocabulary) "
+        "VALUES (?,?,?,?,?,?,?,?,?)",
         [
             evidence_id_value,
             as_of,
@@ -124,6 +132,7 @@ def persist_regime_evidence(
             bool(payload.get("complete", False)),
             payload_json,
             recorded_at,
+            regime_vocabulary,
         ],
     )
     return dict(
@@ -134,6 +143,7 @@ def persist_regime_evidence(
         regime_label=payload.get("regime_label"),
         complete=bool(payload.get("complete", False)),
         recorded_at=recorded_at.isoformat(),
+        regime_vocabulary=regime_vocabulary,
         decision_eligibility_asserted=False,
     )
 
@@ -146,7 +156,7 @@ def read_regime_evidence(
     if not _pin(evidence_id):
         raise PersistenceRejected("EXACT_REGIME_EVIDENCE_PIN_REQUIRED")
     row = target.execute(
-        f"SELECT as_of,symbol,classifier_version,regime_label,complete,payload_json,recorded_at "
+        f"SELECT as_of,symbol,classifier_version,regime_label,complete,payload_json,recorded_at,regime_vocabulary "
         f"FROM {TABLE} WHERE evidence_id=? LIMIT 1",
         [evidence_id],
     ).fetchone()
@@ -162,5 +172,6 @@ def read_regime_evidence(
         complete=row[4],
         payload=payload,
         recorded_at=row[6].isoformat(),
+        regime_vocabulary=row[7],
         decision_eligibility_asserted=False,
     )

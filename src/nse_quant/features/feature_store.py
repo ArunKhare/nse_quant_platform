@@ -17,7 +17,7 @@ class FeatureStore:
 
         self.conn.execute(
             """
-            INSERT OR REPLACE INTO feature_snapshots VALUES (
+            INSERT OR REPLACE INTO feature_snapshots (feature_id, ts, run_id, underlying, expiry, spot, atm_iv, iv_rank, iv_percentile, realized_vol, iv_rv_spread, pcr, total_call_oi, total_put_oi, max_pain, liquidity_score, intraday_shape, short_momentum, straddle_price, expected_move_pct, expected_move_points, diagnostics) VALUES (
                 ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
             )
             """,
@@ -38,7 +38,7 @@ class FeatureStore:
                 features.total_put_oi,
                 features.max_pain,
                 features.liquidity_score,
-                features.regime.value,
+                features.intraday_shape.value,
                 features.short_momentum,
                 features.straddle_price,
                 features.expected_move_pct,
@@ -84,7 +84,7 @@ class FeatureStore:
         return [self._from_row(row) for row in rows]
 
     def _from_row(self, row: tuple[Any, ...]) -> MarketFeatures:
-        from nse_quant.core.models import MarketRegime
+        from nse_quant.core.models import IntradayShape
 
         return MarketFeatures(
             ts=row[1],
@@ -101,7 +101,7 @@ class FeatureStore:
             total_put_oi=int(row[13]) if row[13] is not None else None,
             max_pain=row[14],
             liquidity_score=row[15],
-            regime=MarketRegime(row[16]),
+            intraday_shape=IntradayShape(row[16]),
             short_momentum=row[17],
             straddle_price=row[18],
             expected_move_pct=row[19],

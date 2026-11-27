@@ -50,11 +50,13 @@ def load_decisions_factory(store: DuckDBStore, symbol: str):
             FROM decisions d
             LEFT JOIN market_regimes r
               ON r.symbol = d.underlying
-             AND r.ts = (
+             AND r.regime_vocabulary = 'legacy_daily_v0'
+         AND r.ts = (
                  SELECT MAX(regime.ts)
                  FROM market_regimes regime
                  WHERE regime.symbol = d.underlying
                    AND regime.ts <= d.ts
+                   AND regime.regime_vocabulary = 'legacy_daily_v0'
              )
             WHERE d.underlying = ?
               AND CAST(d.ts AS DATE) >= ?

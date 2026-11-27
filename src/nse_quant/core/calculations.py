@@ -11,7 +11,7 @@ import pandas as pd
 from scipy.optimize import brentq
 from scipy.stats import norm
 
-from nse_quant.core.models import MarketRegime
+from nse_quant.core.models import IntradayShape
 
 TRADING_DAYS_PER_YEAR = 252
 DAYS_PER_YEAR = 365.25
@@ -176,7 +176,7 @@ def atm_iv(
     return float(valid[atm_strike])
 
 
-def classify_market_regime(
+def classify_intraday_shape(
     *,
     spot: float,
     fast_sma: float | None,
@@ -185,13 +185,13 @@ def classify_market_regime(
     volatile_rv_threshold: float = 0.35,
     trend_up_tolerance: float = 1.002,
     trend_down_tolerance: float = 0.998,
-) -> MarketRegime:
+) -> IntradayShape:
     if realized_volatility is not None and realized_volatility > volatile_rv_threshold:
-        return MarketRegime.VOLATILE
+        return IntradayShape.VOLATILE
     if fast_sma is None or slow_sma is None:
-        return MarketRegime.UNKNOWN
+        return IntradayShape.UNKNOWN
     if fast_sma > slow_sma * trend_up_tolerance:
-        return MarketRegime.TREND_UP
+        return IntradayShape.TREND_UP
     if fast_sma < slow_sma * trend_down_tolerance:
-        return MarketRegime.TREND_DOWN
-    return MarketRegime.RANGE
+        return IntradayShape.TREND_DOWN
+    return IntradayShape.RANGE

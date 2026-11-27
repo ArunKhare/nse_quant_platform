@@ -1,6 +1,6 @@
 from datetime import UTC, datetime, timedelta
 
-from nse_quant.core.models import MarketFeatures, MarketRegime
+from nse_quant.core.models import MarketFeatures, IntradayShape
 from nse_quant.features.feature_store import FeatureStore
 from nse_quant.persistence.duckdb_store import DuckDBStore
 
@@ -15,7 +15,7 @@ def make_features(ts: datetime, iv: float) -> MarketFeatures:
         iv_rank=50.0,
         iv_percentile=60.0,
         realized_vol=12.0,
-        regime=MarketRegime.RANGE,
+        intraday_shape=IntradayShape.RANGE,
     )
 
 
@@ -32,7 +32,7 @@ def test_feature_store_persists_and_reads(tmp_path):
     assert loaded is not None
     assert loaded.atm_iv == 15.0
     assert loaded.iv_rank == 50.0
-    assert loaded.regime == MarketRegime.RANGE
+    assert loaded.intraday_shape == IntradayShape.RANGE
 
     store.close()
 

@@ -38,11 +38,13 @@ def load_trade_outcomes(
         FROM decisions d
         LEFT JOIN market_regimes r
           ON r.symbol = d.underlying
+         AND r.regime_vocabulary = 'legacy_daily_v0'
          AND r.ts = (
              SELECT MAX(regime.ts)
              FROM market_regimes regime
              WHERE regime.symbol = d.underlying
                AND regime.ts <= d.ts
+               AND regime.regime_vocabulary = 'legacy_daily_v0'
          )
         JOIN strategy_positions sp
           ON sp.proposal_id = JSON_EXTRACT_STRING(

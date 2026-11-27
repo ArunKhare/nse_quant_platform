@@ -70,10 +70,12 @@ class MarketContextPlugin(EvidencePlugin):
                 trend_regime,
                 volatility_regime,
                 iv_regime,
-                regime
+                regime,
+                regime_vocabulary
             FROM market_regimes
             WHERE symbol = ?
               AND ts <= ?
+              AND regime_vocabulary = 'legacy_daily_v0'
             ORDER BY ts DESC
             LIMIT 1
             """,
@@ -90,6 +92,7 @@ class MarketContextPlugin(EvidencePlugin):
                 "trend_regime": None,
                 "volatility_regime": None,
                 "iv_regime": None,
+                "regime_vocabulary": None,
                 "reason": "no_point_in_time_regime",
             }
 
@@ -121,6 +124,7 @@ class MarketContextPlugin(EvidencePlugin):
             "trend_regime": row[1],
             "volatility_regime": row[2],
             "iv_regime": row[3],
+            "regime_vocabulary": row[5],
             "reason": reason,
         }
 

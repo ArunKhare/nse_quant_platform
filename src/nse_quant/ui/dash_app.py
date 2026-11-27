@@ -178,8 +178,11 @@ def strategy_eligibility_section(
 
     details = eligibility.get("details") or {}
     reason = eligibility.get("reason", "—")
-    current_regime = details.get("current_regime", "—")
-    regime_source = details.get("regime_source", "—")
+    regime_label = details.get("regime_label", "—")
+    regime_source = details.get("regime_label_source", "—")
+    market_context = details.get("market_context") or {}
+    daily_trend_vol = market_context.get("daily_trend_vol", "—")
+    intraday_shape = details.get("intraday_shape", "—")
     allowed_regimes = details.get("allowed_regimes") or []
     iv_rank = details.get("iv_rank")
 
@@ -207,15 +210,29 @@ def strategy_eligibility_section(
             ),
             html.P(
                 [
-                    html.Strong("Current regime: "),
-                    str(current_regime).replace("_", " "),
+                    html.Strong("Canonical regime label: "),
+                    str(regime_label).replace("_", " "),
                 ],
                 style={"marginBottom": "8px"},
             ),
             html.P(
                 [
-                    html.Strong("Regime source: "),
+                    html.Strong("Canonical regime source: "),
                     str(regime_source).replace("_", " "),
+                ],
+                style={"marginBottom": "12px"},
+            ),
+            html.P(
+                [
+                    html.Strong("Market context (daily trend/vol): "),
+                    str(daily_trend_vol).replace("_", " "),
+                ],
+                style={"marginBottom": "8px"},
+            ),
+            html.P(
+                [
+                    html.Strong("Intraday shape: "),
+                    str(intraday_shape).replace("_", " "),
                 ],
                 style={"marginBottom": "12px"},
             ),
