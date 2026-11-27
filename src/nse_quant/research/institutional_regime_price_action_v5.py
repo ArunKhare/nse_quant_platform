@@ -15,7 +15,6 @@ from typing import Any
 
 from pydantic import BaseModel, Field, model_validator
 
-
 PRICE_ACTION_CLASSIFIER_VERSION = "institutional_daily_price_action_v5"
 PRICE_ACTION_STATES = (
     "STRONG_BULL_TREND",
@@ -197,14 +196,9 @@ def _metrics_at(
         return None
 
     er_denominator = sum(
-        abs(bars[position].close - bars[position - 1].close)
-        for position in range(index - 19, index + 1)
+        abs(bars[position].close - bars[position - 1].close) for position in range(index - 19, index + 1)
     )
-    er20 = (
-        abs(bars[index].close - bars[index - 20].close) / er_denominator
-        if er_denominator > 0
-        else 0.0
-    )
+    er20 = abs(bars[index].close - bars[index - 20].close) / er_denominator if er_denominator > 0 else 0.0
     chop = _chop14(bars, index)
     bandwidth = _bandwidth(bars, index)
     if chop is None or bandwidth is None:
@@ -212,9 +206,7 @@ def _metrics_at(
 
     atr_values = [value for value in atr_series[max(0, index - 251) : index + 1] if value is not None]
     bandwidth_values = [
-        value
-        for position in range(max(0, index - 119), index + 1)
-        if (value := _bandwidth(bars, position)) is not None
+        value for position in range(max(0, index - 119), index + 1) if (value := _bandwidth(bars, position)) is not None
     ]
     if len(atr_values) < 252 or len(bandwidth_values) < 120:
         return None
@@ -247,16 +239,8 @@ def _clip(value: float) -> float:
 
 
 def _classify(metrics: _Metrics, prior_state: str | None) -> tuple[str | None, float]:
-    bullish_direction = (
-        metrics.change20 > 0
-        and metrics.sma20_slope > 0
-        and metrics.plus_di > metrics.minus_di
-    )
-    bearish_direction = (
-        metrics.change20 < 0
-        and metrics.sma20_slope < 0
-        and metrics.minus_di > metrics.plus_di
-    )
+    bullish_direction = metrics.change20 > 0 and metrics.sma20_slope > 0 and metrics.plus_di > metrics.minus_di
+    bearish_direction = metrics.change20 < 0 and metrics.sma20_slope < 0 and metrics.minus_di > metrics.plus_di
 
     # The research specification explicitly defines ADX < 20 as the trend
     # exit threshold. Retain a confirmed trend through the 20–25 neutral band
@@ -276,21 +260,9 @@ def _classify(metrics: _Metrics, prior_state: str | None) -> tuple[str | None, f
         )
         return prior_state, confidence
 
-    if (
-        metrics.atr_percentile >= 70.0
-        and (metrics.adx < 20.0 or metrics.chop14 > 61.8)
-        and metrics.er20 < 0.22
-    ):
-        adx_chop_margin = (
-            _clip((20.0 - metrics.adx) / 20.0)
-            if metrics.adx < 20.0
-            else 0.0
-        )
-        chop_index_margin = (
-            _clip((metrics.chop14 - 61.8) / (100.0 - 61.8))
-            if metrics.chop14 > 61.8
-            else 0.0
-        )
+    if metrics.atr_percentile >= 70.0 and (metrics.adx < 20.0 or metrics.chop14 > 61.8) and metrics.er20 < 0.22:
+        adx_chop_margin = _clip((20.0 - metrics.adx) / 20.0) if metrics.adx < 20.0 else 0.0
+        chop_index_margin = _clip((metrics.chop14 - 61.8) / (100.0 - 61.8)) if metrics.chop14 > 61.8 else 0.0
         chop_margin = max(adx_chop_margin, chop_index_margin)
         confidence = min(
             _clip((metrics.atr_percentile - 70.0) / 30.0),
@@ -300,12 +272,10 @@ def _classify(metrics: _Metrics, prior_state: str | None) -> tuple[str | None, f
         return "HIGH_VOL_CHOP", confidence
 
     if metrics.adx >= 25.0 and metrics.er20 >= 0.35 and (bullish_direction or bearish_direction):
-        direction_margin = (
-            min(
-                _clip(abs(metrics.change20) / (20.0 * metrics.atr14)),
-                _clip(abs(metrics.sma20_slope) / metrics.atr14),
-                _clip(abs(metrics.plus_di - metrics.minus_di) / 100.0),
-            )
+        direction_margin = min(
+            _clip(abs(metrics.change20) / (20.0 * metrics.atr14)),
+            _clip(abs(metrics.sma20_slope) / metrics.atr14),
+            _clip(abs(metrics.plus_di - metrics.minus_di) / 100.0),
         )
         confidence = min(
             _clip((metrics.adx - 25.0) / 75.0),
@@ -407,9 +377,7 @@ def classify_daily_price_action(
     if confirmed_metrics is None:
         return _unavailable("confirmed_state_metrics_unavailable")
     confirmed_confidence = next(
-        confidence
-        for index, _state, confidence, _metrics in classified
-        if index == confirmed_index
+        confidence for index, _state, confidence, _metrics in classified if index == confirmed_index
     )
     pending_state = latest_raw_state if latest_raw_state != confirmed_state else None
     output_confidence = latest_confidence if pending_state is None else confirmed_confidence

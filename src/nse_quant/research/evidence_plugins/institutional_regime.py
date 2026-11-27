@@ -15,9 +15,9 @@ from nse_quant.research.evidence_plugins.base import (
     EvidencePlugin,
 )
 from nse_quant.research.institutional_regime_price_action_v5 import (
+    PRICE_ACTION_CLASSIFIER_VERSION,
     DailyBar,
     InstitutionalRegimePriceActionSettings,
-    PRICE_ACTION_CLASSIFIER_VERSION,
     classify_daily_price_action,
 )
 from nse_quant.research.institutional_regime_skew import (
@@ -192,9 +192,7 @@ class InstitutionalRegimePlugin(EvidencePlugin):
             else None
         )
         regime_label = (
-            candidate_label
-            if candidate_label is not None and is_canonical_regime_label(candidate_label)
-            else None
+            candidate_label if candidate_label is not None and is_canonical_regime_label(candidate_label) else None
         )
         all_complete = components_complete and regime_label is not None
 
@@ -211,11 +209,7 @@ class InstitutionalRegimePlugin(EvidencePlugin):
             "regime_label": regime_label,
             "components": components,
             "missing_components": (
-                [
-                    name
-                    for name, component in components.items()
-                    if not component["complete"]
-                ]
+                [name for name, component in components.items() if not component["complete"]]
                 + (["canonical_regime_label"] if components_complete and regime_label is None else [])
             ),
             "reason": (
@@ -225,11 +219,7 @@ class InstitutionalRegimePlugin(EvidencePlugin):
                     "non_canonical_composite_label"
                     if components_complete
                     else next(
-                        (
-                            component["reason"]
-                            for component in components.values()
-                            if not component["complete"]
-                        ),
+                        (component["reason"] for component in components.values() if not component["complete"]),
                         "incomplete_components",
                     )
                 )
@@ -466,11 +456,7 @@ class InstitutionalRegimePlugin(EvidencePlugin):
 
         result["iv_difference"] = difference
         result["state"] = (
-            "CONTANGO"
-            if difference > tolerance
-            else "BACKWARDATION"
-            if difference < -tolerance
-            else "FLAT"
+            "CONTANGO" if difference > tolerance else "BACKWARDATION" if difference < -tolerance else "FLAT"
         )
         result["complete"] = True
 

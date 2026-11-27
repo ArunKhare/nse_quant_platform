@@ -8,8 +8,8 @@ from nse_quant.research.institutional_regime_price_action_v5 import (
     PRICE_ACTION_CLASSIFIER_VERSION,
     DailyBar,
     InstitutionalRegimePriceActionSettings,
-    _Metrics,
     _classify,
+    _Metrics,
     classify_daily_price_action,
 )
 
@@ -27,9 +27,9 @@ def trading_dates(count: int) -> list[date]:
 def trending_bars(direction: int, count: int = 280) -> list[DailyBar]:
     dates = trading_dates(count)
     bars: list[DailyBar] = []
-    previous = 100.0
+    previous = 250.0
     for index, trade_date in enumerate(dates):
-        close = 100.0 + direction * index * 0.5
+        close = 250.0 + direction * index * 0.5
         opening = previous
         bars.append(
             DailyBar(
@@ -67,7 +67,7 @@ def test_completed_daily_bars_produce_canonical_bear_trend() -> None:
         trending_bars(-1),
         InstitutionalRegimePriceActionSettings(),
     )
-
+    print("BEAR CLASSIFIER RESULT:", result)
     assert result["complete"] is True
     assert result["state"] == "STRONG_BEAR_TREND"
 
