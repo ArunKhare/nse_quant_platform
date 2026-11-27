@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from dataclasses import asdict, replace
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
@@ -9,9 +10,6 @@ from typing import Any
 
 import duckdb
 import pytest
-
-import json
-from nse_quant.research.regime_risk_policy import RegimeRiskLimits
 
 from nse_quant.data_platform import legacy_daily_rv_bronze as common
 from nse_quant.data_platform import legacy_regime_policies as codec
@@ -21,6 +19,7 @@ from nse_quant.data_platform.audit import AuditLedger, JobState
 from nse_quant.data_platform.bronze import BronzeEventStore
 from nse_quant.persistence.duckdb_store import DuckDBStore
 from nse_quant.research.regime_policy import RegimePolicy
+from nse_quant.research.regime_risk_policy import RegimeRiskLimits
 
 AT = datetime(2026, 1, 1, tzinfo=UTC)
 REVISION = "a" * 40
