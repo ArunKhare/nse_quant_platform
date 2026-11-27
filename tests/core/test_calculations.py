@@ -9,7 +9,7 @@ import pytest
 from nse_quant.core.calculations import (
     atm_iv,
     black_scholes_price_and_greeks,
-    classify_market_regime,
+    classify_intraday_shape,
     implied_volatility,
     iv_percentile,
     iv_rank,
@@ -88,7 +88,7 @@ def test_atm_iv_selects_nearest_positive_finite_iv():
     assert result == 0.3
 
 
-def test_market_regime_classification():
-    assert classify_market_regime(spot=100, fast_sma=101, slow_sma=100, realized_volatility=0.2).value == "TREND_UP"
-    assert classify_market_regime(spot=100, fast_sma=99, slow_sma=100, realized_volatility=0.2).value == "TREND_DOWN"
+def test_intraday_shape_classification():
+    assert classify_intraday_shape(spot=100, fast_sma=101, slow_sma=100, realized_volatility=0.2).value == "TREND_UP"
+    assert classify_intraday_shape(spot=100, fast_sma=99, slow_sma=100, realized_volatility=0.2).value == "TREND_DOWN"
     assert classify_market_regime(spot=100, fast_sma=100, slow_sma=100, realized_volatility=0.4).value == "VOLATILE"
