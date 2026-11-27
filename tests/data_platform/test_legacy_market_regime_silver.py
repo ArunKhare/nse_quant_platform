@@ -26,24 +26,41 @@ OPAQUE = '{ "eligible":true, "eligible":false, "authorized":true }'
 def _bronze(tmp_path: Path) -> tuple[Path, silver.RegimeBronzePins]:
     legacy_path = tmp_path / "legacy.duckdb"
     bronze_path = tmp_path / "bronze.duckdb"
-    legacy = DuckDBStore(path=legacy_path)
+    legacy = duckdb.connect(str(legacy_path))
     try:
-        args: dict[str, Any] = dict(
-            symbol="NIFTY",
-            trend_regime="unknown-trend",
-            volatility_regime="opaque-vol",
-            iv_regime="opaque-iv",
-            regime="custom-label",
-            features={"clock": AT},
+        # Build the exact reviewed seven-column legacy contract directly. Opening
+        # this source through DuckDBStore would add regime_vocabulary and migrate
+        # the retained source before Bronze can verify its physical schema.
+        legacy.execute(
+            """
+            CREATE TABLE market_regimes (
+                symbol VARCHAR,
+                ts TIMESTAMPTZ,
+                trend_regime VARCHAR,
+                volatility_regime VARCHAR,
+                iv_regime VARCHAR,
+                regime VARCHAR,
+                features JSON,
+                PRIMARY KEY (symbol, ts)
+            )
+            """
         )
         local = AT.astimezone(timezone(timedelta(hours=5, minutes=30)))
-        legacy.write_market_regime(ts=local, **args)
-        legacy.write_market_regime(ts=AT, **(args | dict(trend_regime="retained-replacement")))
-        table = common.name(legacy.conn, "main", codec.TABLE)
-        # Opaque nested-key boundary in retained SQL, not authentic policy authority.
-        legacy.conn.execute(f"UPDATE {table} SET features=?", [OPAQUE])
-        legacy.conn.executemany(
-            f"INSERT INTO {table} (symbol,ts,features) VALUES (?,?,?)",
+        legacy.execute(
+            "INSERT INTO market_regimes VALUES (?,?,?,?,?,?,?)",
+            ["NIFTY", local, "unknown-trend", "opaque-vol", "opaque-iv", "custom-label", '{"clock":"2026-01-01T00:00:00+00:00"}'],
+        )
+        # Same instant in a different offset replaces the composite-key row.
+        legacy.execute(
+            """
+            UPDATE market_regimes
+            SET trend_regime=?,features=?
+            WHERE symbol=? AND ts=?
+            """,
+            ["retained-replacement", OPAQUE, "NIFTY", AT],
+        )
+        legacy.executemany(
+            "INSERT INTO market_regimes (symbol,ts,features) VALUES (?,?,?)",
             [("NULL", AT, None), ("JSONNULL", AT, "null"), ("EMPTY", AT, "{}")],
         )
     finally:
@@ -539,16 +556,27 @@ def test_maximum_label_actual_native_persistence(tmp_path: Path, text: str) -> N
     legacy_path = tmp_path / "legacy.duckdb"
     bronze_path = tmp_path / "bronze.duckdb"
     silver_path = tmp_path / "silver.duckdb"
-    legacy = DuckDBStore(path=legacy_path)
+    legacy = duckdb.connect(str(legacy_path))
     try:
-        legacy.write_market_regime(
-            symbol="N",
-            ts=AT,
-            trend_regime=text,
-            volatility_regime="custom",
-            iv_regime="custom",
-            regime="custom",
-            features={},
+        # Keep the source on the exact reviewed legacy schema; DuckDBStore
+        # initialization would add the later regime_vocabulary migration column.
+        legacy.execute(
+            """
+            CREATE TABLE market_regimes (
+                symbol VARCHAR,
+                ts TIMESTAMPTZ,
+                trend_regime VARCHAR,
+                volatility_regime VARCHAR,
+                iv_regime VARCHAR,
+                regime VARCHAR,
+                features JSON,
+                PRIMARY KEY (symbol, ts)
+            )
+            """
+        )
+        legacy.execute(
+            "INSERT INTO market_regimes VALUES (?,?,?,?,?,?,?)",
+            ["N", AT, text, "custom", "custom", "custom", "{}"],
         )
     finally:
         legacy.close()
