@@ -45,11 +45,17 @@ def _load_rows(path: Path) -> list[CalibrationObservation]:
             raise ValueError(f"missing_required_csv_columns:{','.join(missing)}")
         for line_number, row in enumerate(reader, start=2):
             try:
-                values: dict[str, Any] = {
-                    key: float(row[key]) for key in required if key != "session"
-                }
+                session_text = row.get("session")
+                if not session_text:
+                    raise ValueError("missing_session")
+                values: dict[str, Any] = {}
+                for key in required - {"session"}:
+                    raw_value = row.get(key)
+                    if raw_value is None:
+                        raise ValueError(f"missing_value:{key}")
+                    values[key] = float(raw_value)
                 rows.append(CalibrationObservation(
-                    session=date.fromisoformat(row["session"]),
+                    session=date.fromisoformat(session_text),
                     **values,
                 ))
             except (TypeError, ValueError, KeyError) as exc:

@@ -14,7 +14,7 @@ from nse_quant.research.institutional_regime_calibration import (
 
 def observations(count: int = 486) -> list[CalibrationObservation]:
     first = date(2024, 1, 1)
-    rows = []
+    rows: list[CalibrationObservation] = []
     session = first
     for index in range(count):
         while session.weekday() >= 5:
