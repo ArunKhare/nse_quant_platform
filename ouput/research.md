@@ -724,3 +724,21 @@ Implementation changes committed on `feat/medallion-feature-store`:
 - Eligibility evidence and dashboard presentation distinguish the canonical regime label, legacy daily trend/vol context, and intraday shape.
 
 Validation status: implementation and focused tests have been updated, but the assistant has not executed the repository test suite, Ruff, or mypy. QA remains pending. In particular, run the feature-store, regime-policy, institutional-persistence, and decision-loop focused tests, then the full configured quality gates. This entry records code changes only; it does not assert paper-trading acceptance or alter live-trading authority.
+
+
+## 2026-11-27 — S6 diagnostic walk-forward calibration report
+
+Implemented a diagnostic-only report engine for the provisional thresholds in sections 3.1–3.5.
+
+- Added a typed NIFTY completed-session input contract for IVP, IV30–IV90, RR25, daily price-action diagnostics, and daily 5-minute-plus-overnight realized variance.
+- Added rolling fixed-length train/test folds (default 360 training sessions, 63 test sessions, 63-session step). Test windows do not overlap.
+- Each fold reports training-window p10/p25/p50/p75/p90 distributions for the relevant diagnostics and the frozen provisional thresholds.
+- Each fold applies the provisional IVP hysteresis, term-structure band, point-in-time trailing-252-session RR25 p10/p50 skew bands, and existing v5 price-action classifier to the later test window. State counts/fractions and unavailable price-action sessions are reported.
+- Integrated the existing HAR-RV rolling-origin calibration within each training window and separately evaluated the 21-session HAR-RV forecast against the subsequent test window.
+- HAR-RV calibration sufficiency is retained as a diagnostic only; its gate-margin eligibility is explicitly suppressed in the S6 report.
+- Added a CSV runner that records input SHA-256, accepts an optional upstream source manifest, and writes Markdown plus JSON reports.
+- Added documentation at docs/INSTITUTIONAL_REGIME_CALIBRATION.md.
+
+The report is explicitly diagnostic-only: thresholds are neither optimized nor changed; no threshold is promoted; no classifier configuration, decision eligibility, paper-trading approval, risk limit, or execution permission is modified. The runner requires a source-pinned, point-in-time NIFTY export; it does not fetch or reconstruct upstream market data.
+
+Focused tests have been added in tests/research/test_institutional_regime_calibration.py. QA is pending. The assistant has not executed the tests, Ruff, mypy, or the report against a production NIFTY export. S6 is not accepted until operator QA and review of a real source-pinned report are complete.
