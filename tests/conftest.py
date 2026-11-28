@@ -106,45 +106,39 @@ def _seed_lock(lock_path: Path):
 
 @pytest.fixture(scope="session")
 def _seed_native_failure_lab(tmp_path_factory):
-    """Build NativeFailureLab ONCE across all xdist workers and snapshot via meta.json."""
-    shared_dir = tmp_path_factory.getbasetemp().parent
-    backup_root = shared_dir / "native_failure_lab_shared_backup"
-    lock_path = shared_dir / "native_failure_lab_seed.lock"
+    """Build a worker-local native producer seed with a stable artifact-root binding."""
     work_root = tmp_path_factory.mktemp("native_failure_lab_work")
+    backup_root = work_root.with_name(work_root.name + "_backup")
 
-    with _seed_lock(lock_path):
-        if not (backup_root / "meta.json").exists():
-            seed_tmp = shared_dir / "native_failure_lab_seed_tmp"
-            shutil.rmtree(seed_tmp, ignore_errors=True)
-            seed_tmp.mkdir(parents=True, exist_ok=True)
+    if not (backup_root / "meta.json").exists():
+        shutil.rmtree(work_root, ignore_errors=True)
+        work_root.mkdir(parents=True, exist_ok=True)
 
-            # Run the full 8-DB producer pipeline once
-            seeded = NativeFailureLab(seed_tmp)
+        # Seed at the final worker path: the staging DB binds to this exact artifact root.
+        seeded = NativeFailureLab(work_root)
+        meta = {
+            "at": seeded.at.isoformat(),
+            "identity": seeded.identity,
+            "raw_hex": seeded.raw.hex(),
+            "original_receipt_id": seeded.original.receipt_id,
+            "capture": seeded.capture,
+            "build_id": seeded.build_id,
+            "bundle_id": seeded.bundle_id,
+            "publication_id": seeded.publication_id,
+        }
+        (work_root / "meta.json").write_text(
+            json.dumps(meta, sort_keys=True),
+            encoding="utf-8",
+        )
 
-            meta = {
-                "at": seeded.at.isoformat(),
-                "identity": seeded.identity,
-                "raw_hex": seeded.raw.hex(),
-                "original_receipt_id": seeded.original.receipt_id,
-                "capture": seeded.capture,
-                "build_id": seeded.build_id,
-                "bundle_id": seeded.bundle_id,
-                "publication_id": seeded.publication_id,
-            }
-            (seed_tmp / "meta.json").write_text(
-                json.dumps(meta, sort_keys=True),
-                encoding="utf-8",
-            )
+        # Keep a pristine per-worker snapshot for restoration between tests.
+        shutil.copytree(work_root, backup_root, dirs_exist_ok=True)
 
-            # Atomic rename into place so other workers never see a partial directory
-            shutil.rmtree(backup_root, ignore_errors=True)
-            seed_tmp.replace(backup_root)
-
-    # Copy the clean snapshot into this worker's isolated work_root
+    # Restore/copy the clean snapshot at the same path recorded by the staging DB.
     shutil.copytree(backup_root, work_root, dirs_exist_ok=True)
     meta = json.loads((work_root / "meta.json").read_text(encoding="utf-8"))
 
-    # Hydrate NativeFailureLab without calling __init__
+    # Hydrate NativeFailureLab without calling __init__.
     lab_instance = NativeFailureLab.__new__(NativeFailureLab)
     lab_instance.paths = {
         role: work_root / f"{role}.duckdb"
@@ -173,7 +167,6 @@ def _seed_native_failure_lab(tmp_path_factory):
     lab_instance.publication_id = meta["publication_id"]
 
     return work_root, backup_root, lab_instance
-
 
 @pytest.fixture
 def lab(_seed_native_failure_lab):
