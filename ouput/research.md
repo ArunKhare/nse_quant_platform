@@ -803,3 +803,57 @@ The assistant has not executed these commands. Implementation status is
 committed; test, lint, type-check and full-suite acceptance remain pending
 operator output. No strategy gate, regime classification, Silver publication,
 decision eligibility or trading authority was changed.
+
+
+## 2026-11-28 — S1 consumer-boundary corrections
+
+Implemented the S1 follow-up corrections on `feat/medallion-feature-store`.
+
+### Eligibility and risk boundaries
+
+- Institutional eligibility now requires all of the following on the same evidence payload: `available is True`, `complete is True`, an exact registry-v2 label, `thresholds_provisional is False`, and `decision_eligibility_asserted is False`. Missing approval metadata is not interpreted as approval.
+- The decision audit retains the individual readiness fields and a separate `regime_label_eligible` result. An exact canonical string alone is not sufficient.
+- Static configured risk fallback now independently checks the strategy profile's configured allowlist and blocklist before applying any configured limits. A canonical-but-disallowed label receives zero limits and a rejection reason.
+- The lower-level risk context also requires explicit false values for provisional thresholds and decision-eligibility assertion; absent fields fail closed.
+
+### Historical policy-training outcomes
+
+- Removed the legacy `market_regimes` join from `load_trade_outcomes`. The loader now joins the exact `institutional_regime` decision-evidence record identified by the regime `as_of` timestamp in the persisted decision audit. It does not select a later observation or borrow the previous available regime.
+- Each outcome retains the evidence ID, evidence timestamp and a bounded evidence-status code. Training accepts only complete, available, canonical decision-time evidence with explicit non-provisional and non-asserted metadata. Missing, future-only, legacy, incomplete or provisional evidence is not relabelled; policy summarization reports the evidence-status counts and rejects the training set.
+- A configured-profile fallback in the policy evaluation report is no longer marked `actionable`. This is distinct from a READY learned policy and must not be presented as learned-policy acceptance.
+
+### Export and dashboard consumers
+
+- Active policy export independently validates `regime_vocabulary == canonical_v1`, exact canonical allowed-regime labels, and canonical risk-limit keys constrained to the allowlist. Invalid or unversioned policies export as non-actionable with empty operational allowlists/limits.
+- Export payloads now carry `regime_vocabulary` and `regime_registry_version`.
+- Dashboard market features no longer read the removed `features.regime` field. The feature table displays institutional eligibility regime, legacy daily trend/vol context, and intraday shape as three separately named fields. Metric cards show intraday shape only.
+
+### Persistence contract
+
+- The active decision loop continues to persist plugin evidence through the existing `decision_evidence` writer. The decision audit stores the institutional classifier version, registry version, availability/completeness, `as_of`, missing components and explicit non-assertion state; the trade-outcome loader now pins the exact evidence row by that audit timestamp.
+- `institutional_regime_persistence.persist_regime_evidence` remains a separate first-write helper and is not silently introduced as a second active decision-loop writer. Its `canonical_v1` tag denotes exact label vocabulary only; it is not classifier calibration approval or decision eligibility.
+- No new evidence table, legacy backfill, vocabulary translation, classifier cutover, threshold promotion or trading authority was introduced.
+
+### Regression coverage added/updated
+
+- Strict classifier readiness and risk-fallback allowlist tests.
+- Point-in-time outcome sourcing tests, including future-only evidence and legacy daily context that must not be used as fallback.
+- Export rejection tests for legacy vocabulary and noncanonical risk-limit keys.
+- Dashboard tests for the three distinct regime/context concepts.
+- Existing synthetic policy-selection fixtures now explicitly identify their canonical evidence status.
+
+### QA status and operator commands
+
+These changes are committed remotely, but this environment has not executed the repository's Python test suite, Ruff, mypy or Windows operator checks. S1 consumer QA therefore remains pending until the commands below pass on the project checkout:
+
+```powershell
+uv run pytest -q tests/research/test_s1_regime_consumer_boundaries.py tests/research/test_trade_outcomes_canonical_evidence.py tests/research/test_regime_policy.py tests/research/test_trade_outcomes.py tests/research/test_active_policy_export.py tests/ui/test_dashboard_regime_vocabulary.py
+
+uv run ruff check src/nse_quant/strategy/canonical_risk_context.py src/nse_quant/strategy/decision_loop.py src/nse_quant/research/trade_outcomes.py src/nse_quant/research/regime_policy.py src/nse_quant/research/regime_policy_evaluation.py scripts/export_active_policy.py src/nse_quant/ui/dash_app.py tests/research/test_s1_regime_consumer_boundaries.py tests/research/test_trade_outcomes_canonical_evidence.py tests/research/test_regime_policy.py tests/research/test_active_policy_export.py tests/ui/test_dashboard_regime_vocabulary.py
+
+uv run mypy src/nse_quant/strategy/canonical_risk_context.py src/nse_quant/strategy/decision_loop.py src/nse_quant/research/trade_outcomes.py src/nse_quant/research/regime_policy.py src/nse_quant/research/regime_policy_evaluation.py scripts/export_active_policy.py src/nse_quant/ui/dash_app.py
+
+git diff --check
+```
+
+Passing these implementation tests will not by itself make the v5 classifier decision-eligible. Its provisional thresholds and the existing source-coverage/calibration gate remain unchanged.
