@@ -457,7 +457,10 @@ def _load_option_features(
         "sessions_with_30d_90d_term_and_25d_skew": len(features),
         "snapshot_selection": "latest run_id/ts per IST session; no fallback to older snapshots",
         "term_structure": "30D and 90D constant-maturity ATM IV interpolated in total-variance space; no extrapolation",
-        "rr25": "30D constant-maturity call 25-delta IV minus put 25-delta IV; total-variance interpolation; no extrapolation",
+        "rr25": (
+            "30D constant-maturity call 25-delta IV minus put 25-delta IV; "
+            "total-variance interpolation; no extrapolation"
+        ),
     }
     return features, summary
 
