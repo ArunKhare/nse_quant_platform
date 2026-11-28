@@ -143,6 +143,13 @@ The active branch contains two materially different Kite acquisition APIs:
   horizon.
 - `kite_stream.py` uses the multi-expiry API and persists each returned expiry
   snapshot. The ordinary `DecisionLoop` path calls the single-expiry API.
+- The stream runner previously assigned one timestamp at startup and reused it
+  for every polling cycle. Because `option_stream` is keyed by
+  `(run_id, ts, instrument_token)`, repeated writes replaced earlier rows for
+  the same instrument instead of retaining a time series. The runner now stamps
+  all expiry snapshots with one shared timestamp per capture cycle, advancing
+  the timestamp on the next cycle. This preserves cross-expiry grouping while
+  retaining each cycle's observations.
 - `discover_chain_for_horizon()` selects a strike window around spot using
   `strikes_per_side`; this is a strike-count selection, not a guarantee that
   both 25-delta wings are present.
