@@ -516,6 +516,11 @@ def test_v5_price_action_completes_observational_canonical_composite(
     assert result["components"]["skew"]["canonical_state"] == "FORWARD_REVERSE_SKEW"
     assert result["components"]["price_action"]["state"] == "HIGH_VOL_CHOP"
     assert result["components"]["price_action"]["source_vocabulary"] == "v5_price_action"
+    assert result["components"]["price_action"]["source_classifier_version"] == (
+        "institutional_daily_price_action_v5"
+    )
+    assert result["components"]["price_action"]["research_only"] is True
+    assert result["components"]["price_action"]["eligibility_approved"] is False
 
     evidence_id = store.write_decision_evidence(
         run_id="institutional-test",
