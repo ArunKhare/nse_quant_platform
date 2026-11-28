@@ -100,12 +100,12 @@ def build_active_policy(
             "reason": "canonical_policy_validation_failed",
         }
 
-    if test_end is None:
-        is_current = False
-        expires_at = None
+    if isinstance(test_end, datetime):
+        test_end_date = test_end.date()
     else:
-        expires_at = test_end.isoformat() if hasattr(test_end, "isoformat") else str(test_end)
-        is_current = test_end >= as_of.date()
+        test_end_date = test_end
+    expires_at = test_end.isoformat()
+    is_current = test_end_date >= as_of.date()
 
     is_ready = policy.get("selection_status") == "READY"
     actionable = is_ready and is_current
