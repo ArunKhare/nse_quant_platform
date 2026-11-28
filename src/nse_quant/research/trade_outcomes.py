@@ -43,16 +43,13 @@ def load_trade_outcomes(
             sp.closed_at,
             ptr.realized_pnl
         FROM decisions d
-        LEFT JOIN LATERAL (
-            SELECT evidence.evidence_id, evidence.ts, evidence.payload_json
-            FROM decision_evidence evidence
-            WHERE evidence.run_id = d.run_id
-              AND evidence.symbol = d.underlying
-              AND evidence.plugin = 'institutional_regime'
-              AND evidence.ts <= d.ts
-            ORDER BY evidence.ts DESC
-            LIMIT 1
-        ) de ON TRUE
+        LEFT JOIN decision_evidence de
+          ON de.run_id = d.run_id
+         AND de.symbol = d.underlying
+         AND de.plugin = 'institutional_regime'
+         AND de.ts = TRY_CAST(
+             JSON_EXTRACT_STRING(d.payload, '$.decision_audit.regime.as_of') AS TIMESTAMP
+         )
         JOIN strategy_positions sp
           ON sp.proposal_id = JSON_EXTRACT_STRING(
               d.payload,
