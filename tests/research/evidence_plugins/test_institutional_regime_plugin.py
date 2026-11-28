@@ -119,6 +119,8 @@ def test_iv_state_is_complete_but_full_label_is_not(
 
     assert result["available"] is True
     assert result["complete"] is False
+    assert result["thresholds_provisional"] is True
+    assert result["decision_eligibility_asserted"] is False
     assert result["regime_label"] is None
     assert iv["complete"] is True
     assert iv["iv_rank"] == pytest.approx(80.0)
@@ -253,6 +255,8 @@ def test_invalid_current_iv_is_unavailable(
     result = plugin(store).build(context(value))
 
     assert result["available"] is False
+    assert result["thresholds_provisional"] is True
+    assert result["decision_eligibility_asserted"] is False
     assert result["reason"] == "invalid_current_iv"
     json.dumps(result, allow_nan=False)
 
