@@ -55,6 +55,7 @@ def _bronze(tmp_path: Path) -> tuple[Path, silver.FeatureBronzePins]:
             ),
         )
         writer.execute(f"UPDATE {table} SET diagnostics=? WHERE run_id='retained'", [DIAGNOSTICS])
+        writer.execute(f"UPDATE {table} SET regime='BULL|NORMAL' WHERE run_id='retained'")
         writer.execute(f"INSERT INTO {table} (feature_id) VALUES ('opaque-null-row')")
     finally:
         writer.close()
@@ -134,6 +135,8 @@ def test_actual_native_producer_and_all_field_replay(tmp_path: Path) -> None:
         assert by_run["retained"]["total_call_oi"] == "0"
         assert by_run["retained"]["total_put_oi"] == str(2**63 - 1)
         assert by_run["retained"]["diagnostics"] == DIAGNOSTICS
+        assert by_run["retained"]["regime"] == "BULL|NORMAL"
+        assert "intraday_shape" not in {name for name, _kind in codec.SCHEMA}
         assert by_run["second"]["iv_rv_spread"] == (-0.1).hex()
         assert all(v is None for k, v in by_run[None].items() if k != "feature_id")
         for doc in docs:
