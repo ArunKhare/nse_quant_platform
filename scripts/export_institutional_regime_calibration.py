@@ -589,6 +589,22 @@ def export_calibration_dataset(args: argparse.Namespace) -> tuple[int, dict[str,
         "last_exported_session": output_rows[-1]["session"] if output_rows else None,
         "csv_columns": CSV_COLUMNS,
         "missing_feature_session_counts": missing_counts,
+        "coverage_bottlenecks": {
+            "daily_price_feature_sessions": len(price),
+            "india_vix_ivp_sessions": len(ivp),
+            "option_surface_sessions": len(options),
+            "realized_variance_sessions": len(realized_variance),
+            "complete_session_upper_bound": min(
+                len(price),
+                len(ivp),
+                len(options),
+                len(realized_variance),
+            ),
+            "daily_bars_required_for_423_price_feature_sessions": 688,
+            "india_vix_sessions_required_for_423_ivp_sessions": 452,
+            "option_surface_sessions_required": args.min_sessions,
+            "realized_variance_sessions_required": args.min_sessions,
+        },
         "sources": {
             "duckdb": {
                 "path": str(args.db_path),
