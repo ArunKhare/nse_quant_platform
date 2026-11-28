@@ -95,4 +95,4 @@ def test_all_four_components_present():
     result = plugin.build(_context(snapshot, _features()))
     assert set(result["components"]) == {"iv_state", "skew", "price_action", "term_structure"}
     assert "not_implemented" not in str(result["components"])
-    assert result["classifier_version"] == "institutional_iv_term_components_v4"
+    assert result["classifier_version"] == "institutional_iv_term_components_v4_with_daily_price_action_v5"
