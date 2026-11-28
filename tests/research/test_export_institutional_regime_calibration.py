@@ -8,6 +8,7 @@ from scripts.export_institutional_regime_calibration import (
     _interpolate_total_variance,
     _load_india_vix,
     _option_features_for_snapshot,
+    _option_features_with_diagnostics,
     _parse_vix_date,
 )
 
@@ -104,3 +105,50 @@ def test_option_snapshot_rejects_non_25_delta_wings() -> None:
         )
 
     assert _option_features_for_snapshot(rows, session=session) is None
+
+
+
+def test_option_snapshot_reports_missing_25_delta_wings() -> None:
+    session = date(2025, 11, 28)
+    rows = []
+    for days, atm_iv in ((20, 0.20), (40, 0.22), (80, 0.25), (100, 0.27)):
+        expiry = date.fromordinal(session.toordinal() + days)
+        rows.extend(
+            [
+                (expiry, "CE", atm_iv, 0.50),
+                (expiry, "PE", atm_iv, -0.50),
+                (expiry, "CE", atm_iv + 0.02, 0.10),
+                (expiry, "PE", atm_iv + 0.04, -0.10),
+            ]
+        )
+
+    features, missing = _option_features_with_diagnostics(rows, session=session)
+
+    assert features is None
+    assert "missing_call25_30d_bracket" in missing
+    assert "missing_put25_30d_bracket" in missing
+
+
+def test_option_snapshot_diagnostics_are_empty_for_complete_surface() -> None:
+    session = date(2025, 11, 28)
+    rows = []
+    for days, atm_iv, call25_iv, put25_iv in (
+        (20, 0.20, 0.22, 0.24),
+        (40, 0.22, 0.24, 0.26),
+        (80, 0.25, 0.27, 0.29),
+        (100, 0.27, 0.29, 0.31),
+    ):
+        expiry = date.fromordinal(session.toordinal() + days)
+        rows.extend(
+            [
+                (expiry, "CE", atm_iv, 0.50),
+                (expiry, "PE", atm_iv + 0.002, -0.50),
+                (expiry, "CE", call25_iv, 0.25),
+                (expiry, "PE", put25_iv, -0.25),
+            ]
+        )
+
+    features, missing = _option_features_with_diagnostics(rows, session=session)
+
+    assert features is not None
+    assert missing == []
