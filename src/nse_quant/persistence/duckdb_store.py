@@ -1832,6 +1832,7 @@ class DuckDBStore:
             ON CONFLICT (run_id, ts, symbol, plugin) DO UPDATE SET
                         available = excluded.available,
                         payload_json = excluded.payload_json
+            WHERE decision_evidence.plugin <> 'institutional_regime'
             """,
             [
                 str(uuid4()),
