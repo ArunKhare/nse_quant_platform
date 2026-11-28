@@ -351,11 +351,12 @@ def _interpolate_total_variance(
     return math.sqrt(target_variance / target_time)
 
 
-def _option_features_for_snapshot(
+def _option_features_with_diagnostics(
     rows: list[tuple[Any, ...]],
     *,
     session: date,
-) -> dict[str, float] | None:
+) -> tuple[dict[str, float] | None, list[str]]:
+    """Return option features and explicit reasons when the snapshot is incomplete."""
     by_expiry: dict[date, dict[str, list[tuple[float, float]]]] = defaultdict(
         lambda: {"CALL": [], "PUT": []}
     )
@@ -398,12 +399,33 @@ def _option_features_for_snapshot(
     iv90 = _interpolate_total_variance(atm_points, 90)
     call25_30 = _interpolate_total_variance(call25_points, 30)
     put25_30 = _interpolate_total_variance(put25_points, 30)
-    if iv30 is None or iv90 is None or call25_30 is None or put25_30 is None:
-        return None
+    missing: list[str] = []
+    if iv30 is None:
+        missing.append("missing_iv30_atm_bracket")
+    if iv90 is None:
+        missing.append("missing_iv90_atm_bracket")
+    if call25_30 is None:
+        missing.append("missing_call25_30d_bracket")
+    if put25_30 is None:
+        missing.append("missing_put25_30d_bracket")
+    if missing:
+        return None, missing
+    assert iv30 is not None and iv90 is not None
+    assert call25_30 is not None and put25_30 is not None
     return {
         "iv30_minus_iv90": iv30 - iv90,
         "rr25": call25_30 - put25_30,
-    }
+    }, []
+
+
+def _option_features_for_snapshot(
+    rows: list[tuple[Any, ...]],
+    *,
+    session: date,
+) -> dict[str, float] | None:
+    """Compatibility wrapper for callers that need only the calculated features."""
+    features, _missing = _option_features_with_diagnostics(rows, session=session)
+    return features
 
 
 def _load_option_features(
@@ -412,7 +434,15 @@ def _load_option_features(
     end_date: date,
 ) -> tuple[dict[date, dict[str, float]], dict[str, Any]]:
     if not _table_exists(conn, "option_stream"):
-        return {}, {"table": "option_stream", "available": False, "sessions": 0}
+        return {}, {
+            "table": "option_stream",
+            "available": False,
+            "sessions_with_rows": 0,
+            "sessions_with_30d_90d_term_and_25d_skew": 0,
+            "snapshot_sessions": [],
+            "rejection_reason_counts": {},
+            "rejected_sessions": [],
+        }
 
     rows = conn.execute(
         """
@@ -443,10 +473,18 @@ def _load_option_features(
             current[2].append((expiry, option_type, iv, delta))
 
     features: dict[date, dict[str, float]] = {}
+    rejection_reason_counts: dict[str, int] = defaultdict(int)
+    rejected_sessions: list[dict[str, Any]] = []
     for session, (_ts, _run_id, snapshot_rows) in latest.items():
-        calculated = _option_features_for_snapshot(snapshot_rows, session=session)
+        calculated, missing = _option_features_with_diagnostics(snapshot_rows, session=session)
         if calculated is not None:
             features[session] = calculated
+        else:
+            for reason in missing:
+                rejection_reason_counts[reason] += 1
+            rejected_sessions.append(
+                {"session": session.isoformat(), "reasons": missing}
+            )
 
     summary = {
         "table": "option_stream",
@@ -454,6 +492,9 @@ def _load_option_features(
         "rows_read": len(rows),
         "sessions_with_rows": len(latest),
         "sessions_with_30d_90d_term_and_25d_skew": len(features),
+        "snapshot_sessions": [session.isoformat() for session in sorted(latest)],
+        "rejection_reason_counts": dict(sorted(rejection_reason_counts.items())),
+        "rejected_sessions": sorted(rejected_sessions, key=lambda item: item["session"]),
         "snapshot_selection": "latest run_id/ts per IST session; no fallback to older snapshots",
         "term_structure": "30D and 90D constant-maturity ATM IV interpolated in total-variance space; no extrapolation",
         "rr25": (
@@ -589,9 +630,20 @@ def export_calibration_dataset(args: argparse.Namespace) -> tuple[int, dict[str,
         "csv_columns": CSV_COLUMNS,
         "missing_feature_session_counts": missing_counts,
         "coverage_bottlenecks": {
+            "candidate_daily_sessions": len(candidate_sessions),
             "daily_price_feature_sessions": len(price),
             "india_vix_ivp_sessions": len(ivp),
             "option_surface_sessions": len(options),
+            "option_sessions_without_snapshot": len(
+                set(candidate_sessions)
+                - {date.fromisoformat(value) for value in options_summary.get("snapshot_sessions", [])}
+            ),
+            "option_sessions_rejected_for_incomplete_surface": len(
+                options_summary.get("rejected_sessions", [])
+            ),
+            "option_surface_rejection_reason_counts": options_summary.get(
+                "rejection_reason_counts", {}
+            ),
             "realized_variance_sessions": len(realized_variance),
             "complete_session_upper_bound": min(
                 len(price),
