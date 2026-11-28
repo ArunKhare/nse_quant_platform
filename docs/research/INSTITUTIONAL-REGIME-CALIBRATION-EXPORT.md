@@ -160,7 +160,10 @@ The manifest now records a per-snapshot profile: expiry date and days to expiry,
 row/call/put counts, valid-IV row count, call/put delta ranges, and the presence
 of ATM and 25-delta quotes under the existing tolerances. It also separates
 candidate daily sessions with no snapshot, incomplete snapshots, complete
-surfaces, and snapshots outside the daily candidate window. These are
+surfaces, and snapshots outside the daily candidate window. The
+complete-session upper bound is now based on the intersection of candidate
+sessions across price features, IVP, complete option surfaces, and realized
+variance, rather than the minimum of independent source totals. These are
 observational diagnostics; they do not alter the latest-snapshot rule or the
 surface eligibility calculation.
 
