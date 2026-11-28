@@ -540,7 +540,7 @@ class DecisionLoop:
             # institutional regime_label. Daily/spot regimes (e.g. BULL|NORMAL)
             # are market context only and are never compared to the allowlist.
             institutional = self._institutional_regime_audit(evidence)
-            eligibility_regime = institutional["regime_label"] if institutional["regime_label_canonical"] else None
+            eligibility_regime = institutional["regime_label"] if institutional["regime_label_eligible"] else None
             regime_allowed = eligibility_regime is not None and eligibility_regime in effective_regimes
 
             eligibility = self._evaluate_strategy_eligibility(
@@ -1352,6 +1352,21 @@ class DecisionLoop:
                 reason="non_canonical_regime",
             )
 
+        profile = self.settings.get_strategy_profile("iron_condor_monitor")
+        configured_allowlist = set(profile.regime_policy.allowed_regimes)
+        configured_blocklist = set(profile.regime_policy.blocked_regimes)
+        if current_regime not in configured_allowlist or current_regime in configured_blocklist:
+            return RegimeRiskLimits(
+                regime=current_regime,
+                allowed=False,
+                max_lots_per_order=0,
+                max_open_positions=0,
+                max_notional_exposure=0.0,
+                max_portfolio_vega=0.0,
+                max_daily_loss=0.0,
+                reason="regime_not_in_configured_allowlist",
+            )
+
         configured_limits = self.settings.get_effective_risk_settings("iron_condor_monitor")
         if (
             not isinstance(regime_policy, dict)
@@ -1834,9 +1849,26 @@ class DecisionLoop:
         payload = evidence.get("institutional_regime")
         institutional = payload if isinstance(payload, dict) else {}
         label = institutional.get("regime_label")
+        available = institutional.get("available") is True
+        complete = institutional.get("complete") is True
+        thresholds_approved = institutional.get("thresholds_provisional") is False
+        eligibility_not_asserted = institutional.get("decision_eligibility_asserted") is False
+        canonical = is_canonical_regime_label(label)
+        eligible = (
+            available
+            and complete
+            and thresholds_approved
+            and eligibility_not_asserted
+            and canonical
+        )
         return {
             "regime_label": label,
-            "regime_label_canonical": is_canonical_regime_label(label),
+            "regime_label_canonical": canonical,
+            "regime_label_eligible": eligible,
+            "available": available,
+            "complete": complete,
+            "thresholds_provisional": institutional.get("thresholds_provisional"),
+            "decision_eligibility_asserted": institutional.get("decision_eligibility_asserted"),
             "classifier_version": institutional.get("classifier_version"),
             "regime_registry_version": REGIME_REGISTRY_VERSION,
             "as_of": institutional.get("as_of"),
