@@ -16,7 +16,7 @@ def test_market_features_table_separates_regime_vocabularies() -> None:
     snapshot = {
         "features": {
             "spot": 25000.0,
-            "intraday_shape": "TRENDING_UP",
+            "intraday_shape": "TREND_UP",
             "regime": "BULL|NORMAL",
         },
         "strategy_eligibility": {
@@ -40,7 +40,7 @@ def test_market_features_table_separates_regime_vocabularies() -> None:
 def test_market_metric_cards_display_intraday_shape_not_legacy_regime() -> None:
     snapshot = {
         "features": {
-            "intraday_shape": "TRENDING_UP",
+            "intraday_shape": "TREND_UP",
             "regime": "BULL|NORMAL",
         }
     }
@@ -48,5 +48,5 @@ def test_market_metric_cards_display_intraday_shape_not_legacy_regime() -> None:
     rendered = _component_text(market_metric_cards(snapshot))
 
     assert "Intraday shape" in rendered
-    assert "TRENDING UP" in rendered
+    assert "TREND UP" in rendered
     assert "BULL|NORMAL" not in rendered
