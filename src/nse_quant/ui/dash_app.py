@@ -366,8 +366,8 @@ def market_metric_cards(snapshot: dict[str, Any]) -> html.Div:
                 color=ACCENT,
             ),
             metric_card(
-                "Regime",
-                str(features.get("regime", "UNKNOWN")).replace("_", " "),
+                "Intraday shape",
+                str(features.get("intraday_shape", "UNKNOWN")).replace("_", " "),
                 decimals=0,
             ),
         ],
@@ -493,6 +493,9 @@ def market_features_table(snapshot: dict[str, Any]) -> html.Div | html.Table:
     if not features:
         return empty_state("No market feature snapshot available yet.")
 
+    eligibility = snapshot.get("strategy_eligibility") or {}
+    eligibility_details = eligibility.get("details") or {}
+    market_context = eligibility_details.get("market_context") or {}
     rows = [
         ["Spot", format_number(features.get("spot"))],
         ["ATM IV", format_number(features.get("atm_iv"), 2)],
@@ -503,7 +506,18 @@ def market_features_table(snapshot: dict[str, Any]) -> html.Div | html.Table:
         ["PCR", format_number(features.get("pcr"), 2)],
         ["Max pain", format_number(features.get("max_pain"), 0)],
         ["Expected move", format_number(features.get("expected_move_points"), 1)],
-        ["Regime", str(features.get("regime", "UNKNOWN")).replace("_", " ")],
+        [
+            "Institutional regime (eligibility evidence)",
+            str(eligibility_details.get("regime_label", "UNAVAILABLE")).replace("_", " "),
+        ],
+        [
+            "Daily market context (legacy)",
+            str(market_context.get("daily_trend_vol", "UNAVAILABLE")).replace("_", " "),
+        ],
+        [
+            "Intraday shape",
+            str(features.get("intraday_shape", "UNKNOWN")).replace("_", " "),
+        ],
     ]
 
     return data_table(["Metric", "Value"], rows)
