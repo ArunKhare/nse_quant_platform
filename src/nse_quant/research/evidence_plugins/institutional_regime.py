@@ -51,6 +51,8 @@ def _canonical_component_state(component_name: str, component: dict[str, Any]) -
     if component.get("complete") is not True:
         return None
     raw_state = component.get("state")
+    if not isinstance(raw_state, str):
+        return None
     if component_name == "price_action":
         return raw_state if raw_state in PRICE_ACTION_STATES else None
     return _V4_CANONICAL_STATE_MAP.get(component_name, {}).get(raw_state)
