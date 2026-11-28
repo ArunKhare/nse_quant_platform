@@ -486,6 +486,10 @@ def export_calibration_dataset(args: argparse.Namespace) -> tuple[int, dict[str,
     end_date = min(args.end_date or (as_of - timedelta(days=1)), as_of - timedelta(days=1))
     if args.min_sessions < 1 or args.min_intraday_observations < 2:
         raise ValueError("invalid_export_coverage_threshold")
+    if args.output.resolve() in {args.db_path.resolve(), args.india_vix_csv.resolve()}:
+        raise ValueError("output_path_must_not_overwrite_a_source")
+    if args.manifest.resolve() in {args.db_path.resolve(), args.india_vix_csv.resolve(), args.output.resolve()}:
+        raise ValueError("manifest_path_must_be_distinct_from_sources_and_csv")
     if args.iv_lookback_sessions < 2 or args.iv_min_observations < 2:
         raise ValueError("invalid_iv_percentile_configuration")
 
@@ -572,6 +576,11 @@ def export_calibration_dataset(args: argparse.Namespace) -> tuple[int, dict[str,
         "end_date_inclusive": end_date.isoformat(),
         "minimum_complete_sessions": args.min_sessions,
         "complete_sessions_exported": len(output_rows),
+        "output_csv": {
+            "path": str(args.output),
+            "sha256": _sha256(args.output),
+            "rows": len(output_rows),
+        },
         "candidate_daily_sessions": len(candidate_sessions),
         "first_exported_session": output_rows[0]["session"] if output_rows else None,
         "last_exported_session": output_rows[-1]["session"] if output_rows else None,
@@ -599,7 +608,10 @@ def export_calibration_dataset(args: argparse.Namespace) -> tuple[int, dict[str,
             "Only sessions with all 16 required fields are exported.",
             "Missing values are not imputed, forward-filled, or synthesized.",
             "India VIX Close is used as the IVP proxy; it is not represented as option-implied ATM IV.",
-            "The daily_rv_observations.rv field and daily_rv_NIFTY.csv are not used because the prior audit did not establish their units as non-annualized realized variance.",
+            (
+                "The daily_rv_observations.rv field and daily_rv_NIFTY.csv are not used "
+                "because the prior audit did not establish their units as non-annualized realized variance."
+            ),
             "The option surface is derived only from the latest available legacy option_stream snapshot per IST session.",
             "No output from this exporter changes regime thresholds, publication status, or trading authority.",
         ],
