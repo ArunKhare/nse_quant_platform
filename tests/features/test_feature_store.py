@@ -1,6 +1,9 @@
 from datetime import UTC, datetime, timedelta
 
+import duckdb
+
 from nse_quant.core.models import MarketFeatures, IntradayShape
+from nse_quant.data_platform import legacy_feature_snapshots as legacy_codec
 from nse_quant.features.feature_store import FeatureStore
 from nse_quant.persistence.duckdb_store import DuckDBStore
 
@@ -27,12 +30,17 @@ def test_feature_store_persists_and_reads(tmp_path):
     features = make_features(base, 15.0)
     feature_store.save("run-1", features)
 
+    feature_store.save("run-2", make_features(base + timedelta(minutes=1), 16.0))
+
     loaded = feature_store.latest("NIFTY")
+    history = feature_store.history("NIFTY")
 
     assert loaded is not None
-    assert loaded.atm_iv == 15.0
+    assert loaded.atm_iv == 16.0
     assert loaded.iv_rank == 50.0
     assert loaded.intraday_shape == IntradayShape.RANGE
+    assert [item.atm_iv for item in history] == [15.0, 16.0]
+    assert all(item.intraday_shape == IntradayShape.RANGE for item in history)
 
     store.close()
 
