@@ -71,7 +71,6 @@ Optional arguments:
 - `--manifest`: JSON manifest path (default `data/research/nifty_regime_sources.json`).
 - `--as-of`: exclusive IST date boundary; current IST date is used by default.
 - `--end-date`: inclusive last session, always capped before `--as-of`.
-- `--min-sessions`: minimum complete observations (default 423).
 - `--min-intraday-observations`: 1-minute bars required per RV session (default 300).
 - `--iv-lookback-sessions`: India VIX percentile window (default 252).
 - `--iv-min-observations`: minimum India VIX observations for IVP (default 30).
@@ -114,4 +113,4 @@ least 688 valid daily bars, 452 India VIX sessions, 423 sessions with valid
 The exporter records the observed counts and their complete-session upper
 bound in the manifest. It is expected to emit a partial CSV and a manifest
 with `INSUFFICIENT_SOURCE_COVERAGE` until the missing history is backfilled.
-Do not lower the 423-session floor to make the runner pass.
+The 423-session floor is fixed in the exporter and cannot be lowered through a CLI option.
