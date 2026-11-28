@@ -75,7 +75,12 @@ def load_trade_outcomes(
         payload = json.loads(payload_json) if payload_json else {}
         evidence_payload = json.loads(evidence_payload_json) if evidence_payload_json else {}
         proposal = payload.get("proposal") or {}
-        regime = evidence_payload.get("regime_label")
+        regime_value = evidence_payload.get("regime_label")
+        canonical_regime = (
+            regime_value
+            if isinstance(regime_value, str) and is_canonical_regime_label(regime_value)
+            else None
+        )
         if evidence_id is None:
             evidence_status = "MISSING_DECISION_TIME_EVIDENCE"
         elif evidence_payload.get("available") is not True:
@@ -86,7 +91,7 @@ def load_trade_outcomes(
             evidence_status = "REGIME_THRESHOLDS_NOT_APPROVED"
         elif evidence_payload.get("decision_eligibility_asserted") is not False:
             evidence_status = "REGIME_ELIGIBILITY_METADATA_NOT_EXPLICITLY_FALSE"
-        elif not is_canonical_regime_label(regime):
+        elif canonical_regime is None:
             evidence_status = "NONCANONICAL_DECISION_TIME_REGIME"
         else:
             evidence_status = "CANONICAL_DECISION_TIME_EVIDENCE"
@@ -96,7 +101,7 @@ def load_trade_outcomes(
                 proposal_id=str(proposal.get("proposal_id")),
                 underlying=symbol,
                 strategy=str(proposal.get("strategy")),
-                regime=regime if canonical else "UNKNOWN",
+                regime=canonical_regime if canonical else "UNKNOWN",
                 opened_at=opened_at,
                 closed_at=closed_at,
                 realized_pnl=float(pnl or 0.0),
