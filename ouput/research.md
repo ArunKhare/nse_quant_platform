@@ -818,7 +818,7 @@ Implemented the S1 follow-up corrections on `feat/medallion-feature-store`.
 
 ### Historical policy-training outcomes
 
-- Removed the legacy `market_regimes` join from `load_trade_outcomes`. The loader now joins the exact `institutional_regime` decision-evidence record identified by the regime `as_of` timestamp in the persisted decision audit. It does not select a later observation or borrow the previous available regime.
+- Removed the legacy `market_regimes` join from `load_trade_outcomes`. The loader now joins the exact `institutional_regime` decision-evidence row by the stable `evidence_id` pinned in the persisted decision audit, and independently requires the evidence timestamp not to exceed the decision timestamp. It does not select a later observation or borrow the previous available regime.
 - Each outcome retains the evidence ID, evidence timestamp and a bounded evidence-status code. Training accepts only complete, available, canonical decision-time evidence with explicit non-provisional and non-asserted metadata. Missing, future-only, legacy, incomplete or provisional evidence is not relabelled; policy summarization reports the evidence-status counts and rejects the training set.
 - A configured-profile fallback in the policy evaluation report is no longer marked `actionable`. This is distinct from a READY learned policy and must not be presented as learned-policy acceptance.
 
