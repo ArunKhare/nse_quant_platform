@@ -556,6 +556,7 @@ class DecisionLoop:
                 market_context_source=market_context_source,
                 market_context_vocabulary=market_context_vocabulary,
                 classifier_version=institutional["classifier_version"],
+                institutional_regime_audit=institutional,
             )
 
             self.decisions.save_decision(
@@ -1450,6 +1451,7 @@ class DecisionLoop:
         market_context_vocabulary: str | None = None,
         effective_regimes: list[str] | None = None,
         classifier_version: str | None = None,
+        institutional_regime_audit: dict[str, Any] | None = None,
     ) -> GateResult:
         iv_rank = features.iv_rank
         iv_rank_available = iv_rank is not None
@@ -1469,6 +1471,17 @@ class DecisionLoop:
             "allowed_regimes": sorted(effective_regimes or []),
             "regime_classifier_version": classifier_version,
             "regime_registry_version": REGIME_REGISTRY_VERSION,
+            "institutional_regime_evidence": {
+                "available": (institutional_regime_audit or {}).get("available", False),
+                "complete": (institutional_regime_audit or {}).get("complete", False),
+                "regime_label_canonical": (institutional_regime_audit or {}).get("regime_label_canonical", False),
+                "regime_label_eligible": (institutional_regime_audit or {}).get("regime_label_eligible", False),
+                "thresholds_provisional": (institutional_regime_audit or {}).get("thresholds_provisional"),
+                "decision_eligibility_asserted": (institutional_regime_audit or {}).get("decision_eligibility_asserted"),
+                "as_of": (institutional_regime_audit or {}).get("as_of"),
+                "missing_components": (institutional_regime_audit or {}).get("missing_components", []),
+                "reason": (institutional_regime_audit or {}).get("reason"),
+            },
             "market_context": {
                 "daily_trend_vol": market_context_daily_trend_vol,
                 "source": market_context_source,
