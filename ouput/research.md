@@ -830,7 +830,7 @@ Implemented the S1 follow-up corrections on `feat/medallion-feature-store`.
 
 ### Persistence contract
 
-- The active decision loop continues to persist plugin evidence through the existing `decision_evidence` writer. That writer returns the stable evidence-row ID; the decision audit stores that exact pin together with classifier/registry versions, availability/completeness, `as_of`, missing components and explicit non-assertion state. The trade-outcome loader joins only the pinned row and independently requires its timestamp not to exceed the decision timestamp.
+- The active decision loop continues to persist plugin evidence through the existing `decision_evidence` writer. Institutional-regime rows now use first-write semantics while other plugin rows retain their existing upsert behavior. The writer returns the stable evidence-row ID; the decision audit stores that exact pin together with classifier/registry versions, availability/completeness, `as_of`, missing components and explicit non-assertion state. The trade-outcome loader joins only the pinned row and independently requires its timestamp not to exceed the decision timestamp.
 - `institutional_regime_persistence.persist_regime_evidence` remains a separate first-write helper and is not silently introduced as a second active decision-loop writer. Its `canonical_v1` tag denotes exact label vocabulary only; it is not classifier calibration approval or decision eligibility.
 - No new evidence table, legacy backfill, vocabulary translation, classifier cutover, threshold promotion or trading authority was introduced.
 
