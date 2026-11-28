@@ -16,6 +16,7 @@ from nse_quant.research.evidence_plugins.base import (
 )
 from nse_quant.research.institutional_regime_price_action_v5 import (
     PRICE_ACTION_CLASSIFIER_VERSION,
+    PRICE_ACTION_STATES,
     DailyBar,
     InstitutionalRegimePriceActionSettings,
     classify_daily_price_action,
@@ -26,6 +27,33 @@ from nse_quant.research.institutional_regime_skew import (
 )
 
 HISTORY_SOURCE = "atm_average_live"
+
+
+# Explicit vocabulary adapter approved by ouput/research.md §4.3.
+# Raw v4 states remain untouched; only these exact aliases are normalized.
+_V4_CANONICAL_STATE_MAP: dict[str, dict[str, str]] = {
+    "iv_state": {"HIGH_IV": "HIGH_IV", "NORMAL_IV": "LOW_IV"},
+    "term_structure": {
+        "CONTANGO": "CONTANGO",
+        "FLAT": "FLAT_TERM",
+        "BACKWARDATION": "BACKWARDATION",
+    },
+    "skew": {
+        "NORMAL_SKEW": "NORMAL_SKEW",
+        "HIGH_PUT_SKEW": "HIGH_PUT_SKEW",
+        "HIGH_CALL_SKEW": "FORWARD_REVERSE_SKEW",
+    },
+}
+
+
+def _canonical_component_state(component_name: str, component: dict[str, Any]) -> str | None:
+    """Return an exact registry token without rewriting the source state."""
+    if component.get("complete") is not True:
+        return None
+    raw_state = component.get("state")
+    if component_name == "price_action":
+        return raw_state if raw_state in PRICE_ACTION_STATES else None
+    return _V4_CANONICAL_STATE_MAP.get(component_name, {}).get(raw_state)
 
 
 class InstitutionalRegimePlugin(EvidencePlugin):
@@ -178,29 +206,52 @@ class InstitutionalRegimePlugin(EvidencePlugin):
             "price_action": price_action_component,
         }
 
-        components_complete = all(component["complete"] for component in components.values())
-        candidate_label = (
-            "_".join(
-                [
-                    iv_component["state"],
-                    term_component["state"],
-                    skew_component["state"],
-                    price_action_component["state"],
-                ]
+        # Preserve producer states and attach a separate, auditable canonical
+        # candidate. The first three producers are v4 research components;
+        # their semantics are not calibration-approved and cannot grant
+        # decision eligibility even when the vocabulary adapter succeeds.
+        for name, component in components.items():
+            component["source_state"] = component.get("state")
+            component["canonical_state"] = _canonical_component_state(name, component)
+            component["canonical_vocabulary"] = "institutional_regime_registry_v2"
+            component["source_vocabulary"] = (
+                "v5_price_action" if name == "price_action" else "v4_research"
             )
-            if components_complete
+            component["eligibility_approved"] = False
+            component["research_only"] = name != "price_action"
+            if name != "price_action":
+                component["source_classifier_version"] = "institutional_iv_term_components_v4"
+
+        components_complete = all(component["complete"] for component in components.values())
+        canonical_components_complete = all(
+            component["canonical_state"] is not None for component in components.values()
+        )
+        candidate_label = (
+            "_".join(component["canonical_state"] for component in components.values())
+            if components_complete and canonical_components_complete
             else None
         )
         regime_label = (
             candidate_label if candidate_label is not None and is_canonical_regime_label(candidate_label) else None
         )
-        all_complete = components_complete and regime_label is not None
+        all_complete = components_complete and canonical_components_complete and regime_label is not None
+        missing_components = [
+            name
+            for name, component in components.items()
+            if not component["complete"] or component["canonical_state"] is None
+        ]
+        if components_complete and regime_label is None:
+            missing_components.append("canonical_regime_label")
 
         return {
             "available": True,
             "complete": all_complete,
             "thresholds_provisional": True,
             "decision_eligibility_asserted": False,
+            "eligibility_approved": False,
+            "research_only": True,
+            "regime_vocabulary": "canonical_v1" if regime_label is not None else None,
+            "regime_version": "institutional_regime_registry_v2" if regime_label is not None else None,
             "as_of": as_of.isoformat(),
             "symbol": context.symbol,
             "expiry": snapshot.expiry.isoformat(),
@@ -210,10 +261,7 @@ class InstitutionalRegimePlugin(EvidencePlugin):
             "mode": "observation",
             "regime_label": regime_label,
             "components": components,
-            "missing_components": (
-                [name for name, component in components.items() if not component["complete"]]
-                + (["canonical_regime_label"] if components_complete and regime_label is None else [])
-            ),
+            "missing_components": missing_components,
             "reason": (
                 None
                 if all_complete
@@ -221,7 +269,7 @@ class InstitutionalRegimePlugin(EvidencePlugin):
                     "non_canonical_composite_label"
                     if components_complete
                     else next(
-                        (component["reason"] for component in components.values() if not component["complete"]),
+                        (component.get("reason") for component in components.values() if not component["complete"]),
                         "incomplete_components",
                     )
                 )
