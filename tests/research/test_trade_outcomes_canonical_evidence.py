@@ -110,7 +110,13 @@ def test_trade_outcomes_use_pinned_decision_time_institutional_regime() -> None:
             datetime(2026, 1, 10, 11, 59),
             "NIFTY",
             "institutional_regime",
-            json.dumps({"regime_label": CANONICAL, "complete": True}),
+            json.dumps({
+                "regime_label": CANONICAL,
+                "available": True,
+                "complete": True,
+                "thresholds_provisional": False,
+                "decision_eligibility_asserted": False,
+            }),
         ],
     )
 
@@ -169,5 +175,5 @@ def test_missing_or_future_regime_evidence_is_explicit_not_daily_fallback() -> N
     assert len(outcomes) == 1
     assert outcomes[0].regime == "UNKNOWN"
     assert outcomes[0].regime_evidence_id is None
-    assert outcomes[0].regime_evidence_status == "MISSING_OR_NONCANONICAL_DECISION_TIME_EVIDENCE"
+    assert outcomes[0].regime_evidence_status == "MISSING_DECISION_TIME_EVIDENCE"
     conn.close()
