@@ -79,3 +79,29 @@ def test_static_risk_fallback_rejects_canonical_regime_outside_profile_allowlist
     assert limits.allowed is False
     assert limits.max_lots_per_order == 0
     assert limits.reason == "regime_not_in_configured_allowlist"
+
+def test_decision_audit_retains_exact_institutional_evidence_pin() -> None:
+    loop = object.__new__(DecisionLoop)
+    loop.run_id = "test-run"
+    loop.settings = SimpleNamespace(
+        safety=SimpleNamespace(paper_trading=True, dry_run=True)
+    )
+    audit = loop._decision_audit(
+        status="paper_filled",
+        evidence={
+            "institutional_regime": {
+                "available": True,
+                "complete": True,
+                "as_of": "2026-01-10T11:59:00+00:00",
+                "classifier_version": "test-classifier",
+                "regime_label": CANONICAL,
+                "thresholds_provisional": True,
+                "decision_eligibility_asserted": False,
+            },
+            "_decision_evidence_pins": {"institutional_regime": "evidence-pin-1"},
+        },
+    )
+
+    assert audit["regime"]["evidence_id"] == "evidence-pin-1"
+    assert audit["regime"]["thresholds_provisional"] is True
+    assert audit["decision_eligibility_asserted"] is False
