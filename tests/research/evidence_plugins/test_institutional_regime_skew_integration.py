@@ -136,7 +136,7 @@ def test_skew_component_missing_iv():
     assert "skew" in result["missing_components"]
 
 
-def test_price_action_still_pending():
+def test_price_action_requires_spot_instrument_token():
     plugin = _plugin()
     snapshot = _snapshot(put_iv=0.21, call_iv=0.20)
     context = type(
@@ -150,5 +150,5 @@ def test_price_action_still_pending():
         },
     )()
     result = plugin.build(context)
-    assert result["components"]["price_action"]["reason"] == "not_implemented"
+    assert result["components"]["price_action"]["reason"] == "missing_spot_instrument_token"
     assert "price_action" in result["missing_components"]
