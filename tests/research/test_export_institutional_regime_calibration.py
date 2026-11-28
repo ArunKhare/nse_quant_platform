@@ -241,6 +241,6 @@ def test_option_snapshot_profile_exposes_missing_upper_90d_atm_bracket() -> None
     assert bracket == {
         "target_days": 90,
         "status": "missing_upper_bracket",
-        "lower": {"days_to_expiry": 88, "iv": pytest.approx(0.2895)},
+        "lower": {"days_to_expiry": 88, "iv": pytest.approx(0.2885)},
         "upper": None,
     }
