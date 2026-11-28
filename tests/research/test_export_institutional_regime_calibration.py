@@ -9,6 +9,7 @@ from scripts.export_institutional_regime_calibration import (
     _load_india_vix,
     _option_features_for_snapshot,
     _option_features_with_diagnostics,
+    _option_snapshot_profile,
     _parse_vix_date,
 )
 
@@ -127,6 +128,41 @@ def test_option_snapshot_reports_missing_25_delta_wings() -> None:
     assert features is None
     assert "missing_call25_30d_bracket" in missing
     assert "missing_put25_30d_bracket" in missing
+
+
+def test_option_snapshot_profile_reports_expiry_and_delta_composition() -> None:
+    session = date(2025, 11, 28)
+    expiry_30 = date.fromordinal(session.toordinal() + 30)
+    expiry_90 = date.fromordinal(session.toordinal() + 90)
+    rows = [
+        (expiry_30, "CE", 0.20, 0.50),
+        (expiry_30, "PE", 0.21, -0.50),
+        (expiry_30, "CE", 0.22, 0.25),
+        (expiry_30, "PE", 0.23, -0.25),
+        (expiry_90, "CE", 0.24, 0.50),
+        (expiry_90, "PE", 0.25, -0.50),
+    ]
+
+    profile = _option_snapshot_profile(rows, session=session)
+
+    assert profile["rows"] == 6
+    assert profile["expiry_count"] == 2
+    assert profile["expiry_profiles"][0] == {
+        "expiry": expiry_30.isoformat(),
+        "days_to_expiry": 30,
+        "rows": 4,
+        "calls": 2,
+        "puts": 2,
+        "valid_iv_rows": 4,
+        "call_delta_range": {"minimum": 0.25, "maximum": 0.5},
+        "put_delta_range": {"minimum": -0.5, "maximum": -0.25},
+        "has_atm_call": True,
+        "has_atm_put": True,
+        "has_call25": True,
+        "has_put25": True,
+    }
+    assert profile["expiry_profiles"][1]["has_call25"] is False
+    assert profile["expiry_profiles"][1]["has_put25"] is False
 
 
 def test_option_snapshot_diagnostics_are_empty_for_complete_surface() -> None:
