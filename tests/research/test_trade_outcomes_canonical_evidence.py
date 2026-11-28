@@ -66,7 +66,16 @@ def _insert_trade(
     conn.execute(
         "INSERT INTO decisions VALUES (?, ?, ?, ?, ?)",
         [
-            json.dumps({"proposal": {"proposal_id": proposal_id, "strategy": "test_strategy"}}),
+            json.dumps(
+                {
+                    "proposal": {"proposal_id": proposal_id, "strategy": "test_strategy"},
+                    "decision_audit": {
+                        "regime": {
+                            "as_of": (decision_ts.replace(minute=decision_ts.minute - 1)).isoformat()
+                        }
+                    },
+                }
+            ),
             run_id,
             decision_ts,
             "NIFTY",
