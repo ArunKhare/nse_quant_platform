@@ -545,3 +545,113 @@ def test_v5_price_action_completes_observational_canonical_composite(
     assert persisted_payload["components"]["term_structure"]["state"] == "FLAT"
     assert persisted_payload["components"]["term_structure"]["canonical_state"] == "FLAT_TERM"
     assert persisted_payload["decision_eligibility_asserted"] is False
+
+
+def test_runner_to_persistence_preserves_canonical_regime_evidence(
+    store: DuckDBStore,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Exercise the production plugin runner and the existing evidence writer."""
+    seed(store)
+    regime_plugin = plugin(store)
+    monkeypatch.setattr(
+        regime_plugin,
+        "_term_structure",
+        lambda **_kwargs: {
+            "available": True,
+            "complete": True,
+            "state": "FLAT",
+            "reason": None,
+        },
+    )
+    monkeypatch.setattr(
+        regime_plugin,
+        "_skew",
+        lambda _snapshot: {
+            "available": True,
+            "complete": True,
+            "state": "HIGH_CALL_SKEW",
+            "reason": None,
+        },
+    )
+    monkeypatch.setattr(
+        regime_plugin,
+        "_price_action",
+        lambda _context: {
+            "available": True,
+            "complete": True,
+            "state": "HIGH_VOL_CHOP",
+            "classifier_version": "institutional_daily_price_action_v5",
+            "decision_eligibility_asserted": False,
+        },
+    )
+    current = context(0.225)
+
+    results = EvidencePluginRunner([regime_plugin]).run(current)
+
+    assert len(results) == 1
+    result = results[0]
+    assert result.plugin == "institutional_regime"
+    assert result.available is True
+    assert result.complete is True
+
+    payload = result.payload
+    expected_label = "HIGH_IV_FLAT_TERM_FORWARD_REVERSE_SKEW_HIGH_VOL_CHOP"
+    assert payload["regime_label"] == expected_label
+    assert payload["regime_vocabulary"] == "canonical_v1"
+    assert payload["regime_version"] == "institutional_regime_registry_v2"
+    assert payload["thresholds_provisional"] is True
+    assert payload["decision_eligibility_asserted"] is False
+    assert payload["eligibility_approved"] is False
+    assert payload["research_only"] is True
+
+    expected_components = {
+        "iv_state": ("HIGH_IV", "HIGH_IV", "v4_research"),
+        "term_structure": ("FLAT", "FLAT_TERM", "v4_research"),
+        "skew": ("HIGH_CALL_SKEW", "FORWARD_REVERSE_SKEW", "v4_research"),
+        "price_action": ("HIGH_VOL_CHOP", "HIGH_VOL_CHOP", "v5_price_action"),
+    }
+    for name, (source_state, canonical_state, source_vocabulary) in expected_components.items():
+        component = payload["components"][name]
+        assert component["complete"] is True
+        assert component["state"] == source_state
+        assert component["source_state"] == source_state
+        assert component["canonical_state"] == canonical_state
+        assert component["source_vocabulary"] == source_vocabulary
+        assert component["canonical_vocabulary"] == "institutional_regime_registry_v2"
+        assert component["eligibility_approved"] is False
+        assert component["research_only"] is True
+
+    evidence_id = store.write_decision_evidence(
+        run_id=current.run_id,
+        ts=current.ts,
+        symbol=current.symbol,
+        plugin=result.plugin,
+        evidence=result.payload,
+    )
+    persisted = store.conn.execute(
+        """
+        SELECT evidence_id, available, payload_json
+        FROM decision_evidence
+        WHERE run_id = ? AND ts = ? AND symbol = ? AND plugin = ?
+        """,
+        [current.run_id, current.ts, current.symbol, result.plugin],
+    ).fetchone()
+
+    assert persisted is not None
+    assert persisted[0] == evidence_id
+    assert persisted[1] is True
+    persisted_payload = json.loads(persisted[2])
+    assert persisted_payload["regime_label"] == expected_label
+    assert persisted_payload["regime_vocabulary"] == "canonical_v1"
+    assert persisted_payload["regime_version"] == "institutional_regime_registry_v2"
+    assert persisted_payload["thresholds_provisional"] is True
+    assert persisted_payload["decision_eligibility_asserted"] is False
+    assert persisted_payload["eligibility_approved"] is False
+    assert persisted_payload["research_only"] is True
+    for name, (_, canonical_state, _) in expected_components.items():
+        component = persisted_payload["components"][name]
+        assert component["canonical_state"] == canonical_state
+        assert component["canonical_vocabulary"] == "institutional_regime_registry_v2"
+        assert component["eligibility_approved"] is False
+        assert component["research_only"] is True
