@@ -15,10 +15,10 @@ Idempotency	        Uses INSERT OR REPLACE
 
 uv run python scripts/fill_data_gaps.py `
   --symbol NIFTY `
-  --from 2026-10-29 `
-  --to 2026-10-31 `
+  --from 2026-11-19 `
+  --to 2026-11-28 `
   --interval 1m `
-  --min-candles 400
+  --min-candles 10
 """
 
 from __future__ import annotations

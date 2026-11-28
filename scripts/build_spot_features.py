@@ -200,8 +200,8 @@ This makes an inclusive date-range invocation intuitive:
 
     uv run python scripts/build_spot_features.py `
       --symbol NIFTY `
-      --from 2026-11-17 `
-      --to 2026-11-18
+      --from 2026-11-18 `
+      --to 2026-11-28
 
 Command-line interface
 ----------------------

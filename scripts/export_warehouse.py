@@ -18,8 +18,8 @@ Market-regime export
 Use this after build_daily_market_regimes.py has written regimes:
 uv run python scripts/export_warehouse.py market-regimes `
   --underlying NIFTY `
-  --start-date 2026-10-18 `
-  --end-date 2026-11-19
+  --start-date 2026-11-18 `
+  --end-date 2026-11-28
 
 Important limitations
 - It exports one option-stream day at a time; there is no bulk date-range option-stream command.

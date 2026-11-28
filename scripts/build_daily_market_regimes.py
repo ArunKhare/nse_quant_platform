@@ -211,8 +211,8 @@ Command-line interface
 
     uv run python scripts/build_daily_market_regimes.py `
       --symbol NIFTY `
-      --from 2023-10-18 `
-      --to 2026-11-19
+      --from 2023-11-19 `
+      --to 2026-11-28
 
 Arguments:
 
