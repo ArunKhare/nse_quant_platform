@@ -15,6 +15,7 @@ def test_missing_policy_is_not_actionable() -> None:
     assert result["actionable"] is False
     assert result["selection_status"] == "UNAVAILABLE"
     assert result["reason"] == "no_policy_available"
+    assert result["regime_vocabulary"] is None
 
 
 def test_ready_current_policy_is_actionable() -> None:
@@ -80,6 +81,7 @@ def test_legacy_or_unversioned_policy_is_not_actionable() -> None:
     assert result["actionable"] is False
     assert result["selection_status"] == "INVALID_POLICY"
     assert result["reason"] == "canonical_policy_validation_failed"
+    assert result["regime_vocabulary"] == "legacy_daily_v0"
 
 
 def test_noncanonical_risk_limit_key_is_not_exported() -> None:
