@@ -112,6 +112,20 @@ The supplied DuckDB audit reports:
   term structure and 30D 25-delta risk reversal.
 - 1,931 India VIX IVP observations.
 
+The realized-variance source summary now includes a per-session
+`session_coverage` record with the observed 1-minute close count, configured
+minimum, eligibility flag, and explicit `below_minimum_observations` rejection
+reason. This identifies the exact session(s) that fail the RV observation floor
+without changing that floor or the realized-variance calculation.
+
+Each option snapshot profile now includes `interpolation_brackets` for 30D ATM,
+90D ATM, 30D call-25, and 30D put-25. Each entry reports the target maturity,
+status (`exact`, `interpolated`, `missing_lower_bracket`,
+`missing_upper_bracket`, or `missing_both_brackets`), and the actual nearest
+valid lower/upper DTE and IV observations. These diagnostics use the same
+accepted IV/delta observations as the feature calculation; they do not relax
+tolerances, change snapshot selection, or permit extrapolation.
+
 The exporter now records option-snapshot rejection reasons separately:
 `missing_iv30_atm_bracket`, `missing_iv90_atm_bracket`,
 `missing_call25_30d_bracket`, and `missing_put25_30d_bracket`.
