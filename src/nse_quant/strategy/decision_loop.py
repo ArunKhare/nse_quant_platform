@@ -1902,7 +1902,6 @@ class DecisionLoop:
             "classifier_version": institutional.get("classifier_version"),
             "regime_registry_version": REGIME_REGISTRY_VERSION,
             "as_of": institutional.get("as_of"),
-            "complete": bool(institutional.get("complete")),
             "missing_components": institutional.get("missing_components") or [],
             "reason": institutional.get("reason") if institutional else "institutional_regime_evidence_missing",
         }
