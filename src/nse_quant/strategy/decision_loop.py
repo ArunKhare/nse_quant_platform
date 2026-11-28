@@ -1477,7 +1477,9 @@ class DecisionLoop:
                 "regime_label_canonical": (institutional_regime_audit or {}).get("regime_label_canonical", False),
                 "regime_label_eligible": (institutional_regime_audit or {}).get("regime_label_eligible", False),
                 "thresholds_provisional": (institutional_regime_audit or {}).get("thresholds_provisional"),
-                "decision_eligibility_asserted": (institutional_regime_audit or {}).get("decision_eligibility_asserted"),
+                "decision_eligibility_asserted": (institutional_regime_audit or {}).get(
+                    "decision_eligibility_asserted"
+                ),
                 "as_of": (institutional_regime_audit or {}).get("as_of"),
                 "missing_components": (institutional_regime_audit or {}).get("missing_components", []),
                 "reason": (institutional_regime_audit or {}).get("reason"),
