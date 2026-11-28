@@ -42,6 +42,19 @@ def summarize_by_regime(
     Mixed or legacy-labelled input is rejected as a whole, rather than silently
     filtering trades or assigning historical P&L to a new regime taxonomy.
     """
+    missing_evidence = [
+        outcome.regime_evidence_status
+        for outcome in outcomes
+        if outcome.regime_evidence_status != "CANONICAL_DECISION_TIME_EVIDENCE"
+    ]
+    if missing_evidence:
+        counts: dict[str, int] = {}
+        for status in missing_evidence:
+            counts[status] = counts.get(status, 0) + 1
+        raise ValueError(
+            "training_outcomes: canonical point-in-time institutional regime evidence "
+            f"is missing or ineligible for {len(missing_evidence)} trade(s): {counts}"
+        )
     validate_regime_labels(
         [outcome.regime for outcome in outcomes],
         context="training_outcomes.regime",
