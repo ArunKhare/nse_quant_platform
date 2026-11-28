@@ -826,7 +826,7 @@ Implemented the S1 follow-up corrections on `feat/medallion-feature-store`.
 
 - Active policy export independently validates `regime_vocabulary == canonical_v1`, exact canonical allowed-regime labels, and canonical risk-limit keys constrained to the allowlist. Invalid or unversioned policies export as non-actionable with empty operational allowlists/limits.
 - Export payloads now carry `regime_vocabulary` and `regime_registry_version`.
-- Dashboard market features no longer read the removed `features.regime` field. The feature table displays institutional eligibility regime, legacy daily trend/vol context, and intraday shape as three separately named fields. Metric cards show intraday shape only.
+- Dashboard market features no longer read the removed `features.regime` field. The feature table displays institutional eligibility regime, legacy daily trend/vol context, and intraday shape as three separately named fields. Metric cards show intraday shape only. The eligibility panel also displays classifier availability, completeness, canonical/eligible status, provisional-threshold state and missing components.
 
 ### Persistence contract
 
