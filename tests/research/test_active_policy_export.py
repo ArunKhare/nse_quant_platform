@@ -62,6 +62,8 @@ def test_expired_ready_policy_is_not_actionable() -> None:
 
     assert result["actionable"] is False
     assert result["reason"] == "policy_expired"
+
+
 def test_legacy_or_unversioned_policy_is_not_actionable() -> None:
     policy = {
         "policy_id": "NIFTY:legacy",
