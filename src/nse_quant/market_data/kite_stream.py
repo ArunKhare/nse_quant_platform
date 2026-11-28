@@ -25,6 +25,12 @@ from ..market_data.normalizer import normalize_tick
 from ..persistence.duckdb_store import DuckDBStore
 
 
+def _stamp_snapshot_batch(snapshots: list[Any], captured_at: datetime) -> None:
+    """Give every expiry in one capture cycle the same, cycle-specific timestamp."""
+    for snapshot in snapshots:
+        snapshot.ts = captured_at
+
+
 def atomic_write(
     path: Path,
     payload: dict[str, Any],
@@ -66,11 +72,6 @@ def main() -> int:
     provider = KiteMarketDataProvider(kite)
 
     snapshots = provider.get_chain_snapshots()
-    snapshot_ts = datetime.now(UTC)
-
-    for snapshot in snapshots:
-        snapshot.ts = snapshot_ts
-
     tokens = sorted({quote.instrument_token for snapshot in snapshots for quote in snapshot.quotes})
     state: dict[int, dict[str, Any]] = {}
     lock = threading.Lock()
@@ -108,10 +109,9 @@ def main() -> int:
             time.sleep(1)
             with lock:
                 current = dict(state)
-            now = datetime.now()
-            snapshot = datetime.now()
-            for snapshot in snapshots:
-                snapshot.ts = snapshot_ts
+            capture_ts = datetime.now(UTC)
+            _stamp_snapshot_batch(snapshots, capture_ts)
+            now = capture_ts
             for snapshot in snapshots:
                 print(snapshot)
 
