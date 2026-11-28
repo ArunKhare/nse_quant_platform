@@ -229,14 +229,20 @@ features.intraday_shape	V5 TREND_UP/…	features.regime
 research.iv_daily_state	V3	daily_iv_regime.regime_label
 spread_profile.market_tags	V6	spread_profiles.allowed_regimes
 evidence.<plugin>.state	V7	unchanged (already plugin-scoped)
-4.3 Concrete changes (proposed, not yet applied)
-Registry: rename PriceAction.STRONG_BULL/STRONG_BEAR to STRONG_BULL_TREND/STRONG_BEAR_TREND, per the charter (D9). The six IC labels do not contain either token, so the allowlist is unaffected. Bump REGIME_REGISTRY_VERSION to v2.
+4.3 Concrete changes (implementation status — 2026-11-28)
+Registry: implemented. `PriceAction` uses `STRONG_BULL_TREND` / `STRONG_BEAR_TREND`, and `REGIME_REGISTRY_VERSION` is `institutional_regime_registry_v2`. The 108-label registry remains exact and does not accept legacy aliases.
 
-v4 adapter (immediate, no market logic change): add one explicit mapping for the IV, term and skew components only: NORMAL_IV→LOW_IV, FLAT→FLAT_TERM, HIGH_CALL_SKEW→FORWARD_REVERSE_SKEW. v4 price-action tokens get no mapping, as the charter requires ("must not be silently reinterpreted"). That leaves the label None until v5 ships. The semantics are still v4's (wrong IVR window, ATM-parity skew), so mark the component provenance v4_research and keep it out of eligibility.
+v4 adapter: implemented in `research/evidence_plugins/institutional_regime.py`. The adapter applies only the three charter-authorized aliases: `NORMAL_IV→LOW_IV`, `FLAT→FLAT_TERM`, and `HIGH_CALL_SKEW→FORWARD_REVERSE_SKEW`. Already matching v4 tokens pass through unchanged (`HIGH_IV`, `CONTANGO`, `BACKWARDATION`, `NORMAL_SKEW`, `HIGH_PUT_SKEW`). Unknown tokens and incomplete components do not produce a canonical component state. The raw producer `state` is retained; the adapter writes a separate `canonical_state`.
 
-v5 classifier: a new institutional_regime_v5 implementing sections 3.1–3.4. It emits registry enums directly, plus per-component confidence and inputs.
+v4 provenance: implemented. IV, term-structure, and skew components are tagged `source_vocabulary="v4_research"`, retain their source classifier version, and are marked `research_only=true` / `eligibility_approved=false`. Their canonical vocabulary mapping is a syntactic registry adapter only; it does not correct their known IVP/IVR, term-structure, or ATM-parity skew methodology. They must not be interpreted as calibrated evidence or as decision eligibility.
 
-Risk limits: re-key regime_risk_policy and _apply_regime_limits on V1 labels. Until learned V1 policies exist, use the static config limits; do not look up by legacy V4 strings. This closes the remaining open item from bf18386.
+v5 price action: the existing `institutional_daily_price_action_v5` is wired directly into the composite. Only the six exact v5 registry states are accepted; no v4 price-action alias is introduced. The component retains its classifier version, completed-daily-bar cutoff, and diagnostics.
+
+Composite and evidence contract: implemented. A complete canonical four-component `regime_label` is constructed only when all four source components are complete and every component has an exact canonical state. The evidence retains raw states, canonical states, source vocabularies, and classifier provenance. The top-level evidence remains observation-only with `thresholds_provisional=true`, `decision_eligibility_asserted=false`, `eligibility_approved=false`, and `research_only=true`. A canonical label here means structurally valid evidence, not calibrated or actionable evidence.
+
+Risk limits: existing S1 risk-policy boundaries remain unchanged. This integration does not re-key risk policy, alter strategy allowlists, or grant decision eligibility. Learned V1 policy readiness remains a separate gate.
+
+Remaining validation: run focused plugin tests, full pytest, Ruff, and mypy on the updated branch. Verify daily-bar transition persistence against consecutive NSE sessions (the classifier currently confirms consecutive available daily bars). No test or quality-gate result is claimed by this documentation update.
 
 Field renames:
 
