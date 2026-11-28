@@ -2,18 +2,16 @@ from types import SimpleNamespace
 from typing import Any, cast
 
 from nse_quant.core.regime_registry import REGIMES
+from nse_quant.core.settings import IronCondorProfileSettings, RegimePolicySettings
 from nse_quant.research import regime_policy_evaluation as evaluation_module
 
 REGIME = next(iter(REGIMES))
 
 
 def test_configured_profile_fallback_is_not_learned_policy_actionable(monkeypatch) -> None:
-    profile = SimpleNamespace(
+    profile = IronCondorProfileSettings(
         enabled=True,
-        regime_policy=SimpleNamespace(
-            allowed_regimes={REGIME},
-            blocked_regimes=set(),
-        ),
+        regime_policy=RegimePolicySettings(allowed_regimes=[REGIME]),
     )
     settings = SimpleNamespace(
         storage=SimpleNamespace(db_path="unused-test-database"),
