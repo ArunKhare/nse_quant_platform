@@ -95,22 +95,39 @@ uv run python scripts/run_institutional_regime_calibration.py `
 The runner remains diagnostic-only. No threshold promotion or execution
 eligibility is implied by a completed report.
 
-## Known coverage constraint from the November 28, 2026 audit
+## Coverage audit — 2026-11-28
 
-The audit identified 566 NIFTY daily sessions, 81 daily RV observations,
-29 days of options data, and an India VIX download covering approximately one
-year. The price-action feature implementation needs 252 valid ATR observations
-(approximately 266 daily bars including ATR warm-up) before its first complete
-feature row. Therefore 566 daily bars support at most about 301 price-feature
-sessions. A one-year India VIX file provides at most about 220 IVP observations
-with the 30-observation warm-up. The 29-day option history is the tighter
-known bottleneck; the current complete-row upper bound cannot exceed 29 and
-may be lower if the dates do not align or 30D/90D expiry brackets are absent.
+The updated calibration export uses the consolidated India VIX history from
+2019-01-01 through 2026-11-27. Its source manifest reports 1,960 source rows
+through the requested end date and 1,931 valid trailing-percentile observations.
+India VIX coverage is no longer the binding constraint for the 566 daily
+candidate sessions in the supplied audit. The VIX source is still a proxy for
+option IV, not a replacement for the native constant-maturity option surface.
+
+The supplied DuckDB audit reports:
+
+- 566 valid NIFTY daily bars, yielding 301 daily price-feature sessions.
+- 81 sessions with 1-minute bars, of which 80 meet the 300-observation RV floor.
+- 29 NIFTY option-stream sessions, of which only 2 have a complete 30D/90D ATM
+  term structure and 30D 25-delta risk reversal.
+- 1,931 India VIX IVP observations.
+
+The exporter now records option-snapshot rejection reasons separately:
+`missing_iv30_atm_bracket`, `missing_iv90_atm_bracket`,
+`missing_call25_30d_bracket`, and `missing_put25_30d_bracket`.
+It also reports candidate daily sessions without any option snapshot. The
+diagnostics use only the latest snapshot per IST session and do not fall back
+to an older snapshot, interpolate beyond observed expiries, or synthesize data.
 
 For 423 complete observations, the current feature definitions require at
 least 688 valid daily bars, 452 India VIX sessions, 423 sessions with valid
 30D/90D term and 25-delta skew, and 423 eligible realized-variance sessions.
-The exporter records the observed counts and their complete-session upper
-bound in the manifest. It is expected to emit a partial CSV and a manifest
-with `INSUFFICIENT_SOURCE_COVERAGE` until the missing history is backfilled.
-The 423-session floor is fixed in the exporter and cannot be lowered through a CLI option.
+The supplied export remains `INSUFFICIENT_SOURCE_COVERAGE`: its complete-row
+upper bound is 2, with option surface coverage the tightest current constraint.
+The 423-session floor is fixed in the exporter and cannot be lowered through
+a CLI option.
+
+The option-surface diagnostics continue to read the legacy `option_stream`
+table for this exporter. They do not claim that legacy records are native
+Medallion Bronze/Silver evidence, and they do not migrate or backfill any data.
+
