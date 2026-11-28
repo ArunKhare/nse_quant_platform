@@ -48,6 +48,7 @@ def test_expired_ready_policy_is_not_actionable() -> None:
         "policy_id": "NIFTY:2026-01-01:2026-03-01",
         "allowed_regimes": {REGIME},
         "selection_status": "READY",
+        "regime_vocabulary": "canonical_v1",
         "test_end": datetime(2026, 3, 1).date(),
         "risk_limits": {},
     }
