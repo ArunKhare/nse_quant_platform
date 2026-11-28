@@ -365,6 +365,8 @@ def test_history_limit_must_cover_minimum() -> None:
             min_iv_history_observations=3,
         )
 
+
+
 def test_institutional_regime_evidence_is_first_write_only(store: DuckDBStore) -> None:
     seed(store)
     current = context()
