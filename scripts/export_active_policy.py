@@ -8,6 +8,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from nse_quant.core.regime_registry import REGIME_REGISTRY_VERSION, is_canonical_regime_label
 from nse_quant.persistence.duckdb_store import DuckDBStore
 
 DEFAULT_OUTPUT = Path("data/active_regime_policy.json")
@@ -53,43 +54,75 @@ def build_active_policy(
     policy: dict[str, Any] | None,
     as_of: datetime,
 ) -> dict[str, Any]:
+    base = {
+        "symbol": symbol,
+        "as_of": as_of.isoformat(),
+        "regime_vocabulary": "canonical_v1",
+        "regime_registry_version": REGIME_REGISTRY_VERSION,
+    }
     if policy is None:
         return {
-            "symbol": symbol,
+            **base,
             "selection_status": "UNAVAILABLE",
-            "as_of": as_of.isoformat(),
             "allowed_regimes": [],
             "risk_limits": {},
             "actionable": False,
             "reason": "no_policy_available",
         }
 
-    test_end = policy["test_end"]
+    allowed = policy.get("allowed_regimes")
+    risk_limits = policy.get("risk_limits")
+    vocabulary = policy.get("regime_vocabulary")
+    labels_valid = (
+        isinstance(allowed, (list, tuple, set, frozenset))
+        and bool(allowed)
+        and all(is_canonical_regime_label(label) for label in allowed)
+    )
+    limits_valid = (
+        isinstance(risk_limits, dict)
+        and all(is_canonical_regime_label(label) for label in risk_limits)
+        and set(risk_limits).issubset(set(allowed or []))
+        and all(isinstance(value, dict) for value in risk_limits.values())
+    )
+    policy_valid = vocabulary == "canonical_v1" and labels_valid and limits_valid
+    if not policy_valid:
+        return {
+            **base,
+            "policy_id": policy.get("policy_id"),
+            "selection_status": "INVALID_POLICY",
+            "allowed_regimes": [],
+            "risk_limits": {},
+            "actionable": False,
+            "reason": "canonical_policy_validation_failed",
+        }
 
-    expires_at = test_end.isoformat() if hasattr(test_end, "isoformat") else str(test_end)
+    test_end = policy.get("test_end")
+    if test_end is None:
+        is_current = False
+        expires_at = None
+    else:
+        expires_at = test_end.isoformat() if hasattr(test_end, "isoformat") else str(test_end)
+        is_current = test_end >= as_of.date()
 
-    is_ready = policy["selection_status"] == "READY"
-    is_current = test_end >= as_of.date()
-
+    is_ready = policy.get("selection_status") == "READY"
+    actionable = is_ready and is_current
     return {
-        "symbol": symbol,
+        **base,
         "policy_id": policy.get("policy_id"),
-        "selection_status": policy["selection_status"],
-        "as_of": as_of.isoformat(),
+        "selection_status": policy.get("selection_status", "UNAVAILABLE"),
         "test_end": expires_at,
         "expires_at": expires_at,
-        "allowed_regimes": sorted(policy["allowed_regimes"]),
-        "risk_limits": policy["risk_limits"],
-        "actionable": is_ready and is_current,
+        "allowed_regimes": sorted(allowed),
+        "risk_limits": risk_limits,
+        "actionable": actionable,
         "reason": (
             "active"
-            if is_ready and is_current
+            if actionable
             else "policy_expired"
-            if is_ready
-            else policy["selection_status"].lower()
+            if is_ready and not is_current
+            else str(policy.get("selection_status", "unavailable")).lower()
         ),
     }
-
 
 def write_json_atomically(
     payload: dict[str, Any],
