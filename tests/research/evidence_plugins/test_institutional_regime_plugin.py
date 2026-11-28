@@ -364,3 +364,36 @@ def test_history_limit_must_cover_minimum() -> None:
             iv_history_limit=2,
             min_iv_history_observations=3,
         )
+
+def test_institutional_regime_evidence_is_first_write_only(store: DuckDBStore) -> None:
+    seed(store)
+    current = context()
+    payload = plugin(store).build(current)
+    first_id = store.write_decision_evidence(
+        run_id=current.run_id,
+        ts=current.ts,
+        symbol=current.symbol,
+        plugin="institutional_regime",
+        evidence=payload,
+    )
+    revised_payload = {**payload, "regime_label": "HIGH_IV_CONTANGO_NORMAL_SKEW_HIGH_VOL_CHOP"}
+    second_id = store.write_decision_evidence(
+        run_id=current.run_id,
+        ts=current.ts,
+        symbol=current.symbol,
+        plugin="institutional_regime",
+        evidence=revised_payload,
+    )
+
+    row = store.conn.execute(
+        """
+        SELECT evidence_id, payload_json
+        FROM decision_evidence
+        WHERE run_id = ? AND ts = ? AND symbol = ? AND plugin = ?
+        """,
+        [current.run_id, current.ts, current.symbol, "institutional_regime"],
+    ).fetchone()
+
+    assert row is not None
+    assert first_id == second_id == row[0]
+    assert json.loads(row[1])["regime_label"] == payload["regime_label"]
