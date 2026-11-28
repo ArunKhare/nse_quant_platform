@@ -79,9 +79,10 @@ def build_active_policy(
         and all(is_canonical_regime_label(label) for label in allowed)
     )
     limits_valid = (
-        isinstance(risk_limits, dict)
+        labels_valid
+        and isinstance(risk_limits, dict)
         and all(is_canonical_regime_label(label) for label in risk_limits)
-        and set(risk_limits).issubset(set(allowed or []))
+        and set(risk_limits).issubset({label for label in allowed if isinstance(label, str)})
         and all(isinstance(value, dict) for value in risk_limits.values())
     )
     policy_valid = vocabulary == "canonical_v1" and labels_valid and limits_valid
