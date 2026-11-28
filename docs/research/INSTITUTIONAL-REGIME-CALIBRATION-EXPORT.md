@@ -169,6 +169,16 @@ The active branch contains two materially different Kite acquisition APIs:
   both 25-delta wings are present.
 - `write_option_stream()` persists the supplied snapshot rows. It does not
   enforce a complete 30D/90D surface or guarantee valid 25-delta IV observations.
+- The stream runner subscribes to the underlying spot instrument as well as the
+  selected option contracts. On every capture cycle it refreshes spot and the
+  option LTP/bid/ask/volume/OI from the latest WebSocket state before computing
+  per-contract IV and Greeks. It clears prior-cycle IV/Greeks first, so a cycle
+  with no valid current price cannot inherit stale analytics. The snapshot
+  timestamp remains shared across expiries for that capture cycle.
+- This correction affects captures made after deployment only. It does not
+  rewrite historical `option_stream` rows or establish that a 25-delta wing
+  exists in the listed strike universe; the calibration export's existing
+  surface completeness rules remain unchanged.
 
 The manifest now records a per-snapshot profile: expiry date and days to expiry,
 row/call/put counts, valid-IV row count, call/put delta ranges, and the presence
