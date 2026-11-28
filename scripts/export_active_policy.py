@@ -74,20 +74,37 @@ def build_active_policy(
     risk_limits = policy.get("risk_limits")
     vocabulary = policy.get("regime_vocabulary")
     test_end = policy.get("test_end")
-    expiry_valid = isinstance(test_end, (date, datetime))
-    labels_valid = (
-        isinstance(allowed, (list, tuple, set, frozenset))
-        and bool(allowed)
-        and all(is_canonical_regime_label(label) for label in allowed)
+
+    allowed_values = (
+        list(allowed)
+        if isinstance(allowed, (list, tuple, set, frozenset))
+        else []
     )
+    allowed_labels = [label for label in allowed_values if isinstance(label, str)]
+    labels_valid = (
+        bool(allowed_labels)
+        and len(allowed_labels) == len(allowed_values)
+        and all(is_canonical_regime_label(label) for label in allowed_labels)
+    )
+    if isinstance(test_end, datetime):
+        test_end_date: date | None = test_end.date()
+        expires_at: str | None = test_end.isoformat()
+    elif isinstance(test_end, date):
+        test_end_date = test_end
+        expires_at = test_end.isoformat()
+    else:
+        test_end_date = None
+        expires_at = None
+    expiry_valid = test_end_date is not None
     limits_valid = (
         labels_valid
         and isinstance(risk_limits, dict)
         and all(is_canonical_regime_label(label) for label in risk_limits)
-        and set(risk_limits).issubset({label for label in allowed if isinstance(label, str)})
+        and set(risk_limits).issubset(set(allowed_labels))
         and all(isinstance(value, dict) for value in risk_limits.values())
     )
     policy_valid = vocabulary == "canonical_v1" and labels_valid and limits_valid and expiry_valid
+
     if not policy_valid:
         return {
             **base,
@@ -100,11 +117,9 @@ def build_active_policy(
             "reason": "canonical_policy_validation_failed",
         }
 
-    if isinstance(test_end, datetime):
-        test_end_date = test_end.date()
-    else:
-        test_end_date = test_end
-    expires_at = test_end.isoformat()
+    # policy_valid guarantees both values are populated and date-compatible.
+    assert test_end_date is not None
+    assert expires_at is not None
     is_current = test_end_date >= as_of.date()
 
     is_ready = policy.get("selection_status") == "READY"
@@ -116,7 +131,7 @@ def build_active_policy(
         "selection_status": policy.get("selection_status", "UNAVAILABLE"),
         "test_end": expires_at,
         "expires_at": expires_at,
-        "allowed_regimes": sorted(allowed),
+        "allowed_regimes": sorted(allowed_labels),
         "risk_limits": risk_limits,
         "actionable": actionable,
         "reason": (
