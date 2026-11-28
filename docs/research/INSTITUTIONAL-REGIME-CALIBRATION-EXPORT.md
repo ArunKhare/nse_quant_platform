@@ -29,7 +29,11 @@ observations by default.
 
 The output has the exact column order required by the calibration runner:
 
-`session, ivp, iv30_minus_iv90, rr25, adx14, plus_di14, minus_di14, er20, chop14, atr14, atr_percentile, bandwidth_percentile, range_position, change20, sma20_slope, realized_variance`
+```text
+session, ivp, iv30_minus_iv90, rr25, adx14, plus_di14, minus_di14, er20,
+chop14, atr14, atr_percentile, bandwidth_percentile, range_position,
+change20, sma20_slope, realized_variance
+```
 
 - `ivp`: trailing percentile rank of India VIX Close, over up to 252
   available sessions including the current session, with at least 30
