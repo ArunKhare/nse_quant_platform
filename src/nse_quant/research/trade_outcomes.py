@@ -37,7 +37,7 @@ def load_trade_outcomes(
             d.payload,
             de.evidence_id,
             de.ts AS regime_evidence_as_of,
-            JSON_EXTRACT_STRING(de.payload_json, '$.regime_label') AS regime,
+            de.payload_json AS regime_evidence_payload,
             sp.strategy_position_id,
             sp.opened_at,
             sp.closed_at,
@@ -69,10 +69,26 @@ def load_trade_outcomes(
 
     outcomes: list[TradeOutcome] = []
 
-    for payload_json, evidence_id, evidence_as_of, regime, _, opened_at, closed_at, pnl in rows:
+    for payload_json, evidence_id, evidence_as_of, evidence_payload_json, _, opened_at, closed_at, pnl in rows:
         payload = json.loads(payload_json) if payload_json else {}
+        evidence_payload = json.loads(evidence_payload_json) if evidence_payload_json else {}
         proposal = payload.get("proposal") or {}
-        canonical = isinstance(regime, str) and is_canonical_regime_label(regime)
+        regime = evidence_payload.get("regime_label")
+        if evidence_id is None:
+            evidence_status = "MISSING_DECISION_TIME_EVIDENCE"
+        elif evidence_payload.get("available") is not True:
+            evidence_status = "REGIME_EVIDENCE_UNAVAILABLE"
+        elif evidence_payload.get("complete") is not True:
+            evidence_status = "REGIME_EVIDENCE_INCOMPLETE"
+        elif evidence_payload.get("thresholds_provisional") is not False:
+            evidence_status = "REGIME_THRESHOLDS_NOT_APPROVED"
+        elif evidence_payload.get("decision_eligibility_asserted") is not False:
+            evidence_status = "REGIME_ELIGIBILITY_METADATA_NOT_EXPLICITLY_FALSE"
+        elif not is_canonical_regime_label(regime):
+            evidence_status = "NONCANONICAL_DECISION_TIME_REGIME"
+        else:
+            evidence_status = "CANONICAL_DECISION_TIME_EVIDENCE"
+        canonical = evidence_status == "CANONICAL_DECISION_TIME_EVIDENCE"
         outcomes.append(
             TradeOutcome(
                 proposal_id=str(proposal.get("proposal_id")),
@@ -84,11 +100,7 @@ def load_trade_outcomes(
                 realized_pnl=float(pnl or 0.0),
                 regime_evidence_id=evidence_id,
                 regime_evidence_as_of=evidence_as_of,
-                regime_evidence_status=(
-                    "CANONICAL_DECISION_TIME_EVIDENCE"
-                    if canonical and evidence_id
-                    else "MISSING_OR_NONCANONICAL_DECISION_TIME_EVIDENCE"
-                ),
+                regime_evidence_status=evidence_status,
             )
         )
 
