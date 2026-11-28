@@ -22,7 +22,8 @@ def test_india_vix_percentile_is_point_in_time(tmp_path) -> None:
         "Date,Open,High,Low,Close,Prev. Close,Change,% Change\n"
         "28-NOV-2025,11.785,11.785,10.8175,11.62,11.785,-0.17,-1.40\n"
         "01-DEC-2025,12.0,12.0,11.0,12.0,11.62,0.38,3.27\n"
-        "02-DEC-2025,10.0,12.0,10.0,10.0,12.0,-2.0,-16.67\n",
+        "02-DEC-2025,10.0,12.0,10.0,10.0,12.0,-2.0,-16.67\n"
+        "03-DEC-2025,11.0,12.0,10.0,11.0,10.0,1.0,10.0\n",
         encoding="utf-8",
     )
 
@@ -83,5 +84,23 @@ def test_option_snapshot_returns_unavailable_without_90_day_bracket() -> None:
         (expiry, "CE", 0.22, 0.25),
         (expiry, "PE", 0.24, -0.25),
     ]
+
+    assert _option_features_for_snapshot(rows, session=session) is None
+
+
+
+def test_option_snapshot_rejects_non_25_delta_wings() -> None:
+    session = date(2025, 11, 28)
+    rows = []
+    for days, atm_iv in ((20, 0.20), (40, 0.22), (80, 0.25), (100, 0.27)):
+        expiry = date.fromordinal(session.toordinal() + days)
+        rows.extend(
+            [
+                (expiry, "CE", atm_iv, 0.50),
+                (expiry, "PE", atm_iv, -0.50),
+                (expiry, "CE", atm_iv + 0.02, 0.10),
+                (expiry, "PE", atm_iv + 0.04, -0.10),
+            ]
+        )
 
     assert _option_features_for_snapshot(rows, session=session) is None
