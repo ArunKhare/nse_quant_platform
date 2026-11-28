@@ -1,5 +1,5 @@
 import json
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 
 import duckdb
 
@@ -71,7 +71,7 @@ def _insert_trade(
                     "proposal": {"proposal_id": proposal_id, "strategy": "test_strategy"},
                     "decision_audit": {
                         "regime": {
-                            "as_of": (decision_ts.replace(minute=decision_ts.minute - 1)).isoformat()
+                            "as_of": (decision_ts - timedelta(minutes=1)).isoformat()
                         }
                     },
                 }
