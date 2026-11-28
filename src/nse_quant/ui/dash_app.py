@@ -184,6 +184,8 @@ def strategy_eligibility_section(
     daily_trend_vol = market_context.get("daily_trend_vol", "—")
     intraday_shape = details.get("intraday_shape", "—")
     allowed_regimes = details.get("allowed_regimes") or []
+    institutional_evidence = details.get("institutional_regime_evidence") or {}
+    missing_components = institutional_evidence.get("missing_components") or []
     iv_rank = details.get("iv_rank")
 
     regime_list = (
@@ -219,6 +221,26 @@ def strategy_eligibility_section(
                 [
                     html.Strong("Canonical regime source: "),
                     str(regime_source).replace("_", " "),
+                ],
+                style={"marginBottom": "12px"},
+            ),
+            html.P(
+                [
+                    html.Strong("Classifier evidence readiness: "),
+                    (
+                        f"available={institutional_evidence.get('available', False)}, "
+                        f"complete={institutional_evidence.get('complete', False)}, "
+                        f"canonical={institutional_evidence.get('regime_label_canonical', False)}, "
+                        f"eligible={institutional_evidence.get('regime_label_eligible', False)}, "
+                        f"thresholds_provisional={institutional_evidence.get('thresholds_provisional')}"
+                    ),
+                ],
+                style={"marginBottom": "8px"},
+            ),
+            html.P(
+                [
+                    html.Strong("Missing regime components: "),
+                    ", ".join(str(component) for component in missing_components) or "None reported",
                 ],
                 style={"marginBottom": "12px"},
             ),
