@@ -91,7 +91,7 @@ def evaluate_regime_policy(
     for outcome in outcomes:
         coverage[outcome.regime] = coverage.get(outcome.regime, 0) + 1
 
-    actionable = profile.enabled and bool(effective_allowed) and reason != "no_allowed_regimes"
+    actionable = profile.enabled and bool(effective_allowed) and reason == "learned_policy_ready"
 
     evaluation = RegimePolicyEvaluation(
         symbol=symbol,
