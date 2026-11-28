@@ -509,3 +509,26 @@ def test_v5_price_action_completes_observational_canonical_composite(
     assert result["components"]["skew"]["canonical_state"] == "FORWARD_REVERSE_SKEW"
     assert result["components"]["price_action"]["state"] == "HIGH_VOL_CHOP"
     assert result["components"]["price_action"]["source_vocabulary"] == "v5_price_action"
+
+    evidence_id = store.write_decision_evidence(
+        run_id="institutional-test",
+        ts=TS,
+        symbol="NIFTY",
+        plugin="institutional_regime",
+        evidence=result,
+    )
+    persisted = store.conn.execute(
+        """
+        SELECT evidence_id, payload_json
+        FROM decision_evidence
+        WHERE run_id = ? AND ts = ? AND symbol = ? AND plugin = ?
+        """,
+        ["institutional-test", TS, "NIFTY", "institutional_regime"],
+    ).fetchone()
+    assert persisted is not None
+    assert persisted[0] == evidence_id
+    persisted_payload = json.loads(persisted[1])
+    assert persisted_payload["regime_label"] == result["regime_label"]
+    assert persisted_payload["components"]["term_structure"]["state"] == "FLAT"
+    assert persisted_payload["components"]["term_structure"]["canonical_state"] == "FLAT_TERM"
+    assert persisted_payload["decision_eligibility_asserted"] is False
