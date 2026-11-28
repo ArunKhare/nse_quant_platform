@@ -199,6 +199,8 @@ class InstitutionalRegimePlugin(EvidencePlugin):
         return {
             "available": True,
             "complete": all_complete,
+            "thresholds_provisional": True,
+            "decision_eligibility_asserted": False,
             "as_of": as_of.isoformat(),
             "symbol": context.symbol,
             "expiry": snapshot.expiry.isoformat(),
@@ -472,6 +474,8 @@ class InstitutionalRegimePlugin(EvidencePlugin):
         return {
             "available": False,
             "complete": False,
+            "thresholds_provisional": True,
+            "decision_eligibility_asserted": False,
             "as_of": as_of.isoformat(),
             "symbol": context.symbol,
             "classifier_version": "institutional_iv_term_components_v4_with_daily_price_action_v5",
