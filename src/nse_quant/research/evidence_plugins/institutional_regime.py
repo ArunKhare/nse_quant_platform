@@ -220,9 +220,12 @@ class InstitutionalRegimePlugin(EvidencePlugin):
                 "v5_price_action" if name == "price_action" else "v4_research"
             )
             component["eligibility_approved"] = False
-            component["research_only"] = name != "price_action"
-            if name != "price_action":
-                component["source_classifier_version"] = "institutional_iv_term_components_v4"
+            component["research_only"] = True
+            component["source_classifier_version"] = (
+                PRICE_ACTION_CLASSIFIER_VERSION
+                if name == "price_action"
+                else "institutional_iv_term_components_v4"
+            )
 
         components_complete = all(component["complete"] for component in components.values())
         canonical_components_complete = all(
