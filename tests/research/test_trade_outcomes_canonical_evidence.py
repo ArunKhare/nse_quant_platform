@@ -64,6 +64,7 @@ def _insert_trade(
     run_id: str,
     proposal_id: str,
     decision_ts: datetime,
+    evidence_id: str | None = None,
 ) -> None:
     conn.execute(
         "INSERT INTO decisions VALUES (?, ?, ?, ?, ?)",
@@ -73,7 +74,8 @@ def _insert_trade(
                     "proposal": {"proposal_id": proposal_id, "strategy": "test_strategy"},
                     "decision_audit": {
                         "regime": {
-                            "as_of": (decision_ts - timedelta(minutes=1)).isoformat()
+                            "as_of": (decision_ts - timedelta(minutes=1)).isoformat(),
+                            "evidence_id": evidence_id,
                         }
                     },
                 }
@@ -103,7 +105,13 @@ def _insert_trade(
 def test_trade_outcomes_use_pinned_decision_time_institutional_regime() -> None:
     conn = _connection()
     decision_ts = datetime(2026, 1, 10, 12, 0)
-    _insert_trade(conn, run_id="run-1", proposal_id="p-1", decision_ts=decision_ts)
+    _insert_trade(
+        conn,
+        run_id="run-1",
+        proposal_id="p-1",
+        decision_ts=decision_ts,
+        evidence_id="evidence-1",
+    )
     conn.execute(
         "INSERT INTO decision_evidence VALUES (?, ?, ?, ?, ?, ?)",
         [
@@ -140,7 +148,13 @@ def test_trade_outcomes_use_pinned_decision_time_institutional_regime() -> None:
 def test_missing_or_future_regime_evidence_is_explicit_not_daily_fallback() -> None:
     conn = _connection()
     decision_ts = datetime(2026, 1, 10, 12, 0)
-    _insert_trade(conn, run_id="run-2", proposal_id="p-2", decision_ts=decision_ts)
+    _insert_trade(
+        conn,
+        run_id="run-2",
+        proposal_id="p-2",
+        decision_ts=decision_ts,
+        evidence_id="future-evidence",
+    )
     conn.execute(
         "INSERT INTO decision_evidence VALUES (?, ?, ?, ?, ?, ?)",
         [
