@@ -1,4 +1,5 @@
 from types import SimpleNamespace
+from typing import Any, cast
 
 from nse_quant.core.regime_registry import REGIMES
 from nse_quant.strategy.canonical_risk_context import canonical_regime_for_risk
@@ -24,11 +25,11 @@ def test_risk_context_requires_explicit_approval_metadata() -> None:
     assert canonical_regime_for_risk(evidence) == CANONICAL
 
     missing_provisional = _eligible_payload()
-    del missing_provisional["institutional_regime"]["thresholds_provisional"]  # type: ignore[index]
+    del cast(dict[str, Any], missing_provisional["institutional_regime"])["thresholds_provisional"]
     assert canonical_regime_for_risk(missing_provisional) is None
 
     missing_assertion = _eligible_payload()
-    del missing_assertion["institutional_regime"]["decision_eligibility_asserted"]  # type: ignore[index]
+    del cast(dict[str, Any], missing_assertion["institutional_regime"])["decision_eligibility_asserted"]
     assert canonical_regime_for_risk(missing_assertion) is None
 
 
