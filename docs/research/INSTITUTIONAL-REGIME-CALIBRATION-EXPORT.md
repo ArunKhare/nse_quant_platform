@@ -131,3 +131,35 @@ The option-surface diagnostics continue to read the legacy `option_stream`
 table for this exporter. They do not claim that legacy records are native
 Medallion Bronze/Silver evidence, and they do not migrate or backfill any data.
 
+### Option acquisition-path inspection
+
+The active branch contains two materially different Kite acquisition APIs:
+
+- `KiteMarketDataProvider.get_chain_snapshot()` selects one expiry (the nearest
+  expiry when none is supplied).
+- `KiteMarketDataProvider.get_chain_snapshots()` uses
+  `discover_chain_for_horizon()` to select listed expiries through the first
+  expiry beyond the configured capture horizon, with a minimum 90-calendar-day
+  horizon.
+- `kite_stream.py` uses the multi-expiry API and persists each returned expiry
+  snapshot. The ordinary `DecisionLoop` path calls the single-expiry API.
+- `discover_chain_for_horizon()` selects a strike window around spot using
+  `strikes_per_side`; this is a strike-count selection, not a guarantee that
+  both 25-delta wings are present.
+- `write_option_stream()` persists the supplied snapshot rows. It does not
+  enforce a complete 30D/90D surface or guarantee valid 25-delta IV observations.
+
+The manifest now records a per-snapshot profile: expiry date and days to expiry,
+row/call/put counts, valid-IV row count, call/put delta ranges, and the presence
+of ATM and 25-delta quotes under the existing tolerances. It also separates
+candidate daily sessions with no snapshot, incomplete snapshots, complete
+surfaces, and snapshots outside the daily candidate window. These are
+observational diagnostics; they do not alter the latest-snapshot rule or the
+surface eligibility calculation.
+
+This trace establishes the available code paths, not which path produced each
+historical row. The source profile must be examined before changing acquisition
+selection, strike coverage, capture cadence, or any legacy data. In particular,
+do not infer that multi-expiry capture ran historically merely because the API
+and runner exist.
+
