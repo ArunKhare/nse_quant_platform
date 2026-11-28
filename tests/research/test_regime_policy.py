@@ -21,6 +21,7 @@ def make_outcome(regime: str, pnl: float) -> TradeOutcome:
         opened_at=None,
         closed_at=None,
         realized_pnl=pnl,
+        regime_evidence_status="CANONICAL_DECISION_TIME_EVIDENCE",
     )
 
 
