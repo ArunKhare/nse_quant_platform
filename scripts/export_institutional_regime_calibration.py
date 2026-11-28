@@ -295,7 +295,7 @@ def _load_realized_variance(
     for session, closes in closes_by_session.items():
         if len(closes) < minimum_observations:
             continue
-        value = sum(math.log(current / previous) ** 2 for previous, current in zip(closes, closes[1:]))
+        value = sum(math.log(current / previous) ** 2 for previous, current in zip(closes, closes[1:], strict=False))
         if math.isfinite(value) and value >= 0:
             realized_variance[session] = value
 
