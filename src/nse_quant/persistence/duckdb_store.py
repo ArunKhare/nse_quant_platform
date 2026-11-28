@@ -1814,8 +1814,8 @@ class DuckDBStore:
         symbol: str,
         plugin: str,
         evidence: dict[str, Any],
-    ) -> None:
-
+    ) -> str:
+        """Persist one plugin result and return its stable evidence-row pin."""
         self.conn.execute(
             """
             INSERT INTO decision_evidence (
@@ -1843,6 +1843,17 @@ class DuckDBStore:
                 json.dumps(evidence, default=str),
             ],
         )
+        row = self.conn.execute(
+            """
+            SELECT evidence_id
+            FROM decision_evidence
+            WHERE run_id = ? AND ts = ? AND symbol = ? AND plugin = ?
+            """,
+            [run_id, ts, symbol, plugin],
+        ).fetchone()
+        if row is None:
+            raise RuntimeError("Decision evidence write did not produce a stable row pin")
+        return str(row[0])
 
     def latest_spot_candles(
         self,
