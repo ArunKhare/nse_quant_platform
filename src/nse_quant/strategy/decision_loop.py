@@ -786,14 +786,18 @@ class DecisionLoop:
 
         evidence_results = self.evidence_runner.run(context)
         evidence = {result.plugin: result.payload for result in evidence_results}
+        evidence_pins: dict[str, str] = {}
         for result in evidence_results:
-            self.store.write_decision_evidence(
+            evidence_id = self.store.write_decision_evidence(
                 run_id=self.run_id,
                 ts=context.ts,
                 symbol=context.symbol,
                 plugin=result.plugin,
                 evidence=result.payload,
             )
+            if result.plugin == "institutional_regime":
+                evidence_pins[result.plugin] = evidence_id
+        evidence["_decision_evidence_pins"] = evidence_pins
 
         strategy_id = self._resolve_active_strategy_id()
         timing_filter = self._resolve_timing_filter(strategy_id)
@@ -1807,7 +1811,7 @@ class DecisionLoop:
         vrp = evidence.get("variance_risk_premium") or {}
         provenance: dict[str, Any] = {}
         for plugin, payload in evidence.items():
-            if not isinstance(payload, dict):
+            if plugin.startswith("_") or not isinstance(payload, dict):
                 continue
             provenance[plugin] = {
                 "available": payload.get("available"),
@@ -1821,11 +1825,15 @@ class DecisionLoop:
                 ),
                 "mode": payload.get("mode") or payload.get("gate_mode"),
             }
+        regime_audit = self._institutional_regime_audit(evidence)
+        evidence_pins = evidence.get("_decision_evidence_pins")
+        if isinstance(evidence_pins, dict):
+            regime_audit["evidence_id"] = evidence_pins.get("institutional_regime")
         return {
             "audit_version": "stage1_decision_audit_v1",
             "decision_outcome": status,
             "run_id": self.run_id,
-            "regime": self._institutional_regime_audit(evidence),
+            "regime": regime_audit,
             "realized_volatility_input": vrp.get("expected_realized_volatility_input"),
             "variance_risk_premium": {
                 "applicable": vrp.get("applicable"),
