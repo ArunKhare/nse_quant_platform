@@ -428,6 +428,97 @@ def _option_features_for_snapshot(
     return features
 
 
+def _option_snapshot_profile(
+    rows: list[tuple[Any, ...]],
+    *,
+    session: date,
+) -> dict[str, Any]:
+    """Describe expiry/side/IV/delta composition without changing eligibility."""
+    by_expiry: dict[date, list[tuple[Any, Any, Any]]] = defaultdict(list)
+    for expiry, option_type, iv, delta in rows:
+        if expiry is None:
+            continue
+        expiry_date = expiry.date() if isinstance(expiry, datetime) else expiry
+        by_expiry[expiry_date].append((option_type, iv, delta))
+
+    expiry_profiles: list[dict[str, Any]] = []
+    for expiry in sorted(by_expiry):
+        days = (expiry - session).days
+        expiry_rows = by_expiry[expiry]
+        side_rows = {
+            side: [
+                row for row in expiry_rows
+                if _normalise_option_type(row[0]) == side
+            ]
+            for side in ("CALL", "PUT")
+        }
+        valid_iv = [
+            float(iv)
+            for _side, iv, _delta in expiry_rows
+            if iv is not None and math.isfinite(float(iv)) and 0.001 <= float(iv) <= 5.0
+        ]
+        side_delta_ranges: dict[str, dict[str, float | None]] = {}
+        side_counts: dict[str, int] = {}
+        for side, side_values in side_rows.items():
+            deltas = [
+                float(delta)
+                for _kind, _iv, delta in side_values
+                if delta is not None and math.isfinite(float(delta)) and -1.0 <= float(delta) <= 1.0
+            ]
+            side_counts[side.lower()] = len(side_values)
+            side_delta_ranges[side.lower()] = {
+                "minimum": min(deltas) if deltas else None,
+                "maximum": max(deltas) if deltas else None,
+            }
+
+        call25 = any(
+            iv is not None and delta is not None
+            and math.isfinite(float(iv)) and 0.001 <= float(iv) <= 5.0
+            and math.isfinite(float(delta)) and abs(float(delta) - 0.25) <= 0.05
+            for _kind, iv, delta in side_rows["CALL"]
+        )
+        put25 = any(
+            iv is not None and delta is not None
+            and math.isfinite(float(iv)) and 0.001 <= float(iv) <= 5.0
+            and math.isfinite(float(delta)) and abs(float(delta) + 0.25) <= 0.05
+            for _kind, iv, delta in side_rows["PUT"]
+        )
+        atm_call = any(
+            iv is not None and delta is not None
+            and math.isfinite(float(iv)) and 0.001 <= float(iv) <= 5.0
+            and math.isfinite(float(delta)) and abs(float(delta) - 0.50) <= 0.10
+            for _kind, iv, delta in side_rows["CALL"]
+        )
+        atm_put = any(
+            iv is not None and delta is not None
+            and math.isfinite(float(iv)) and 0.001 <= float(iv) <= 5.0
+            and math.isfinite(float(delta)) and abs(float(delta) + 0.50) <= 0.10
+            for _kind, iv, delta in side_rows["PUT"]
+        )
+        expiry_profiles.append(
+            {
+                "expiry": expiry.isoformat(),
+                "days_to_expiry": days,
+                "rows": len(expiry_rows),
+                "calls": side_counts["call"],
+                "puts": side_counts["put"],
+                "valid_iv_rows": len(valid_iv),
+                "call_delta_range": side_delta_ranges["call"],
+                "put_delta_range": side_delta_ranges["put"],
+                "has_atm_call": atm_call,
+                "has_atm_put": atm_put,
+                "has_call25": call25,
+                "has_put25": put25,
+            }
+        )
+
+    return {
+        "rows": len(rows),
+        "expiry_count": len(expiry_profiles),
+        "expiry_profiles": expiry_profiles,
+    }
+
+
 def _load_option_features(
     conn: Any,
     *,
@@ -442,6 +533,7 @@ def _load_option_features(
             "snapshot_sessions": [],
             "rejection_reason_counts": {},
             "rejected_sessions": [],
+            "snapshot_profiles": [],
         }
 
     rows = conn.execute(
@@ -475,7 +567,10 @@ def _load_option_features(
     features: dict[date, dict[str, float]] = {}
     rejection_reason_counts: dict[str, int] = defaultdict(int)
     rejected_sessions: list[dict[str, Any]] = []
+    snapshot_profiles: list[dict[str, Any]] = []
     for session, (_ts, _run_id, snapshot_rows) in latest.items():
+        profile = _option_snapshot_profile(snapshot_rows, session=session)
+        snapshot_profiles.append({"session": session.isoformat(), **profile})
         calculated, missing = _option_features_with_diagnostics(snapshot_rows, session=session)
         if calculated is not None:
             features[session] = calculated
@@ -483,7 +578,7 @@ def _load_option_features(
             for reason in missing:
                 rejection_reason_counts[reason] += 1
             rejected_sessions.append(
-                {"session": session.isoformat(), "reasons": missing}
+                {"session": session.isoformat(), "reasons": missing, **profile}
             )
 
     summary = {
@@ -495,6 +590,7 @@ def _load_option_features(
         "snapshot_sessions": [session.isoformat() for session in sorted(latest)],
         "rejection_reason_counts": dict(sorted(rejection_reason_counts.items())),
         "rejected_sessions": sorted(rejected_sessions, key=lambda item: item["session"]),
+        "snapshot_profiles": sorted(snapshot_profiles, key=lambda item: item["session"]),
         "snapshot_selection": "latest run_id/ts per IST session; no fallback to older snapshots",
         "term_structure": "30D and 90D constant-maturity ATM IV interpolated in total-variance space; no extrapolation",
         "rr25": (
@@ -559,6 +655,23 @@ def export_calibration_dataset(args: argparse.Namespace) -> tuple[int, dict[str,
     output_rows: list[dict[str, Any]] = []
     missing_counts = {column: 0 for column in CSV_COLUMNS if column != "session"}
     candidate_sessions = [bar.trade_date for bar in bars]
+    candidate_session_set = set(candidate_sessions)
+    snapshot_session_set = {
+        date.fromisoformat(value)
+        for value in options_summary.get("snapshot_sessions", [])
+    }
+    candidate_sessions_with_snapshot = candidate_session_set & snapshot_session_set
+    candidate_sessions_with_complete_surface = candidate_session_set & set(options)
+    candidate_sessions_rejected = {
+        date.fromisoformat(item["session"])
+        for item in options_summary.get("rejected_sessions", [])
+    } & candidate_session_set
+    candidate_rejection_reason_counts: dict[str, int] = defaultdict(int)
+    for item in options_summary.get("rejected_sessions", []):
+        if date.fromisoformat(item["session"]) in candidate_session_set:
+            for reason in item["reasons"]:
+                candidate_rejection_reason_counts[reason] += 1
+
     for session in candidate_sessions:
         price_values = price.get(session)
         option_values = options.get(session)
@@ -635,14 +748,17 @@ def export_calibration_dataset(args: argparse.Namespace) -> tuple[int, dict[str,
             "india_vix_ivp_sessions": len(ivp),
             "option_surface_sessions": len(options),
             "option_sessions_without_snapshot": len(
-                set(candidate_sessions)
-                - {date.fromisoformat(value) for value in options_summary.get("snapshot_sessions", [])}
+                candidate_session_set - snapshot_session_set
             ),
-            "option_sessions_rejected_for_incomplete_surface": len(
-                options_summary.get("rejected_sessions", [])
+            "option_sessions_rejected_for_incomplete_surface": len(candidate_sessions_rejected),
+            "option_surface_rejection_reason_counts": dict(
+                sorted(candidate_rejection_reason_counts.items())
             ),
-            "option_surface_rejection_reason_counts": options_summary.get(
-                "rejection_reason_counts", {}
+            "candidate_sessions_with_snapshot": len(candidate_sessions_with_snapshot),
+            "candidate_sessions_with_complete_surface": len(candidate_sessions_with_complete_surface),
+            "candidate_sessions_with_incomplete_surface": len(candidate_sessions_rejected),
+            "snapshot_sessions_outside_candidate_window": len(
+                snapshot_session_set - candidate_session_set
             ),
             "realized_variance_sessions": len(realized_variance),
             "complete_session_upper_bound": min(
