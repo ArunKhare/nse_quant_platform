@@ -6,6 +6,7 @@ import pytest
 
 from scripts.export_institutional_regime_calibration import (
     _interpolate_total_variance,
+    _intraday_session_coverage,
     _load_india_vix,
     _option_features_for_snapshot,
     _option_features_with_diagnostics,
@@ -188,3 +189,58 @@ def test_option_snapshot_diagnostics_are_empty_for_complete_surface() -> None:
 
     assert features is not None
     assert missing == []
+
+
+def test_intraday_session_coverage_reports_counts_and_rejection_reason() -> None:
+    coverage = _intraday_session_coverage(
+        {date(2025, 11, 27): 70, date(2025, 11, 28): 300},
+        minimum_observations=300,
+    )
+
+    assert coverage == [
+        {
+            "session": "2025-11-27",
+            "observations": 70,
+            "minimum_observations": 300,
+            "eligible": False,
+            "rejection_reason": "below_minimum_observations",
+        },
+        {
+            "session": "2025-11-28",
+            "observations": 300,
+            "minimum_observations": 300,
+            "eligible": True,
+            "rejection_reason": None,
+        },
+    ]
+
+
+def test_option_snapshot_profile_exposes_missing_upper_90d_atm_bracket() -> None:
+    session = date(2026, 11, 27)
+    rows = []
+    for days in (4, 11, 18, 25, 32, 59, 88):
+        expiry = date.fromordinal(session.toordinal() + days)
+        rows.extend(
+            [
+                (expiry, "CE", 0.20 + days / 1000, 0.50),
+                (expiry, "PE", 0.201 + days / 1000, -0.50),
+            ]
+        )
+    # The later expiry exists, but its deltas do not satisfy the ATM contract.
+    expiry_123 = date.fromordinal(session.toordinal() + 123)
+    rows.extend(
+        [
+            (expiry_123, "CE", 0.30, 0.32),
+            (expiry_123, "PE", 0.31, -0.60),
+        ]
+    )
+
+    profile = _option_snapshot_profile(rows, session=session)
+    bracket = profile["interpolation_brackets"]["iv90_atm"]
+
+    assert bracket == {
+        "target_days": 90,
+        "status": "missing_upper_bracket",
+        "lower": {"days_to_expiry": 88, "iv": pytest.approx(0.2895)},
+        "upper": None,
+    }
