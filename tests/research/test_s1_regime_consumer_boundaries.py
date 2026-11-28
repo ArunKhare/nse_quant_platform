@@ -69,7 +69,7 @@ def test_static_risk_fallback_rejects_canonical_regime_outside_profile_allowlist
         get_effective_risk_settings=lambda _strategy_id: None,
     )
     loop = object.__new__(DecisionLoop)
-    loop.settings = settings
+    cast(Any, loop).settings = settings
 
     limits = loop._apply_regime_limits(
         current_regime=OTHER_CANONICAL,
@@ -83,7 +83,7 @@ def test_static_risk_fallback_rejects_canonical_regime_outside_profile_allowlist
 def test_decision_audit_retains_exact_institutional_evidence_pin() -> None:
     loop = object.__new__(DecisionLoop)
     loop.run_id = "test-run"
-    loop.settings = SimpleNamespace(
+    cast(Any, loop).settings = SimpleNamespace(
         safety=SimpleNamespace(paper_trading=True, dry_run=True)
     )
     audit = loop._decision_audit(
