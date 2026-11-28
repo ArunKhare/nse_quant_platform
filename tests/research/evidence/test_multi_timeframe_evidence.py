@@ -167,12 +167,16 @@ def test_persisting_evidence_updates_the_existing_result(test_store):
         "symbol": "NIFTY",
         "plugin": "multi_timeframe_trend",
     }
-    test_store.write_decision_evidence(**key, evidence={"available": True, "version": 1})
-    test_store.write_decision_evidence(**key, evidence={"available": False, "version": 2})
+    first_id = test_store.write_decision_evidence(
+        **key, evidence={"available": True, "version": 1}
+    )
+    second_id = test_store.write_decision_evidence(
+        **key, evidence={"available": False, "version": 2}
+    )
 
     rows = test_store.conn.execute(
         """
-        SELECT available, payload_json
+        SELECT evidence_id, available, payload_json
         FROM decision_evidence
         WHERE run_id = ? AND ts = ? AND symbol = ? AND plugin = ?
         """,
@@ -180,7 +184,8 @@ def test_persisting_evidence_updates_the_existing_result(test_store):
     ).fetchall()
 
     assert len(rows) == 1
-    available, payload_json = rows[0]
+    evidence_id, available, payload_json = rows[0]
+    assert first_id == second_id == evidence_id
     assert available is False
     assert json.loads(payload_json) == {"available": False, "version": 2}
 
