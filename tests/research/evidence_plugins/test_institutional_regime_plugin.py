@@ -18,6 +18,7 @@ from nse_quant.persistence.duckdb_store import DuckDBStore
 from nse_quant.research.evidence_plugins.base import DecisionContext
 from nse_quant.research.evidence_plugins.institutional_regime import (
     InstitutionalRegimePlugin,
+    _canonical_component_state,
 )
 from nse_quant.research.evidence_plugins.registry import (
     EvidencePluginRunner,
