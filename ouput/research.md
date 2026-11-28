@@ -811,7 +811,7 @@ Implemented the S1 follow-up corrections on `feat/medallion-feature-store`.
 
 ### Eligibility and risk boundaries
 
-- Institutional eligibility now requires all of the following on the same evidence payload: `available is True`, `complete is True`, an exact registry-v2 label, `thresholds_provisional is False`, and `decision_eligibility_asserted is False`. Missing approval metadata is not interpreted as approval.
+- The active institutional-regime plugin now emits explicit top-level `thresholds_provisional: true` and `decision_eligibility_asserted: false` metadata for both available and unavailable results, reflecting the observation-only v5 price-action thresholds. Institutional eligibility requires all of the following on the same evidence payload: `available is True`, `complete is True`, an exact registry-v2 label, `thresholds_provisional is False`, and `decision_eligibility_asserted is False`. Missing approval metadata is not interpreted as approval.
 - The decision audit retains the individual readiness fields and a separate `regime_label_eligible` result. An exact canonical string alone is not sufficient.
 - Static configured risk fallback now independently checks the strategy profile's configured allowlist and blocklist before applying any configured limits. A canonical-but-disallowed label receives zero limits and a rejection reason.
 - The lower-level risk context also requires explicit false values for provisional thresholds and decision-eligibility assertion; absent fields fail closed.
@@ -847,11 +847,11 @@ Implemented the S1 follow-up corrections on `feat/medallion-feature-store`.
 These changes are committed remotely, but this environment has not executed the repository's Python test suite, Ruff, mypy or Windows operator checks. S1 consumer QA therefore remains pending until the commands below pass on the project checkout:
 
 ```powershell
-uv run pytest -q tests/research/test_s1_regime_consumer_boundaries.py tests/research/test_trade_outcomes_canonical_evidence.py tests/research/test_regime_policy.py tests/research/test_trade_outcomes.py tests/research/test_active_policy_export.py tests/ui/test_dashboard_regime_vocabulary.py
+uv run pytest -q tests/research/test_s1_regime_consumer_boundaries.py tests/research/test_trade_outcomes_canonical_evidence.py tests/research/test_regime_policy.py tests/research/test_trade_outcomes.py tests/research/test_active_policy_export.py tests/research/evidence_plugins/test_institutional_regime_plugin.py tests/research/evidence/test_multi_timeframe_evidence.py tests/ui/test_dashboard_regime_vocabulary.py
 
-uv run ruff check src/nse_quant/strategy/canonical_risk_context.py src/nse_quant/strategy/decision_loop.py src/nse_quant/research/trade_outcomes.py src/nse_quant/research/regime_policy.py src/nse_quant/research/regime_policy_evaluation.py scripts/export_active_policy.py src/nse_quant/ui/dash_app.py tests/research/test_s1_regime_consumer_boundaries.py tests/research/test_trade_outcomes_canonical_evidence.py tests/research/test_regime_policy.py tests/research/test_active_policy_export.py tests/ui/test_dashboard_regime_vocabulary.py
+uv run ruff check src/nse_quant/strategy/canonical_risk_context.py src/nse_quant/strategy/decision_loop.py src/nse_quant/persistence/duckdb_store.py src/nse_quant/research/evidence_plugins/institutional_regime.py src/nse_quant/research/trade_outcomes.py src/nse_quant/research/regime_policy.py src/nse_quant/research/regime_policy_evaluation.py scripts/export_active_policy.py src/nse_quant/ui/dash_app.py tests/research/test_s1_regime_consumer_boundaries.py tests/research/test_trade_outcomes_canonical_evidence.py tests/research/test_regime_policy.py tests/research/test_active_policy_export.py tests/research/evidence_plugins/test_institutional_regime_plugin.py tests/research/evidence/test_multi_timeframe_evidence.py tests/ui/test_dashboard_regime_vocabulary.py
 
-uv run mypy src/nse_quant/strategy/canonical_risk_context.py src/nse_quant/strategy/decision_loop.py src/nse_quant/research/trade_outcomes.py src/nse_quant/research/regime_policy.py src/nse_quant/research/regime_policy_evaluation.py scripts/export_active_policy.py src/nse_quant/ui/dash_app.py
+uv run mypy src/nse_quant/strategy/canonical_risk_context.py src/nse_quant/strategy/decision_loop.py src/nse_quant/persistence/duckdb_store.py src/nse_quant/research/evidence_plugins/institutional_regime.py src/nse_quant/research/trade_outcomes.py src/nse_quant/research/regime_policy.py src/nse_quant/research/regime_policy_evaluation.py scripts/export_active_policy.py src/nse_quant/ui/dash_app.py
 
 git diff --check
 ```
