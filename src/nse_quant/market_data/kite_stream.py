@@ -31,6 +31,42 @@ def _stamp_snapshot_batch(snapshots: list[Any], captured_at: datetime) -> None:
         snapshot.ts = captured_at
 
 
+def _refresh_snapshot_quotes(
+    snapshot: Any,
+    ticks: dict[int, dict[str, Any]],
+    *,
+    spot_token: int,
+    now: datetime,
+    rate: float,
+) -> None:
+    """Refresh a chain from the latest WebSocket marks before calculating IV/Greeks."""
+    spot_tick = ticks.get(spot_token)
+    if spot_tick is not None and spot_tick.get("ltp") is not None:
+        snapshot.spot = float(spot_tick["ltp"])
+
+    for quote in snapshot.quotes:
+        tick = ticks.get(quote.instrument_token)
+        if tick is not None:
+            for field in ("ltp", "bid", "ask", "volume", "oi"):
+                if field in tick:
+                    setattr(quote, field, tick[field])
+
+        # Never carry a previous cycle's analytics into a cycle whose current
+        # price cannot support a fresh implied-volatility calculation.
+        quote.iv = None
+        quote.delta = None
+        quote.gamma = None
+        quote.vega = None
+        quote.theta = None
+        enrich_quote(
+            quote=quote,
+            spot=snapshot.spot,
+            expiry=snapshot.expiry,
+            now=now,
+            rate=rate,
+        )
+
+
 def atomic_write(
     path: Path,
     payload: dict[str, Any],
@@ -72,7 +108,11 @@ def main() -> int:
     provider = KiteMarketDataProvider(kite)
 
     snapshots = provider.get_chain_snapshots()
-    tokens = sorted({quote.instrument_token for snapshot in snapshots for quote in snapshot.quotes})
+    spot_token = provider.resolve_spot_instrument_token(provider.underlying)
+    tokens = sorted(
+        {quote.instrument_token for snapshot in snapshots for quote in snapshot.quotes}
+        | {spot_token}
+    )
     state: dict[int, dict[str, Any]] = {}
     lock = threading.Lock()
     connected = threading.Event()
@@ -113,17 +153,13 @@ def main() -> int:
             _stamp_snapshot_batch(snapshots, capture_ts)
             now = capture_ts
             for snapshot in snapshots:
-                print(snapshot)
-
-                for quote in snapshot.quotes:
-                    enrich_quote(
-                        quote=quote,
-                        spot=snapshot.spot,
-                        expiry=snapshot.expiry,
-                        now=now,
-                        rate=settings.analytics.risk_free_rate,
-                    )
-
+                _refresh_snapshot_quotes(
+                    snapshot,
+                    current,
+                    spot_token=spot_token,
+                    now=now,
+                    rate=settings.analytics.risk_free_rate,
+                )
                 store.write_option_stream(
                     run_id,
                     snapshot,
