@@ -95,7 +95,6 @@ def load_trade_outcomes(
             evidence_status = "NONCANONICAL_DECISION_TIME_REGIME"
         else:
             evidence_status = "CANONICAL_DECISION_TIME_EVIDENCE"
-        canonical = evidence_status == "CANONICAL_DECISION_TIME_EVIDENCE"
         outcomes.append(
             TradeOutcome(
                 proposal_id=str(proposal.get("proposal_id")),
