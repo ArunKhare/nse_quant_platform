@@ -927,3 +927,22 @@ composite-evidence tranche, not this new bundle workflow.
 
 See `docs/INSTITUTIONAL_REGIME_EVIDENCE_BUNDLE.md` for the invocation and focused
 acceptance commands.
+
+
+### Persistence path correction — 2026-11-28
+
+Repository inspection found that the operational decision loop constructs
+`DuckDBStore()`, whose path is resolved from `get_settings().storage.db_path`.
+The current `config/settings.yaml` value is `data/nse_quant.duckdb`.
+
+The `decision_evidence` table is created by
+`src/nse_quant/persistence/duckdb_store.py` in that same platform database.
+Its schema includes `evidence_id`, `run_id`, `ts`, `symbol`, `plugin`,
+`available` and `payload_json`. `write_decision_evidence` persists the
+institutional-regime payload there and returns the stable evidence-row ID.
+
+The previous example path `data/operational/decisions.duckdb` was incorrect:
+no such database path is configured by the current settings. The evidence-bundle
+CLI now resolves `storage.db_path` by default, accepts `--config` for a
+different settings YAML, and retains `--db-path` as an explicit override.
+The database is opened read-only by the bundle builder.

@@ -13,6 +13,7 @@ from pathlib import Path
 
 import duckdb
 
+from nse_quant.core.settings import get_settings
 from nse_quant.research.institutional_regime_evidence import (
     build_institutional_regime_evidence_bundle,
     load_institutional_regime_observations,
@@ -34,7 +35,16 @@ def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Assemble a research-only institutional regime evidence bundle."
     )
-    parser.add_argument("--db-path", required=True, type=Path, help="Quiescent decisions DuckDB or immutable copy.")
+    parser.add_argument(
+        "--db-path",
+        type=Path,
+        help="Override configured storage.db_path; use only a quiescent database or immutable copy.",
+    )
+    parser.add_argument(
+        "--config",
+        type=Path,
+        help="Optional settings YAML; defaults to config/settings.yaml.",
+    )
     parser.add_argument("--symbol", default="NIFTY")
     parser.add_argument("--start", required=True, type=_timestamp, help="Inclusive ISO-8601 UTC timestamp.")
     parser.add_argument("--end", required=True, type=_timestamp, help="Exclusive ISO-8601 UTC timestamp.")
@@ -45,12 +55,17 @@ def _parser() -> argparse.ArgumentParser:
 
 def main() -> int:
     args = _parser().parse_args()
-    if not args.db_path.is_file():
-        raise FileNotFoundError(args.db_path)
+    settings = get_settings(args.config)
+    db_path = args.db_path or settings.storage.db_path
+    if not db_path.is_file():
+        raise FileNotFoundError(
+            f"Decision database not found: {db_path}. "
+            "Check storage.db_path in the selected settings YAML or pass --db-path."
+        )
     if args.end <= args.start:
         raise ValueError("--end must be later than --start")
 
-    connection = duckdb.connect(str(args.db_path), read_only=True)
+    connection = duckdb.connect(str(db_path), read_only=True)
     try:
         connection.execute("SET TimeZone = 'UTC'")
         observations = load_institutional_regime_observations(
@@ -74,6 +89,7 @@ def main() -> int:
         json_path=args.output,
         markdown_path=markdown_path,
     )
+    print(f"database={db_path}")
     print(f"bundle_id={bundle['bundle_id']}")
     print(f"evidence_records={bundle['summary']['observation_count']}")
     print(f"complete_regimes={bundle['summary']['canonical_label_count']}")

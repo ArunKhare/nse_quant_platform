@@ -43,13 +43,20 @@ Example:
 
 ```powershell
 uv run python scripts/build_institutional_regime_evidence_bundle.py `
-  --db-path data/operational/decisions.duckdb `
   --symbol NIFTY `
   --start 2026-11-01T00:00:00Z `
   --end 2026-11-29T00:00:00Z `
   --output data/research/institutional_regime_nifty_2026-11.json
 ```
 
+The command resolves its database from `storage.db_path` in the selected settings
+(default: `config/settings.yaml`). The current repository default is
+`data/nse_quant.duckdb`; the regime plugin writes `decision_evidence` into this
+shared platform DuckDB through `DuckDBStore`. There is no configured
+`data/operational/decisions.duckdb` in the current settings.
+
+Use `--config path/to/settings.yaml` to select another settings file, or
+`--db-path path/to/database.duckdb` to override the configured database explicitly.
 The time window is half-open: `[start, end)`. Both timestamps must include an
 explicit UTC offset. The command selects only `plugin='institutional_regime'`
 for the requested symbol and period.
