@@ -108,7 +108,8 @@ def _bronze(tmp_path: Path, layout_id: str, maximum_status: str | None = None) -
             "fixture",
             layout_id,
             receipt["snapshot_id"],
-            receipt["capture_event_id"],            receipt["envelope_hash"],
+            receipt["capture_event_id"],
+            receipt["envelope_hash"],
             receipt["recording_fingerprint"],
         )
     finally:
@@ -277,7 +278,8 @@ def test_original_recording_faults(tmp_path: Path, kind: str) -> None:
         elif kind == "link":
             writer.execute(f"DELETE FROM {common.name(writer, 'silver', 'policy_attempts')}")
         elif kind == "audit":
-            events = common.name(writer, "medallion_audit", "job_events")            writer.execute(f"DELETE FROM {events} WHERE state='SUCCEEDED'")
+            events = common.name(writer, "medallion_audit", "job_events")
+            writer.execute(f"DELETE FROM {events} WHERE state='SUCCEEDED'")
         else:
             writer.execute(f"UPDATE {sets} SET recorded_at=recorded_at+INTERVAL '1 second'")
             writer.execute(f"UPDATE {table} SET recorded_at=recorded_at+INTERVAL '1 second'")
@@ -436,7 +438,8 @@ def test_final_audit_failure_leaves_original_unreadable(tmp_path: Path, monkeypa
         revision = row[0]
         with pytest.raises(codec.Rejected, match="POLICY_SILVER_FIRST_WRITE_ORIGINAL_OBLIGATION"):
             silver.persist_regime_policy_silver(
-                bronze,                target,
+                bronze,
+                target,
                 pins=pins,
                 expected_context_sha256=codec.sha(context),
                 actor_id="synthetic",

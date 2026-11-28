@@ -41,7 +41,14 @@ def _source(path: Path) -> None:
             """
         )
         local = AT.astimezone(timezone(timedelta(hours=5, minutes=30)))
-        values = ["NIFTY", "unreviewed-trend", "HIGH", "opaque-iv", "arbitrary-regime", '{"clock":"2026-01-01T00:00:00+00:00"}']
+        values = [
+            "NIFTY",
+            "unreviewed-trend",
+            "HIGH",
+            "opaque-iv",
+            "arbitrary-regime",
+            '{"clock":"2026-01-01T00:00:00+00:00"}',
+        ]
         # Retained legacy writer semantics: INSERT OR REPLACE on (symbol, ts).
         legacy.execute(
             "INSERT OR REPLACE INTO market_regimes VALUES (?,?,?,?,?,?,?)",
@@ -57,9 +64,7 @@ def _source(path: Path) -> None:
         )
         # Opaque nested-key boundary through retained SQL, not authenticated policy evidence.
         legacy.execute("UPDATE market_regimes SET features=? WHERE ts=?", [OPAQUE, AT])
-        legacy.execute(
-            "INSERT INTO market_regimes (symbol,ts) VALUES (?,?)", ["NULL", AT + timedelta(seconds=2)]
-        )
+        legacy.execute("INSERT INTO market_regimes (symbol,ts) VALUES (?,?)", ["NULL", AT + timedelta(seconds=2)])
     finally:
         legacy.close()
 
@@ -112,10 +117,7 @@ def test_actual_writer_native_producer_reader_and_every_field(tmp_path: Path) ->
         rows = source.execute(f"SELECT {names} FROM {table} ORDER BY symbol,ts").fetchall()
         for ordinal, (row, raw) in enumerate(zip(rows, records, strict=True)):
             doc = codec.parse(raw, codec.MAX_RECORD)
-            expected = {
-                n: codec.encode_cell(v, kind)
-                for v, (n, kind) in zip(row, codec.SCHEMA, strict=True)
-            }
+            expected = {n: codec.encode_cell(v, kind) for v, (n, kind) in zip(row, codec.SCHEMA, strict=True)}
             assert doc["stored_fields"] == expected
             assert doc["source_ordinal"] == ordinal
             assert doc["features_interpreted"] is False
@@ -128,10 +130,7 @@ def test_actual_writer_native_producer_reader_and_every_field(tmp_path: Path) ->
         assert first["features"] == OPAQUE
         assert first["ts"] == AT.isoformat()
         last = codec.parse(records[-1], codec.MAX_RECORD)["stored_fields"]
-        assert all(
-            last[n] is None
-            for n in ("trend_regime", "volatility_regime", "iv_regime", "regime", "features")
-        )
+        assert all(last[n] is None for n in ("trend_regime", "volatility_regime", "iv_regime", "regime", "features"))
     finally:
         bronze.close()
         source.close()
@@ -235,10 +234,7 @@ def test_schema_and_key_boundaries(tmp_path: Path, kind: str) -> None:
         if kind == "view":
             writer.execute(f"CREATE VIEW {table} AS SELECT 1 AS wrong")
         else:
-            columns = ",".join(
-                f'"{n}" {"TIMESTAMP" if n == "ts" and kind == "naive" else k}'
-                for n, k in codec.SCHEMA
-            )
+            columns = ",".join(f'"{n}" {"TIMESTAMP" if n == "ts" and kind == "naive" else k}' for n, k in codec.SCHEMA)
             writer.execute(f"CREATE TABLE {table} ({columns})")
             if kind != "empty":
                 writer.execute(
@@ -248,9 +244,7 @@ def test_schema_and_key_boundaries(tmp_path: Path, kind: str) -> None:
             if kind == "duplicate":
                 writer.execute(f"INSERT INTO {table} SELECT * FROM {table}")
             elif kind == "overflow":
-                writer.execute(
-                    f"INSERT INTO {table} SELECT t.* FROM {table} t CROSS JOIN range(1000)"
-                )
+                writer.execute(f"INSERT INTO {table} SELECT t.* FROM {table} t CROSS JOIN range(1000)")
     finally:
         writer.close()
     reader = duckdb.connect(str(path), read_only=True)

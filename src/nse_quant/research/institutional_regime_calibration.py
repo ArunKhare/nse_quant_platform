@@ -4,6 +4,7 @@ The report freezes the provisional rules, measures their training-window
 distributions, and evaluates state frequencies and HAR-RV errors on later
 sessions. It never selects replacement thresholds or grants decision authority.
 """
+
 from __future__ import annotations
 
 import math
@@ -18,8 +19,8 @@ from nse_quant.research.har_realized_volatility import (
     forecast_har_rv_30d,
 )
 from nse_quant.research.institutional_regime_price_action_v5 import (
-    _Metrics,
     _classify,
+    _Metrics,
 )
 
 CALIBRATION_REPORT_VERSION = "institutional_regime_walk_forward_calibration_v1"
@@ -91,9 +92,7 @@ def _distribution(values: list[str]) -> dict[str, Any]:
     return {
         "count": total,
         "counts": dict(sorted(counts.items())),
-        "fractions": {
-            key: count / total for key, count in sorted(counts.items())
-        } if total else {},
+        "fractions": {key: count / total for key, count in sorted(counts.items())} if total else {},
     }
 
 
@@ -137,10 +136,21 @@ def _validate_observations(rows: list[CalibrationObservation]) -> str | None:
         return "sessions_must_be_unique_and_ordered"
     for row in rows:
         values = (
-            row.ivp, row.iv30_minus_iv90, row.rr25, row.adx14, row.plus_di14,
-            row.minus_di14, row.er20, row.chop14, row.atr14,
-            row.atr_percentile, row.bandwidth_percentile, row.range_position,
-            row.change20, row.sma20_slope, row.realized_variance,
+            row.ivp,
+            row.iv30_minus_iv90,
+            row.rr25,
+            row.adx14,
+            row.plus_di14,
+            row.minus_di14,
+            row.er20,
+            row.chop14,
+            row.atr14,
+            row.atr_percentile,
+            row.bandwidth_percentile,
+            row.range_position,
+            row.change20,
+            row.sma20_slope,
+            row.realized_variance,
         )
         if not all(_finite(value) for value in values):
             return "non_finite_calibration_input"
@@ -217,7 +227,8 @@ def _fold_report(
         iv_previous = _iv_state(row.ivp, iv_previous)
         iv_states.append(iv_previous)
         term_states.append(
-            "CONTANGO" if row.iv30_minus_iv90 < -TERM_FLAT_BAND
+            "CONTANGO"
+            if row.iv30_minus_iv90 < -TERM_FLAT_BAND
             else ("BACKWARDATION" if row.iv30_minus_iv90 > TERM_FLAT_BAND else "FLAT_TERM")
         )
         point_in_time_rr25 = [item.rr25 for item in train + test[:index]][-252:]
@@ -258,9 +269,7 @@ def _fold_report(
     test_rv = [row.realized_variance for row in test]
     har_calibration = calibrate_har_rv_forecast_errors(train_rv)
     # Calibration sufficiency is diagnostic here; this report cannot enable a gate.
-    har_calibration["calibration_sample_sufficient_for_review"] = bool(
-        har_calibration.get("gate_margin_eligible")
-    )
+    har_calibration["calibration_sample_sufficient_for_review"] = bool(har_calibration.get("gate_margin_eligible"))
     har_calibration["gate_margin_eligible"] = False
     har_calibration["diagnostic_only"] = True
     har_forecast, har_details = forecast_har_rv_30d(train_rv)
@@ -274,22 +283,43 @@ def _fold_report(
     if har_forecast is not None and len(test_rv) >= 21:
         forecast_variance = har_forecast * har_forecast
         realized_variance = sum(test_rv[:21]) / 21 * 252
-        har_oos.update({
-            "available": True,
-            "forecast_annualized_volatility": har_forecast,
-            "forecast_annualized_variance": forecast_variance,
-            "realized_annualized_variance": realized_variance,
-            "absolute_annualized_variance_error": abs(realized_variance - forecast_variance),
-        })
+        har_oos.update(
+            {
+                "available": True,
+                "forecast_annualized_volatility": har_forecast,
+                "forecast_annualized_variance": forecast_variance,
+                "realized_annualized_variance": realized_variance,
+                "absolute_annualized_variance_error": abs(realized_variance - forecast_variance),
+            }
+        )
 
     return {
         "fold_id": fold_id,
-        "train": {"start": train[0].session.isoformat(), "end": train[-1].session.isoformat(), "sessions": len(train)},
-        "test": {"start": test[0].session.isoformat(), "end": test[-1].session.isoformat(), "sessions": len(test)},
+        "train": {
+            "start": train[0].session.isoformat(),
+            "end": train[-1].session.isoformat(),
+            "sessions": len(train),
+        },
+        "test": {
+            "start": test[0].session.isoformat(),
+            "end": test[-1].session.isoformat(),
+            "sessions": len(test),
+        },
         "threshold_stability": {
-            "ivp": {**_quantiles(train_ivp), "provisional_entry": IV_HIGH_ENTRY, "provisional_exit": IV_HIGH_EXIT},
-            "iv30_minus_iv90": {**_quantiles(train_term), "provisional_flat_band": TERM_FLAT_BAND},
-            "rr25": {**_quantiles(train_rr25), "oos_high_put_cutoff": _quantiles(oos_skew_p10), "oos_hysteresis_cutoff": _quantiles(oos_skew_p50)},
+            "ivp": {
+                **_quantiles(train_ivp),
+                "provisional_entry": IV_HIGH_ENTRY,
+                "provisional_exit": IV_HIGH_EXIT,
+            },
+            "iv30_minus_iv90": {
+                **_quantiles(train_term),
+                "provisional_flat_band": TERM_FLAT_BAND,
+            },
+            "rr25": {
+                **_quantiles(train_rr25),
+                "oos_high_put_cutoff": _quantiles(oos_skew_p10),
+                "oos_hysteresis_cutoff": _quantiles(oos_skew_p50),
+            },
             "price_action_diagnostics": {key: _quantiles(values) for key, values in train_price.items()},
             "price_action_provisional_thresholds": PRICE_ACTION_THRESHOLDS,
         },
@@ -363,11 +393,13 @@ def build_institutional_regime_calibration_report(
         train_start = start
         test_start = start + training_sessions
         test_end = test_start + test_sessions
-        folds.append(_fold_report(
-            observations[train_start:test_start],
-            observations[test_start:test_end],
-            fold_id=len(folds),
-        ))
+        folds.append(
+            _fold_report(
+                observations[train_start:test_start],
+                observations[test_start:test_end],
+                fold_id=len(folds),
+            )
+        )
         start += step_sessions
 
     if not folds:
@@ -381,33 +413,49 @@ def build_institutional_regime_calibration_report(
         if fold["har_rv"]["out_of_sample_forecast"]["available"]
     ]
     report["folds"] = folds
-    report["sample"].update({
-        "first_session": observations[0].session.isoformat(),
-        "last_session": observations[-1].session.isoformat(),
-        "fold_count": len(folds),
-    })
+    report["sample"].update(
+        {
+            "first_session": observations[0].session.isoformat(),
+            "last_session": observations[-1].session.isoformat(),
+            "fold_count": len(folds),
+        }
+    )
     report["summary"] = {
-        "iv_state": _distribution([
-            state for fold in folds for state, count in fold["out_of_sample_state_distributions"]["iv_state"]["counts"].items()
-            for _ in range(count)
-        ]),
-        "term_structure": _distribution([
-            state for fold in folds for state, count in fold["out_of_sample_state_distributions"]["term_structure"]["counts"].items()
-            for _ in range(count)
-        ]),
-        "skew": _distribution([
-            state for fold in folds for state, count in fold["out_of_sample_state_distributions"]["skew"]["counts"].items()
-            for _ in range(count)
-        ]),
-        "price_action": _distribution([
-            state for fold in folds for state, count in fold["out_of_sample_state_distributions"]["price_action"]["counts"].items()
-            for _ in range(count)
-        ]),
+        "iv_state": _distribution(
+            [
+                state
+                for fold in folds
+                for state, count in fold["out_of_sample_state_distributions"]["iv_state"]["counts"].items()
+                for _ in range(count)
+            ]
+        ),
+        "term_structure": _distribution(
+            [
+                state
+                for fold in folds
+                for state, count in fold["out_of_sample_state_distributions"]["term_structure"]["counts"].items()
+                for _ in range(count)
+            ]
+        ),
+        "skew": _distribution(
+            [
+                state
+                for fold in folds
+                for state, count in fold["out_of_sample_state_distributions"]["skew"]["counts"].items()
+                for _ in range(count)
+            ]
+        ),
+        "price_action": _distribution(
+            [
+                state
+                for fold in folds
+                for state, count in fold["out_of_sample_state_distributions"]["price_action"]["counts"].items()
+                for _ in range(count)
+            ]
+        ),
         "har_rv_oos_forecast_error": {
             "available_folds": len(har_errors),
-            "mean_absolute_annualized_variance_error": (
-                sum(har_errors) / len(har_errors) if har_errors else None
-            ),
+            "mean_absolute_annualized_variance_error": (sum(har_errors) / len(har_errors) if har_errors else None),
         },
     }
     report["status"] = "DIAGNOSTIC_REPORT_COMPLETE"
@@ -440,24 +488,29 @@ def render_calibration_report_markdown(report: dict[str, Any]) -> str:
         "",
     ]
     for fold in report.get("folds", []):
-        lines.extend([
-            f"### Fold {fold['fold_id']}",
+        lines.extend(
+            [
+                f"### Fold {fold['fold_id']}",
+                "",
+                f"- Train: {fold['train']}",
+                f"- Test: {fold['test']}",
+                f"- Threshold stability: `{fold['threshold_stability']}`",
+                f"- Out-of-sample state distributions: `{fold['out_of_sample_state_distributions']}`",
+                f"- HAR-RV: `{fold['har_rv']}`",
+                "",
+            ]
+        )
+    lines.extend(
+        [
+            "## Governance",
             "",
-            f"- Train: {fold['train']}",
-            f"- Test: {fold['test']}",
-            f"- Threshold stability: `{fold['threshold_stability']}`",
-            f"- Out-of-sample state distributions: `{fold['out_of_sample_state_distributions']}`",
-            f"- HAR-RV: `{fold['har_rv']}`",
+            "- Provisional thresholds are reported, not optimized or replaced.",
+            "- All state distributions and forecast errors are out of sample.",
+            "- HAR-RV training error calibration is computed only inside each training window.",
+            "- No result in this report grants publication, paper-trading, decision, or execution authority.",
+            "- Threshold promotion requires a separately reviewed decision and a versioned \
+                classifier/configuration change.",
             "",
-        ])
-    lines.extend([
-        "## Governance",
-        "",
-        "- Provisional thresholds are reported, not optimized or replaced.",
-        "- All state distributions and forecast errors are out of sample.",
-        "- HAR-RV training error calibration is computed only inside each training window.",
-        "- No result in this report grants publication, paper-trading, decision, or execution authority.",
-        "- Threshold promotion requires a separately reviewed decision and a versioned classifier/configuration change.",
-        "",
-    ])
+        ]
+    )
     return "\n".join(lines)

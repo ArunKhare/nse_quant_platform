@@ -36,9 +36,7 @@ def observations(count: int = 486) -> list[CalibrationObservation]:
                 range_position=0.8,
                 change20=10.0,
                 sma20_slope=0.5,
-                realized_variance=0.0001 * (
-                    1.0 + 0.15 * math.sin(index / 7) + 0.08 * math.cos(index / 19)
-                ),
+                realized_variance=0.0001 * (1.0 + 0.15 * math.sin(index / 7) + 0.08 * math.cos(index / 19)),
             )
         )
         session += timedelta(days=1)
@@ -64,7 +62,10 @@ def test_walk_forward_report_keeps_thresholds_diagnostic_only() -> None:
     assert report["folds"][0]["out_of_sample_state_distributions"]["price_action"]["counts"] == {
         "STRONG_BULL_TREND": 63
     }
-    assert report["folds"][0]["out_of_sample_state_distributions"]["price_action"]["confidence_quantiles"]["p50"] is not None
+    assert (
+        report["folds"][0]["out_of_sample_state_distributions"]["price_action"]["confidence_quantiles"]["p50"]
+        is not None
+    )
     assert "absolute_annualized_variance_error" in report["folds"][0]["har_rv"]["out_of_sample_forecast"]
     assert report["folds"][0]["har_rv"]["training_error_calibration"]["gate_margin_eligible"] is False
     assert report["folds"][0]["har_rv"]["training_error_calibration"]["diagnostic_only"] is True
@@ -91,9 +92,7 @@ def test_invalid_order_or_non_nifty_underlying_fails_closed() -> None:
     rows = observations()
     rows[1] = replace(rows[1], session=rows[0].session)
     unordered = build_institutional_regime_calibration_report(rows)
-    other_underlying = build_institutional_regime_calibration_report(
-        observations(), underlying="BANKNIFTY"
-    )
+    other_underlying = build_institutional_regime_calibration_report(observations(), underlying="BANKNIFTY")
 
     assert unordered["reason"] == "sessions_must_be_unique_and_ordered"
     assert other_underlying["reason"] == "calibration_underlying_must_be_NIFTY"

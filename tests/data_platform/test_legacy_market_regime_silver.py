@@ -47,7 +47,15 @@ def _bronze(tmp_path: Path) -> tuple[Path, silver.RegimeBronzePins]:
         local = AT.astimezone(timezone(timedelta(hours=5, minutes=30)))
         legacy.execute(
             "INSERT INTO market_regimes VALUES (?,?,?,?,?,?,?)",
-            ["NIFTY", local, "unknown-trend", "opaque-vol", "opaque-iv", "custom-label", '{"clock":"2026-01-01T00:00:00+00:00"}'],
+            [
+                "NIFTY",
+                local,
+                "unknown-trend",
+                "opaque-vol",
+                "opaque-iv",
+                "custom-label",
+                '{"clock":"2026-01-01T00:00:00+00:00"}',
+            ],
         )
         # Same instant in a different offset replaces the composite-key row.
         legacy.execute(
@@ -138,10 +146,7 @@ def test_actual_native_chain_reconciles_every_field_and_opaque_json(tmp_path: Pa
         assert fields["NULL"]["features"] is None
         assert fields["JSONNULL"]["features"] == "null"
         assert fields["EMPTY"]["features"] == "{}"
-        assert all(
-            fields["NULL"][n] is None
-            for n in ("trend_regime", "volatility_regime", "iv_regime", "regime")
-        )
+        assert all(fields["NULL"][n] is None for n in ("trend_regime", "volatility_regime", "iv_regime", "regime"))
         columns = ",".join('"' + n + '"' for n, _ in codec.SCHEMA)
         table = common.name(reader, "silver", "regime_observations")
         stored = reader.execute(f"SELECT {columns} FROM {table} ORDER BY ordinal").fetchall()
@@ -175,9 +180,7 @@ def test_all_seven_materialized_fields_reconciled(tmp_path: Path, field: str, ki
         writer.close()
     reader = duckdb.connect(str(silver_path), read_only=True)
     try:
-        with pytest.raises(
-            codec.Rejected, match="REGIME_SILVER_FULL_RECORD_RECOMPUTATION_MISMATCH"
-        ):
+        with pytest.raises(codec.Rejected, match="REGIME_SILVER_FULL_RECORD_RECOMPUTATION_MISMATCH"):
             silver.read_market_regime_silver(reader, **_args(receipt))
     finally:
         reader.close()
@@ -226,13 +229,9 @@ def test_original_recording_faults(tmp_path: Path, kind: str) -> None:
             writer.execute(f"UPDATE {sets} SET context=?", [b"x" * (silver.MAX_CONTEXT + 1)])
         elif kind in ("record-bound", "aggregate"):
             bound = codec.MAX_RECORD if kind == "record-bound" else codec.MAX_RECORDS
-            writer.execute(
-                f"UPDATE {table} SET record_bytes=? WHERE ordinal=0", [b"x" * (bound + 1)]
-            )
+            writer.execute(f"UPDATE {table} SET record_bytes=? WHERE ordinal=0", [b"x" * (bound + 1)])
         elif kind == "nullable-mask":
-            writer.execute(
-                f"UPDATE {table} SET features=? WHERE symbol='NULL'", ["x" * (codec.MAX_CELL + 1)]
-            )
+            writer.execute(f"UPDATE {table} SET features=? WHERE symbol='NULL'", ["x" * (codec.MAX_CELL + 1)])
         elif kind == "link":
             writer.execute(f"DELETE FROM {common.name(writer, 'silver', 'regime_attempts')}")
         elif kind == "audit":
@@ -421,9 +420,7 @@ def test_final_audit_failure_leaves_original_unreadable(tmp_path: Path, monkeypa
     reader = duckdb.connect(str(silver_path), read_only=True)
     try:
         with pytest.raises(codec.Rejected, match="ORIGINAL_REGIME_SILVER_AUDIT_NOT_VERIFIED"):
-            silver.read_market_regime_silver(
-                reader, revision_id=revision, expected_recording_fingerprint="b" * 64
-            )
+            silver.read_market_regime_silver(reader, revision_id=revision, expected_recording_fingerprint="b" * 64)
     finally:
         reader.close()
 
@@ -481,11 +478,7 @@ def test_alias_initialization_and_hex_predecode(tmp_path: Path) -> None:
     finally:
         alias.close()
         target.close()
-    raw = codec.canonical(
-        dict(
-            version=silver.VERSION, pins=asdict(pins), snapshot_hex="z" * (2 * codec.MAX_BYTES + 1)
-        )
-    )
+    raw = codec.canonical(dict(version=silver.VERSION, pins=asdict(pins), snapshot_hex="z" * (2 * codec.MAX_BYTES + 1)))
     with pytest.raises(codec.Rejected, match="SNAPSHOT_HEX_BOUND"):
         silver._derive(raw)
 
@@ -534,9 +527,7 @@ def test_contract_original_jobs_and_orphans(tmp_path: Path, kind: str) -> None:
         target = duckdb.connect(str(silver_path))
         try:
             context = silver.observe_market_regime_bronze(bronze, pins=pins)
-            with pytest.raises(
-                codec.Rejected, match="REGIME_SILVER_FIRST_WRITE_ORIGINAL_OBLIGATION"
-            ):
+            with pytest.raises(codec.Rejected, match="REGIME_SILVER_FIRST_WRITE_ORIGINAL_OBLIGATION"):
                 silver.persist_market_regime_silver(
                     bronze,
                     target,

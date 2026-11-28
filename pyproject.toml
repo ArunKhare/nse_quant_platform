@@ -71,7 +71,7 @@ pythonpath = ["src", ".", "tests/data_platform"]
 # file together on one worker so shared setup fixtures do not collide.
 # --timeout=300
 
-addopts = "-vv -n 8 --dist loadscope --maxfail=10 --tb=short -ra --durations=25 --junitxml=test_results/junit.xml"
+addopts = "-n 6 --dist loadscope --maxfail=10 --tb=short -vv -ra --durations=25 --junitxml=test_results/junit.xml"
 
 # Live file logging: writes test progress to disk immediately in case of a crash
 log_file = "test_results/pytest_live.log"

@@ -2,7 +2,7 @@ from datetime import UTC, datetime, timedelta
 
 import duckdb
 
-from nse_quant.core.models import MarketFeatures, IntradayShape
+from nse_quant.core.models import IntradayShape, MarketFeatures
 from nse_quant.data_platform import legacy_feature_snapshots as legacy_codec
 from nse_quant.features.feature_store import FeatureStore
 from nse_quant.persistence.duckdb_store import DuckDBStore
@@ -76,7 +76,6 @@ def test_iv_history_orders_values(tmp_path):
     store.close()
 
 
-
 def _legacy_feature_store(tmp_path):
     conn = duckdb.connect(str(tmp_path / "legacy-features.duckdb"))
     columns = ", ".join(f'"{name}" {kind}' for name, kind in legacy_codec.SCHEMA)
@@ -115,9 +114,7 @@ def test_schema_migration_does_not_backfill_intraday_shape_from_regime(tmp_path)
 
     store = DuckDBStore(path)
     try:
-        regime, intraday_shape = store.conn.execute(
-            "SELECT regime, intraday_shape FROM feature_snapshots"
-        ).fetchone()
+        regime, intraday_shape = store.conn.execute("SELECT regime, intraday_shape FROM feature_snapshots").fetchone()
         assert regime == "BULL|NORMAL"
         assert intraday_shape is None
         loaded = FeatureStore(store.conn).latest("NIFTY")
