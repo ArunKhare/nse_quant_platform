@@ -5,6 +5,7 @@ option stream from DuckDB. India VIX is supplied as an external NSE CSV.
 It writes only complete, same-session observations; it never fills missing
 inputs, extrapolates the volatility term structure, or promotes thresholds.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -379,9 +380,7 @@ def _option_surface_points(
     session: date,
 ) -> tuple[list[tuple[int, float]], list[tuple[int, float]], list[tuple[int, float]]]:
     """Extract valid ATM and 25-delta IV observations under the surface contract."""
-    by_expiry: dict[date, dict[str, list[tuple[float, float]]]] = defaultdict(
-        lambda: {"CALL": [], "PUT": []}
-    )
+    by_expiry: dict[date, dict[str, list[tuple[float, float]]]] = defaultdict(lambda: {"CALL": [], "PUT": []})
     for expiry, option_type, iv, delta in rows:
         kind = _normalise_option_type(option_type)
         if kind is None or expiry is None or iv is None or delta is None:
@@ -424,11 +423,7 @@ def _interpolation_bracket_diagnostic(
     target_days: int,
 ) -> dict[str, Any]:
     """Describe the exact valid observations bracketing a target maturity."""
-    ordered = sorted(
-        (days, iv)
-        for days, iv in points
-        if days > 0 and math.isfinite(iv) and iv > 0
-    )
+    ordered = sorted((days, iv) for days, iv in points if days > 0 and math.isfinite(iv) and iv > 0)
     exact = [(days, iv) for days, iv in ordered if days == target_days]
     lower = [(days, iv) for days, iv in ordered if days < target_days]
     upper = [(days, iv) for days, iv in ordered if days > target_days]
@@ -520,11 +515,7 @@ def _option_snapshot_profile(
         days = (expiry - session).days
         expiry_rows = by_expiry[expiry]
         side_rows = {
-            side: [
-                row for row in expiry_rows
-                if _normalise_option_type(row[0]) == side
-            ]
-            for side in ("CALL", "PUT")
+            side: [row for row in expiry_rows if _normalise_option_type(row[0]) == side] for side in ("CALL", "PUT")
         }
         valid_iv = [
             float(iv)
@@ -546,27 +537,39 @@ def _option_snapshot_profile(
             }
 
         call25 = any(
-            iv is not None and delta is not None
-            and math.isfinite(float(iv)) and 0.001 <= float(iv) <= 5.0
-            and math.isfinite(float(delta)) and abs(float(delta) - 0.25) <= 0.05
+            iv is not None
+            and delta is not None
+            and math.isfinite(float(iv))
+            and 0.001 <= float(iv) <= 5.0
+            and math.isfinite(float(delta))
+            and abs(float(delta) - 0.25) <= 0.05
             for _kind, iv, delta in side_rows["CALL"]
         )
         put25 = any(
-            iv is not None and delta is not None
-            and math.isfinite(float(iv)) and 0.001 <= float(iv) <= 5.0
-            and math.isfinite(float(delta)) and abs(float(delta) + 0.25) <= 0.05
+            iv is not None
+            and delta is not None
+            and math.isfinite(float(iv))
+            and 0.001 <= float(iv) <= 5.0
+            and math.isfinite(float(delta))
+            and abs(float(delta) + 0.25) <= 0.05
             for _kind, iv, delta in side_rows["PUT"]
         )
         atm_call = any(
-            iv is not None and delta is not None
-            and math.isfinite(float(iv)) and 0.001 <= float(iv) <= 5.0
-            and math.isfinite(float(delta)) and abs(float(delta) - 0.50) <= 0.10
+            iv is not None
+            and delta is not None
+            and math.isfinite(float(iv))
+            and 0.001 <= float(iv) <= 5.0
+            and math.isfinite(float(delta))
+            and abs(float(delta) - 0.50) <= 0.10
             for _kind, iv, delta in side_rows["CALL"]
         )
         atm_put = any(
-            iv is not None and delta is not None
-            and math.isfinite(float(iv)) and 0.001 <= float(iv) <= 5.0
-            and math.isfinite(float(delta)) and abs(float(delta) + 0.50) <= 0.10
+            iv is not None
+            and delta is not None
+            and math.isfinite(float(iv))
+            and 0.001 <= float(iv) <= 5.0
+            and math.isfinite(float(delta))
+            and abs(float(delta) + 0.50) <= 0.10
             for _kind, iv, delta in side_rows["PUT"]
         )
         expiry_profiles.append(
@@ -658,9 +661,7 @@ def _load_option_features(
         else:
             for reason in missing:
                 rejection_reason_counts[reason] += 1
-            rejected_sessions.append(
-                {"session": session.isoformat(), "reasons": missing, **profile}
-            )
+            rejected_sessions.append({"session": session.isoformat(), "reasons": missing, **profile})
 
     summary = {
         "table": "option_stream",
@@ -737,25 +738,17 @@ def export_calibration_dataset(args: argparse.Namespace) -> tuple[int, dict[str,
     missing_counts = {column: 0 for column in CSV_COLUMNS if column != "session"}
     candidate_sessions = [bar.trade_date for bar in bars]
     candidate_session_set = set(candidate_sessions)
-    snapshot_session_set = {
-        date.fromisoformat(value)
-        for value in options_summary.get("snapshot_sessions", [])
-    }
+    snapshot_session_set = {date.fromisoformat(value) for value in options_summary.get("snapshot_sessions", [])}
     candidate_sessions_with_snapshot = candidate_session_set & snapshot_session_set
     candidate_sessions_with_complete_surface = candidate_session_set & set(options)
     candidate_sessions_with_price_features = candidate_session_set & set(price)
     candidate_sessions_with_ivp = candidate_session_set & set(ivp)
     candidate_sessions_with_realized_variance = candidate_session_set & set(realized_variance)
     candidate_sessions_with_all_source_components = (
-        candidate_session_set
-        & set(price)
-        & set(ivp)
-        & set(options)
-        & set(realized_variance)
+        candidate_session_set & set(price) & set(ivp) & set(options) & set(realized_variance)
     )
     candidate_sessions_rejected = {
-        date.fromisoformat(item["session"])
-        for item in options_summary.get("rejected_sessions", [])
+        date.fromisoformat(item["session"]) for item in options_summary.get("rejected_sessions", [])
     } & candidate_session_set
     candidate_rejection_reason_counts: dict[str, int] = defaultdict(int)
     for item in options_summary.get("rejected_sessions", []):
@@ -838,27 +831,17 @@ def export_calibration_dataset(args: argparse.Namespace) -> tuple[int, dict[str,
             "daily_price_feature_sessions": len(price),
             "india_vix_ivp_sessions": len(ivp),
             "option_surface_sessions": len(options),
-            "option_sessions_without_snapshot": len(
-                candidate_session_set - snapshot_session_set
-            ),
+            "option_sessions_without_snapshot": len(candidate_session_set - snapshot_session_set),
             "option_sessions_rejected_for_incomplete_surface": len(candidate_sessions_rejected),
-            "option_surface_rejection_reason_counts": dict(
-                sorted(candidate_rejection_reason_counts.items())
-            ),
+            "option_surface_rejection_reason_counts": dict(sorted(candidate_rejection_reason_counts.items())),
             "candidate_sessions_with_snapshot": len(candidate_sessions_with_snapshot),
             "candidate_sessions_with_complete_surface": len(candidate_sessions_with_complete_surface),
             "candidate_sessions_with_incomplete_surface": len(candidate_sessions_rejected),
-            "snapshot_sessions_outside_candidate_window": len(
-                snapshot_session_set - candidate_session_set
-            ),
+            "snapshot_sessions_outside_candidate_window": len(snapshot_session_set - candidate_session_set),
             "candidate_sessions_with_price_features": len(candidate_sessions_with_price_features),
             "candidate_sessions_with_ivp": len(candidate_sessions_with_ivp),
-            "candidate_sessions_with_realized_variance": len(
-                candidate_sessions_with_realized_variance
-            ),
-            "candidate_sessions_with_all_source_components": len(
-                candidate_sessions_with_all_source_components
-            ),
+            "candidate_sessions_with_realized_variance": len(candidate_sessions_with_realized_variance),
+            "candidate_sessions_with_all_source_components": len(candidate_sessions_with_all_source_components),
             "realized_variance_sessions": len(realized_variance),
             "complete_session_upper_bound": len(candidate_sessions_with_all_source_components),
             "daily_bars_required_for_423_price_feature_sessions": 688,
