@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any
 
@@ -73,6 +73,8 @@ def build_active_policy(
     allowed = policy.get("allowed_regimes")
     risk_limits = policy.get("risk_limits")
     vocabulary = policy.get("regime_vocabulary")
+    test_end = policy.get("test_end")
+    expiry_valid = isinstance(test_end, (date, datetime))
     labels_valid = (
         isinstance(allowed, (list, tuple, set, frozenset))
         and bool(allowed)
@@ -85,7 +87,7 @@ def build_active_policy(
         and set(risk_limits).issubset({label for label in allowed if isinstance(label, str)})
         and all(isinstance(value, dict) for value in risk_limits.values())
     )
-    policy_valid = vocabulary == "canonical_v1" and labels_valid and limits_valid
+    policy_valid = vocabulary == "canonical_v1" and labels_valid and limits_valid and expiry_valid
     if not policy_valid:
         return {
             **base,
@@ -98,7 +100,6 @@ def build_active_policy(
             "reason": "canonical_policy_validation_failed",
         }
 
-    test_end = policy.get("test_end")
     if test_end is None:
         is_current = False
         expires_at = None
