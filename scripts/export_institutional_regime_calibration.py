@@ -612,7 +612,10 @@ def export_calibration_dataset(args: argparse.Namespace) -> tuple[int, dict[str,
                 "The daily_rv_observations.rv field and daily_rv_NIFTY.csv are not used "
                 "because the prior audit did not establish their units as non-annualized realized variance."
             ),
-            "The option surface is derived only from the latest available legacy option_stream snapshot per IST session.",
+            (
+                "The option surface is derived only from the latest available legacy "
+                "option_stream snapshot per IST session."
+            ),
             "No output from this exporter changes regime thresholds, publication status, or trading authority.",
         ],
     }
