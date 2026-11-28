@@ -463,7 +463,12 @@ def test_v5_price_action_completes_observational_canonical_composite(
     monkeypatch.setattr(
         regime_plugin,
         "_term_structure",
-        lambda **_kwargs: {"available": True, "complete": True, "state": "FLAT", "reason": None},
+        lambda **_kwargs: {
+            "available": True,
+            "complete": True,
+            "state": "FLAT",
+            "reason": None,
+        },
     )
     monkeypatch.setattr(
         regime_plugin,
