@@ -85,8 +85,8 @@ def test_skew_and_price_action_wired():
     snapshot = _snapshot(put_iv=0.25, call_iv=0.20)
     result = plugin.build(_context(snapshot, _features()))
     assert result["components"]["skew"]["state"] == "HIGH_PUT_SKEW"
-    assert result["components"]["price_action"]["state"] == "INSUFFICIENT_DATA"
-    assert result["components"]["price_action"]["reason"] == "no_1m_history"
+    assert result["components"]["price_action"]["state"] is None
+    assert result["components"]["price_action"]["reason"] == "no_completed_daily_history"
     assert result["regime_label"] is None
 
 
@@ -95,4 +95,4 @@ def test_no_pending_components_left():
     snapshot = _snapshot(put_iv=0.21, call_iv=0.20)
     result = plugin.build(_context(snapshot, _features()))
     assert "not_implemented" not in str(result["components"])
-    assert result["classifier_version"] == "institutional_iv_term_components_v4"
+    assert result["classifier_version"] == "institutional_iv_term_components_v4_with_daily_price_action_v5"
