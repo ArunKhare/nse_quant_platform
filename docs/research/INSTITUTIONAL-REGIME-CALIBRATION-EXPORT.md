@@ -96,9 +96,18 @@ eligibility is implied by a completed report.
 
 The audit identified 566 NIFTY daily sessions, 81 daily RV observations,
 29 days of options data, and an India VIX download covering approximately one
-year. The price-action feature implementation also needs 252 valid ATR observations (approximately 266 daily bars including
-ATR warm-up) before producing its first fully populated daily feature.
-Consequently, the known source coverage is below the 423-complete-session
-calibration floor. The exporter is expected to emit a partial CSV and a
-manifest with `INSUFFICIENT_SOURCE_COVERAGE` until the missing history is
-backfilled. Do not lower the 423-session floor to make the runner pass.
+year. The price-action feature implementation needs 252 valid ATR observations
+(approximately 266 daily bars including ATR warm-up) before its first complete
+feature row. Therefore 566 daily bars support at most about 301 price-feature
+sessions. A one-year India VIX file provides at most about 220 IVP observations
+with the 30-observation warm-up. The 29-day option history is the tighter
+known bottleneck; the current complete-row upper bound cannot exceed 29 and
+may be lower if the dates do not align or 30D/90D expiry brackets are absent.
+
+For 423 complete observations, the current feature definitions require at
+least 688 valid daily bars, 452 India VIX sessions, 423 sessions with valid
+30D/90D term and 25-delta skew, and 423 eligible realized-variance sessions.
+The exporter records the observed counts and their complete-session upper
+bound in the manifest. It is expected to emit a partial CSV and a manifest
+with `INSUFFICIENT_SOURCE_COVERAGE` until the missing history is backfilled.
+Do not lower the 423-session floor to make the runner pass.
