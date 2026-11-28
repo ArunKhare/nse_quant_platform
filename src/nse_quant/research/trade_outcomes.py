@@ -101,7 +101,7 @@ def load_trade_outcomes(
                 proposal_id=str(proposal.get("proposal_id")),
                 underlying=symbol,
                 strategy=str(proposal.get("strategy")),
-                regime=canonical_regime if canonical else "UNKNOWN",
+                regime=canonical_regime or "UNKNOWN",
                 opened_at=opened_at,
                 closed_at=closed_at,
                 realized_pnl=float(pnl or 0.0),
