@@ -208,6 +208,7 @@ class DecisionLoop:
         self.provider = provider
         self.broker = broker
         self.run_id = run_id
+        self._current_strategy_eligibility: dict[str, Any] | None = None
         self.feature_store = FeatureStore(store.conn)
         self.decisions = DecisionRepository(store.conn)
         self.positions = PositionRepository(store.conn)
@@ -251,7 +252,7 @@ class DecisionLoop:
         ] = {}
 
     def run_once(self) -> dict[str, Any]:
-        self._current_strategy_eligibility: dict[str, Any] | None = None
+        self._current_strategy_eligibility = None
         if self.kill_switch.is_active():
             return self.handle_kill_switch()
         symbol = self.settings.market_data.default_symbol
