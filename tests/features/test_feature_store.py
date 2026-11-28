@@ -66,3 +66,51 @@ def test_iv_history_orders_values(tmp_path):
 
     assert history == [14.0, 18.0]
     store.close()
+
+
+
+def _legacy_feature_store(tmp_path):
+    conn = duckdb.connect(str(tmp_path / "legacy-features.duckdb"))
+    columns = ", ".join(f'"{name}" {kind}' for name, kind in legacy_codec.SCHEMA)
+    conn.execute(f"CREATE TABLE feature_snapshots ({columns}, PRIMARY KEY (feature_id))")
+    return conn, FeatureStore(conn)
+
+
+def test_legacy_latest_and_history_return_unknown_without_shape_column(tmp_path):
+    conn, feature_store = _legacy_feature_store(tmp_path)
+    try:
+        ts = datetime(2026, 10, 16, 10, 0, tzinfo=UTC)
+        feature_store.save("legacy-run", make_features(ts, 15.0))
+        conn.execute("UPDATE feature_snapshots SET regime = 'BULL|NORMAL'")
+
+        latest = feature_store.latest("NIFTY")
+        history = feature_store.history("NIFTY")
+
+        assert latest is not None
+        assert latest.intraday_shape == IntradayShape.UNKNOWN
+        assert len(history) == 1
+        assert history[0].intraday_shape == IntradayShape.UNKNOWN
+        assert conn.execute("SELECT regime FROM feature_snapshots").fetchone() == ("BULL|NORMAL",)
+    finally:
+        conn.close()
+
+
+def test_schema_migration_does_not_backfill_intraday_shape_from_regime(tmp_path):
+    path = tmp_path / "legacy-migration.duckdb"
+    conn, feature_store = _legacy_feature_store(tmp_path)
+    feature_store.save("legacy-run", make_features(datetime(2026, 10, 16, 10, 0, tzinfo=UTC), 15.0))
+    conn.execute("UPDATE feature_snapshots SET regime = 'BULL|NORMAL'")
+    conn.close()
+
+    store = DuckDBStore(path)
+    try:
+        regime, intraday_shape = store.conn.execute(
+            "SELECT regime, intraday_shape FROM feature_snapshots"
+        ).fetchone()
+        assert regime == "BULL|NORMAL"
+        assert intraday_shape is None
+        loaded = FeatureStore(store.conn).latest("NIFTY")
+        assert loaded is not None
+        assert loaded.intraday_shape == IntradayShape.UNKNOWN
+    finally:
+        store.close()
