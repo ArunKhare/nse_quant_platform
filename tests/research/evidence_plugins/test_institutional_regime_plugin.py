@@ -397,3 +397,115 @@ def test_institutional_regime_evidence_is_first_write_only(store: DuckDBStore) -
     assert row is not None
     assert first_id == second_id == row[0]
     assert json.loads(row[1])["regime_label"] == payload["regime_label"]
+
+
+@pytest.mark.parametrize(
+    ("component_name", "raw_state", "canonical_state"),
+    [
+        ("iv_state", "HIGH_IV", "HIGH_IV"),
+        ("iv_state", "NORMAL_IV", "LOW_IV"),
+        ("term_structure", "CONTANGO", "CONTANGO"),
+        ("term_structure", "FLAT", "FLAT_TERM"),
+        ("term_structure", "BACKWARDATION", "BACKWARDATION"),
+        ("skew", "NORMAL_SKEW", "NORMAL_SKEW"),
+        ("skew", "HIGH_PUT_SKEW", "HIGH_PUT_SKEW"),
+        ("skew", "HIGH_CALL_SKEW", "FORWARD_REVERSE_SKEW"),
+        ("price_action", "STRONG_BULL_TREND", "STRONG_BULL_TREND"),
+        ("price_action", "STRONG_BEAR_TREND", "STRONG_BEAR_TREND"),
+        ("price_action", "RANGE_HIGH", "RANGE_HIGH"),
+        ("price_action", "RANGE_LOW", "RANGE_LOW"),
+        ("price_action", "COMPRESSION", "COMPRESSION"),
+        ("price_action", "HIGH_VOL_CHOP", "HIGH_VOL_CHOP"),
+    ],
+)
+def test_canonical_component_adapter_uses_only_governed_tokens(
+    component_name: str,
+    raw_state: str,
+    canonical_state: str,
+) -> None:
+    component = {"complete": True, "state": raw_state}
+    assert _canonical_component_state(component_name, component) == canonical_state
+    assert component["state"] == raw_state
+
+
+@pytest.mark.parametrize(
+    ("component_name", "raw_state"),
+    [
+        ("iv_state", "UNKNOWN_IV"),
+        ("term_structure", "FLAT_TERM"),
+        ("skew", "CALL_SKEW"),
+        ("price_action", "TREND_UP"),
+    ],
+)
+def test_canonical_component_adapter_fails_closed_for_unmapped_tokens(
+    component_name: str,
+    raw_state: str,
+) -> None:
+    assert _canonical_component_state(
+        component_name,
+        {"complete": True, "state": raw_state},
+    ) is None
+
+
+def test_incomplete_component_cannot_be_canonicalized() -> None:
+    assert _canonical_component_state(
+        "iv_state",
+        {"complete": False, "state": "HIGH_IV"},
+    ) is None
+
+
+def test_v5_price_action_completes_observational_canonical_composite(
+    store: DuckDBStore,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    seed(store)
+    regime_plugin = plugin(store)
+    monkeypatch.setattr(
+        regime_plugin,
+        "_term_structure",
+        lambda **_kwargs: {"available": True, "complete": True, "state": "FLAT", "reason": None},
+    )
+    monkeypatch.setattr(
+        regime_plugin,
+        "_skew",
+        lambda _snapshot: {
+            "available": True,
+            "complete": True,
+            "state": "HIGH_CALL_SKEW",
+            "reason": None,
+        },
+    )
+    monkeypatch.setattr(
+        regime_plugin,
+        "_price_action",
+        lambda _context: {
+            "available": True,
+            "complete": True,
+            "state": "HIGH_VOL_CHOP",
+            "classifier_version": "institutional_daily_price_action_v5",
+            "decision_eligibility_asserted": False,
+        },
+    )
+
+    result = regime_plugin.build(context(0.225))
+
+    assert result["complete"] is True
+    assert result["regime_label"] == (
+        "HIGH_IV_FLAT_TERM_FORWARD_REVERSE_SKEW_HIGH_VOL_CHOP"
+    )
+    assert result["regime_vocabulary"] == "canonical_v1"
+    assert result["regime_version"] == "institutional_regime_registry_v2"
+    assert result["thresholds_provisional"] is True
+    assert result["decision_eligibility_asserted"] is False
+    assert result["eligibility_approved"] is False
+    assert result["research_only"] is True
+    assert result["components"]["iv_state"]["state"] == "HIGH_IV"
+    assert result["components"]["iv_state"]["canonical_state"] == "HIGH_IV"
+    assert result["components"]["iv_state"]["source_vocabulary"] == "v4_research"
+    assert result["components"]["iv_state"]["research_only"] is True
+    assert result["components"]["term_structure"]["state"] == "FLAT"
+    assert result["components"]["term_structure"]["canonical_state"] == "FLAT_TERM"
+    assert result["components"]["skew"]["state"] == "HIGH_CALL_SKEW"
+    assert result["components"]["skew"]["canonical_state"] == "FORWARD_REVERSE_SKEW"
+    assert result["components"]["price_action"]["state"] == "HIGH_VOL_CHOP"
+    assert result["components"]["price_action"]["source_vocabulary"] == "v5_price_action"
