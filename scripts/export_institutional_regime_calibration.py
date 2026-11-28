@@ -382,16 +382,18 @@ def _option_features_for_snapshot(
         calls = sides["CALL"]
         puts = sides["PUT"]
         if calls and puts:
-            call_atm = min(calls, key=lambda item: abs(item[1] - 0.50))[0]
-            put_atm = min(puts, key=lambda item: abs(item[1] + 0.50))[0]
-            atm_points.append((days, (call_atm + put_atm) / 2.0))
+            call_atm = min(calls, key=lambda item: abs(item[1] - 0.50))
+            put_atm = min(puts, key=lambda item: abs(item[1] + 0.50))
+            if abs(call_atm[1] - 0.50) <= 0.10 and abs(put_atm[1] + 0.50) <= 0.10:
+                atm_points.append((days, (call_atm[0] + put_atm[0]) / 2.0))
         call_wing = [item for item in calls if item[1] > 0]
         put_wing = [item for item in puts if item[1] < 0]
         if call_wing and put_wing:
-            call25 = min(call_wing, key=lambda item: abs(item[1] - 0.25))[0]
-            put25 = min(put_wing, key=lambda item: abs(item[1] + 0.25))[0]
-            call25_points.append((days, call25))
-            put25_points.append((days, put25))
+            call25 = min(call_wing, key=lambda item: abs(item[1] - 0.25))
+            put25 = min(put_wing, key=lambda item: abs(item[1] + 0.25))
+            if abs(call25[1] - 0.25) <= 0.05 and abs(put25[1] + 0.25) <= 0.05:
+                call25_points.append((days, call25[0]))
+                put25_points.append((days, put25[0]))
 
     iv30 = _interpolate_total_variance(atm_points, 30)
     iv90 = _interpolate_total_variance(atm_points, 90)
