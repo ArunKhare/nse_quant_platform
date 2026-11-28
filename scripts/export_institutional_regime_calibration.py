@@ -256,6 +256,24 @@ def _price_features(bars: list[DailyBar]) -> dict[date, dict[str, float]]:
     return result
 
 
+def _intraday_session_coverage(
+    counts: dict[date, int],
+    *,
+    minimum_observations: int,
+) -> list[dict[str, Any]]:
+    """Return auditable per-session observation counts and eligibility reasons."""
+    return [
+        {
+            "session": session.isoformat(),
+            "observations": observations,
+            "minimum_observations": minimum_observations,
+            "eligible": observations >= minimum_observations,
+            "rejection_reason": None if observations >= minimum_observations else "below_minimum_observations",
+        }
+        for session, observations in sorted(counts.items())
+    ]
+
+
 def _load_realized_variance(
     conn: Any,
     *,
@@ -310,6 +328,10 @@ def _load_realized_variance(
         "observation_count_min": min(counts.values()) if counts else None,
         "observation_count_median": sorted(counts.values())[len(counts) // 2] if counts else None,
         "observation_count_max": max(counts.values()) if counts else None,
+        "session_coverage": _intraday_session_coverage(
+            counts,
+            minimum_observations=minimum_observations,
+        ),
         "definition": "sum of squared consecutive within-session 1-minute log returns; not annualized",
     }
     return realized_variance, summary
@@ -351,12 +373,12 @@ def _interpolate_total_variance(
     return math.sqrt(target_variance / target_time)
 
 
-def _option_features_with_diagnostics(
+def _option_surface_points(
     rows: list[tuple[Any, ...]],
     *,
     session: date,
-) -> tuple[dict[str, float] | None, list[str]]:
-    """Return option features and explicit reasons when the snapshot is incomplete."""
+) -> tuple[list[tuple[int, float]], list[tuple[int, float]], list[tuple[int, float]]]:
+    """Extract valid ATM and 25-delta IV observations under the surface contract."""
     by_expiry: dict[date, dict[str, list[tuple[float, float]]]] = defaultdict(
         lambda: {"CALL": [], "PUT": []}
     )
@@ -394,6 +416,58 @@ def _option_features_with_diagnostics(
             if abs(call25[1] - 0.25) <= 0.05 and abs(put25[1] + 0.25) <= 0.05:
                 call25_points.append((days, call25[0]))
                 put25_points.append((days, put25[0]))
+    return atm_points, call25_points, put25_points
+
+
+def _interpolation_bracket_diagnostic(
+    points: list[tuple[int, float]],
+    target_days: int,
+) -> dict[str, Any]:
+    """Describe the exact valid observations bracketing a target maturity."""
+    ordered = sorted(
+        (days, iv)
+        for days, iv in points
+        if days > 0 and math.isfinite(iv) and iv > 0
+    )
+    exact = [(days, iv) for days, iv in ordered if days == target_days]
+    lower = [(days, iv) for days, iv in ordered if days < target_days]
+    upper = [(days, iv) for days, iv in ordered if days > target_days]
+    lower_point = lower[-1] if lower else None
+    upper_point = upper[0] if upper else None
+    if exact:
+        status = "exact"
+        exact_point = exact[-1]
+        lower_point = exact_point
+        upper_point = exact_point
+    elif lower_point is not None and upper_point is not None:
+        status = "interpolated"
+    elif lower_point is None and upper_point is None:
+        status = "missing_both_brackets"
+    elif lower_point is None:
+        status = "missing_lower_bracket"
+    else:
+        status = "missing_upper_bracket"
+
+    def point_payload(point: tuple[int, float] | None) -> dict[str, float | int] | None:
+        if point is None:
+            return None
+        return {"days_to_expiry": point[0], "iv": point[1]}
+
+    return {
+        "target_days": target_days,
+        "status": status,
+        "lower": point_payload(lower_point),
+        "upper": point_payload(upper_point),
+    }
+
+
+def _option_features_with_diagnostics(
+    rows: list[tuple[Any, ...]],
+    *,
+    session: date,
+) -> tuple[dict[str, float] | None, list[str]]:
+    """Return option features and explicit reasons when the snapshot is incomplete."""
+    atm_points, call25_points, put25_points = _option_surface_points(rows, session=session)
 
     iv30 = _interpolate_total_variance(atm_points, 30)
     iv90 = _interpolate_total_variance(atm_points, 90)
@@ -512,10 +586,17 @@ def _option_snapshot_profile(
             }
         )
 
+    atm_points, call25_points, put25_points = _option_surface_points(rows, session=session)
     return {
         "rows": len(rows),
         "expiry_count": len(expiry_profiles),
         "expiry_profiles": expiry_profiles,
+        "interpolation_brackets": {
+            "iv30_atm": _interpolation_bracket_diagnostic(atm_points, 30),
+            "iv90_atm": _interpolation_bracket_diagnostic(atm_points, 90),
+            "call25_30d": _interpolation_bracket_diagnostic(call25_points, 30),
+            "put25_30d": _interpolation_bracket_diagnostic(put25_points, 30),
+        },
     }
 
 
