@@ -44,12 +44,14 @@ def load_trade_outcomes(
             ptr.realized_pnl
         FROM decisions d
         LEFT JOIN decision_evidence de
-          ON de.run_id = d.run_id
+          ON de.evidence_id = JSON_EXTRACT_STRING(
+              d.payload,
+              '$.decision_audit.regime.evidence_id'
+          )
+         AND de.run_id = d.run_id
          AND de.symbol = d.underlying
          AND de.plugin = 'institutional_regime'
-         AND de.ts = TRY_CAST(
-             JSON_EXTRACT_STRING(d.payload, '$.decision_audit.regime.as_of') AS TIMESTAMP
-         )
+         AND de.ts <= d.ts
         JOIN strategy_positions sp
           ON sp.proposal_id = JSON_EXTRACT_STRING(
               d.payload,
