@@ -57,12 +57,12 @@ def build_active_policy(
     base = {
         "symbol": symbol,
         "as_of": as_of.isoformat(),
-        "regime_vocabulary": "canonical_v1",
         "regime_registry_version": REGIME_REGISTRY_VERSION,
     }
     if policy is None:
         return {
             **base,
+            "regime_vocabulary": None,
             "selection_status": "UNAVAILABLE",
             "allowed_regimes": [],
             "risk_limits": {},
@@ -89,6 +89,7 @@ def build_active_policy(
     if not policy_valid:
         return {
             **base,
+            "regime_vocabulary": vocabulary,
             "policy_id": policy.get("policy_id"),
             "selection_status": "INVALID_POLICY",
             "allowed_regimes": [],
@@ -109,6 +110,7 @@ def build_active_policy(
     actionable = is_ready and is_current
     return {
         **base,
+        "regime_vocabulary": "canonical_v1",
         "policy_id": policy.get("policy_id"),
         "selection_status": policy.get("selection_status", "UNAVAILABLE"),
         "test_end": expires_at,
