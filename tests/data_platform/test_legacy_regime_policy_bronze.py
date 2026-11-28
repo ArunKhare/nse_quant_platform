@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any
@@ -20,6 +21,7 @@ from nse_quant.research.regime_policy import RegimePolicy
 AT = datetime(2026, 1, 1, tzinfo=UTC)
 REVISION = "a" * 40
 OPAQUE = '{ "eligible":true, "eligible":false, "authorized":true }'
+REGIME = "HIGH_IV_CONTANGO_NORMAL_SKEW_RANGE_HIGH"
 
 
 def _table(path: Path, layout_id: str) -> None:
@@ -34,7 +36,7 @@ def _table(path: Path, layout_id: str) -> None:
 
 def _source(path: Path, layout_id: str) -> None:
     _table(path, layout_id)
-    regime = "HIGH_IV_CONTANGO_NORMAL_SKEW_RANGE_HIGH"
+    regime = REGIME
     policy = RegimePolicy(frozenset({regime}), {regime: {"trades": 10, "pnl": 100.0}}, "READY")
     assert policy.is_usable is True
     if layout_id == codec.CLOCK_BEFORE_RISK:
@@ -49,10 +51,18 @@ def _source(path: Path, layout_id: str) -> None:
                 test_end=date(2025, 7, 31),
                 policy=policy,
             )
-            legacy.save_regime_policy(**args, risk_limits={"max_lots": 1})
-            legacy.save_regime_policy(**args, risk_limits={"max_lots": 2})
+            legacy.save_regime_policy(**args, risk_limits={regime: {"max_lots": 1}})
+            legacy.save_regime_policy(**args, risk_limits={regime: {"max_lots": 2}})
         finally:
             legacy.close()
+        # Store initialization appends this newer column; restore the reviewed
+        # historical layout before exercising the legacy snapshot reader.
+        writer = duckdb.connect(str(path))
+        try:
+            table = common.name(writer, "main", codec.TABLE)
+            writer.execute(f"ALTER TABLE {table} DROP COLUMN regime_vocabulary")
+        finally:
+            writer.close()
     else:
         writer = duckdb.connect(str(path))
         try:
@@ -156,7 +166,10 @@ def test_both_actual_physical_layouts_producer_reader(tmp_path: Path, layout_id:
         fields = codec.parse(records[0], codec.MAX_RECORD)["stored_fields"]
         assert fields["selection_status"] == "READY"
         assert fields["regime_metrics"] == OPAQUE
-        assert fields["risk_limits"] in ('{"max_lots":2}', '{"max_lots": 2}')
+        expected_risk_limits = (
+            json.dumps({REGIME: {"max_lots": 2}}) if layout_id == codec.CLOCK_BEFORE_RISK else '{"max_lots":2}'
+        )
+        assert fields["risk_limits"] == expected_risk_limits
         assert fields["created_at"] is not None
         assert [codec.parse(r, codec.MAX_RECORD)["stored_fields"]["allowed_regimes"] for r in records[1:]] == [
             None,
@@ -176,8 +189,8 @@ def test_named_column_writer_fits_fresh_declared_order(tmp_path: Path) -> None:
             "WHERE table_catalog=current_database() AND table_schema='main' "
             "AND table_name='regime_policies' ORDER BY ordinal_position"
         ).fetchall()
-        assert tuple(columns) == codec.checked_layout(codec.RISK_BEFORE_CLOCK)
-        regime = "HIGH_IV_CONTANGO_NORMAL_SKEW_RANGE_HIGH"
+        assert tuple(columns) == (*codec.checked_layout(codec.RISK_BEFORE_CLOCK), ("regime_vocabulary", "VARCHAR"))
+        regime = REGIME
         policy = RegimePolicy(frozenset({regime}), {}, "READY")
         legacy.save_regime_policy(
             policy_id="P",
@@ -187,7 +200,7 @@ def test_named_column_writer_fits_fresh_declared_order(tmp_path: Path) -> None:
             test_start=date(2025, 7, 1),
             test_end=date(2025, 7, 31),
             policy=policy,
-            risk_limits={"max_lots": 2},
+            risk_limits={regime: {"max_lots": 2}},
         )
         table = common.name(legacy.conn, "main", codec.TABLE)
         row = legacy.conn.execute(
@@ -199,7 +212,7 @@ def test_named_column_writer_fits_fresh_declared_order(tmp_path: Path) -> None:
         assert row[0] == "P"
         assert row[1] == "NIFTY"
         assert row[6] == f'["{regime}"]'
-        assert row[9] == '{"max_lots": 2}'
+        assert row[9] == json.dumps({regime: {"max_lots": 2}})
         assert row[10] is not None
     finally:
         legacy.close()
