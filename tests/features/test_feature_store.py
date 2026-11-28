@@ -97,7 +97,10 @@ def test_legacy_latest_and_history_return_unknown_without_shape_column(tmp_path)
 
 def test_schema_migration_does_not_backfill_intraday_shape_from_regime(tmp_path):
     path = tmp_path / "legacy-migration.duckdb"
-    conn, feature_store = _legacy_feature_store(tmp_path)
+    conn = duckdb.connect(str(path))
+    columns = ", ".join(f'"{name}" {kind}' for name, kind in legacy_codec.SCHEMA)
+    conn.execute(f"CREATE TABLE feature_snapshots ({columns}, PRIMARY KEY (feature_id))")
+    feature_store = FeatureStore(conn)
     feature_store.save("legacy-run", make_features(datetime(2026, 10, 16, 10, 0, tzinfo=UTC), 15.0))
     conn.execute("UPDATE feature_snapshots SET regime = 'BULL|NORMAL'")
     conn.close()
