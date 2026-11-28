@@ -17,9 +17,9 @@ def canonical_regime_for_risk(evidence: dict[str, Any]) -> str | None:
         return None
     if payload.get("available") is not True or payload.get("complete") is not True:
         return None
-    if payload.get("thresholds_provisional", False) is not False:
+    if payload.get("thresholds_provisional") is not False:
         return None
-    if payload.get("decision_eligibility_asserted", False) is not False:
+    if payload.get("decision_eligibility_asserted") is not False:
         return None
     label = payload.get("regime_label")
     return label if isinstance(label, str) and is_canonical_regime_label(label) else None
