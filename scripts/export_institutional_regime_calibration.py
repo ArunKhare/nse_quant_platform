@@ -662,6 +662,16 @@ def export_calibration_dataset(args: argparse.Namespace) -> tuple[int, dict[str,
     }
     candidate_sessions_with_snapshot = candidate_session_set & snapshot_session_set
     candidate_sessions_with_complete_surface = candidate_session_set & set(options)
+    candidate_sessions_with_price_features = candidate_session_set & set(price)
+    candidate_sessions_with_ivp = candidate_session_set & set(ivp)
+    candidate_sessions_with_realized_variance = candidate_session_set & set(realized_variance)
+    candidate_sessions_with_all_source_components = (
+        candidate_session_set
+        & set(price)
+        & set(ivp)
+        & set(options)
+        & set(realized_variance)
+    )
     candidate_sessions_rejected = {
         date.fromisoformat(item["session"])
         for item in options_summary.get("rejected_sessions", [])
@@ -760,13 +770,16 @@ def export_calibration_dataset(args: argparse.Namespace) -> tuple[int, dict[str,
             "snapshot_sessions_outside_candidate_window": len(
                 snapshot_session_set - candidate_session_set
             ),
-            "realized_variance_sessions": len(realized_variance),
-            "complete_session_upper_bound": min(
-                len(price),
-                len(ivp),
-                len(options),
-                len(realized_variance),
+            "candidate_sessions_with_price_features": len(candidate_sessions_with_price_features),
+            "candidate_sessions_with_ivp": len(candidate_sessions_with_ivp),
+            "candidate_sessions_with_realized_variance": len(
+                candidate_sessions_with_realized_variance
             ),
+            "candidate_sessions_with_all_source_components": len(
+                candidate_sessions_with_all_source_components
+            ),
+            "realized_variance_sessions": len(realized_variance),
+            "complete_session_upper_bound": len(candidate_sessions_with_all_source_components),
             "daily_bars_required_for_423_price_feature_sessions": 688,
             "india_vix_sessions_required_for_423_ivp_sessions": 452,
             "option_surface_sessions_required": MINIMUM_CALIBRATION_SESSIONS,
