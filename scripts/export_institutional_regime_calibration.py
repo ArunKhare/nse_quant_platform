@@ -67,7 +67,6 @@ def _parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--as-of", type=date.fromisoformat)
     parser.add_argument("--end-date", type=date.fromisoformat)
-    parser.add_argument("--min-sessions", type=int, default=MINIMUM_CALIBRATION_SESSIONS)
     parser.add_argument("--min-intraday-observations", type=int, default=300)
     parser.add_argument("--iv-lookback-sessions", type=int, default=252)
     parser.add_argument("--iv-min-observations", type=int, default=30)
@@ -487,7 +486,7 @@ def export_calibration_dataset(args: argparse.Namespace) -> tuple[int, dict[str,
         raise FileNotFoundError(args.db_path)
     as_of = args.as_of or datetime.now(IST).date()
     end_date = min(args.end_date or (as_of - timedelta(days=1)), as_of - timedelta(days=1))
-    if args.min_sessions < 1 or args.min_intraday_observations < 2:
+    if args.min_intraday_observations < 2:
         raise ValueError("invalid_export_coverage_threshold")
     if args.output.resolve() in {args.db_path.resolve(), args.india_vix_csv.resolve()}:
         raise ValueError("output_path_must_not_overwrite_a_source")
@@ -558,7 +557,7 @@ def export_calibration_dataset(args: argparse.Namespace) -> tuple[int, dict[str,
     output_rows.sort(key=lambda row: row["session"])
     _write_csv(args.output, output_rows)
 
-    ready = len(output_rows) >= args.min_sessions
+    ready = len(output_rows) >= MINIMUM_CALIBRATION_SESSIONS
     manifest: dict[str, Any] = {
         "export_version": EXPORT_VERSION,
         "feature_contract": FEATURE_CONTRACT,
@@ -577,7 +576,7 @@ def export_calibration_dataset(args: argparse.Namespace) -> tuple[int, dict[str,
         "automatic_promotion": False,
         "as_of_exclusive": as_of.isoformat(),
         "end_date_inclusive": end_date.isoformat(),
-        "minimum_complete_sessions": args.min_sessions,
+        "minimum_complete_sessions": MINIMUM_CALIBRATION_SESSIONS,
         "complete_sessions_exported": len(output_rows),
         "output_csv": {
             "path": str(args.output),
@@ -602,8 +601,8 @@ def export_calibration_dataset(args: argparse.Namespace) -> tuple[int, dict[str,
             ),
             "daily_bars_required_for_423_price_feature_sessions": 688,
             "india_vix_sessions_required_for_423_ivp_sessions": 452,
-            "option_surface_sessions_required": args.min_sessions,
-            "realized_variance_sessions_required": args.min_sessions,
+            "option_surface_sessions_required": MINIMUM_CALIBRATION_SESSIONS,
+            "realized_variance_sessions_required": MINIMUM_CALIBRATION_SESSIONS,
         },
         "sources": {
             "duckdb": {
