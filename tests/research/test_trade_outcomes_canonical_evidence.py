@@ -2,8 +2,10 @@ import json
 from datetime import date, datetime, timedelta
 
 import duckdb
+import pytest
 
 from nse_quant.core.regime_registry import REGIMES
+from nse_quant.research.regime_policy import select_regime_policy
 from nse_quant.research.trade_outcomes import load_trade_outcomes
 
 CANONICAL = next(iter(REGIMES))
@@ -176,4 +178,6 @@ def test_missing_or_future_regime_evidence_is_explicit_not_daily_fallback() -> N
     assert outcomes[0].regime == "UNKNOWN"
     assert outcomes[0].regime_evidence_id is None
     assert outcomes[0].regime_evidence_status == "MISSING_DECISION_TIME_EVIDENCE"
+    with pytest.raises(ValueError, match="MISSING_DECISION_TIME_EVIDENCE"):
+        select_regime_policy(outcomes)
     conn.close()
