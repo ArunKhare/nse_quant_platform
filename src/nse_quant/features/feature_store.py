@@ -87,13 +87,22 @@ class FeatureStore:
         )
         return feature_id
 
+    def _intraday_shape_projection(self) -> str:
+        schema_columns = {
+            row[1] for row in self.conn.execute("PRAGMA table_info('feature_snapshots')").fetchall()
+        }
+        if "intraday_shape" in schema_columns:
+            return '"intraday_shape"'
+        return "'UNKNOWN' AS intraday_shape"
+
     def latest(self, underlying: str) -> MarketFeatures | None:
+        shape_projection = self._intraday_shape_projection()
         row = self.conn.execute(
-            """
+            f"""
             SELECT feature_id, ts, run_id, underlying, expiry, spot, atm_iv,
                    iv_rank, iv_percentile, realized_vol, iv_rv_spread, pcr,
                    total_call_oi, total_put_oi, max_pain, liquidity_score,
-                   intraday_shape, short_momentum, straddle_price,
+                   {shape_projection}, short_momentum, straddle_price,
                    expected_move_pct, expected_move_points, diagnostics
             FROM feature_snapshots
             WHERE underlying = ?
@@ -111,12 +120,13 @@ class FeatureStore:
         start_ts: Any | None = None,
         end_ts: Any | None = None,
     ) -> list[MarketFeatures]:
+        shape_projection = self._intraday_shape_projection()
         rows = self.conn.execute(
-            """
+            f"""
             SELECT feature_id, ts, run_id, underlying, expiry, spot, atm_iv,
                    iv_rank, iv_percentile, realized_vol, iv_rv_spread, pcr,
                    total_call_oi, total_put_oi, max_pain, liquidity_score,
-                   intraday_shape, short_momentum, straddle_price,
+                   {shape_projection}, short_momentum, straddle_price,
                    expected_move_pct, expected_move_points, diagnostics
             FROM feature_snapshots
             WHERE underlying = ?
