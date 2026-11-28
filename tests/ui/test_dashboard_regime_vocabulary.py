@@ -22,6 +22,14 @@ def test_market_features_table_separates_regime_vocabularies() -> None:
         "strategy_eligibility": {
             "details": {
                 "regime_label": "HIGH_IV_CONTANGO_NORMAL_SKEW_HIGH_VOL_CHOP",
+                "institutional_regime_evidence": {
+                    "available": True,
+                    "complete": True,
+                    "regime_label_canonical": True,
+                    "regime_label_eligible": False,
+                    "thresholds_provisional": True,
+                    "missing_components": ["term_structure"],
+                },
                 "market_context": {"daily_trend_vol": "BULL|NORMAL"},
             }
         },
@@ -34,6 +42,9 @@ def test_market_features_table_separates_regime_vocabularies() -> None:
     assert "Intraday shape" in rendered
     assert "HIGH IV CONTANGO NORMAL SKEW HIGH VOL CHOP" in rendered
     assert "BULL|NORMAL" in rendered
+    assert "Classifier evidence readiness" in rendered
+    assert "thresholds_provisional=True" in rendered
+    assert "term_structure" in rendered
     assert "Regime" not in rendered
 
 
