@@ -751,3 +751,55 @@ The native legacy feature-snapshot Bronze/Silver integration tests exposed a sch
 Updated `src/nse_quant/features/feature_store.py` to inspect the existing table columns and include `intraday_shape` only when that column exists. The writer deliberately does not copy `intraday_shape` into legacy `regime`; those vocabularies remain distinct. All other feature fields continue to be written using explicit column names.
 
 The reported failures are consistent with this root cause. The focused native legacy feature-snapshot tests have not yet been rerun after the correction, and no test, Ruff, or mypy pass is claimed.
+
+
+## 2026-11-28 — Feature snapshot legacy-schema compatibility
+
+Corrected the S5 `intraday_shape` compatibility boundary.
+
+- Removed the migration backfill that copied `feature_snapshots.regime` into
+  `intraday_shape`. The migration still adds the nullable `intraday_shape`
+  column when upgrading an older operational table, but it leaves historical
+  values unset. The two vocabularies are not interchangeable.
+- Made `FeatureStore.latest()` and `FeatureStore.history()` inspect the
+  `feature_snapshots` schema. When the column is absent, their SELECT projection
+  supplies the literal `UNKNOWN`; when it exists, the stored
+  `intraday_shape` is read. No path reads or maps the legacy `regime` value
+  into the new field.
+- Added regression coverage for both current and legacy operational schemas,
+  including migration of a legacy row whose `regime` is `BULL|NORMAL`.
+  The expected migrated `intraday_shape` remains NULL in storage and reads as
+  `UNKNOWN`.
+- Extended the native legacy feature-snapshot Silver replay test to assert that
+  the original `regime` value remains preserved in the retained 22-field
+  contract.
+
+### Silver contract-version decision
+
+No new Silver contract version is required for this correction. The governed
+`legacy-feature-snapshot@1` contract remains the exact 22-field projection
+defined in `legacy_feature_snapshots.py`; it intentionally contains
+`regime` and excludes `intraday_shape`. This implementation does not alter
+that schema, its canonical bytes, or its replay semantics. The explicit
+`BULL|NORMAL` preservation assertion and full source-to-Silver replay test
+protect that boundary. A future inclusion of `intraday_shape` would require a
+separately versioned contract and migration, not an in-place change to v1.
+
+### Operator QA required
+
+Run the focused tests and quality checks on the Windows checkout:
+
+```powershell
+uv run pytest -q tests/features/test_feature_store.py tests/data_platform/test_legacy_feature_snapshot_silver.py
+
+uv run ruff check src/nse_quant/persistence/duckdb_store.py src/nse_quant/features/feature_store.py tests/features/test_feature_store.py tests/data_platform/test_legacy_feature_snapshot_silver.py
+
+uv run mypy src/nse_quant/persistence/duckdb_store.py src/nse_quant/features/feature_store.py
+
+git diff --check
+```
+
+The assistant has not executed these commands. Implementation status is
+committed; test, lint, type-check and full-suite acceptance remain pending
+operator output. No strategy gate, regime classification, Silver publication,
+decision eligibility or trading authority was changed.
