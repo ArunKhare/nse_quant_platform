@@ -863,3 +863,67 @@ git diff --check
 ```
 
 Passing these implementation tests will not by itself make the v5 classifier decision-eligible. Its provisional thresholds and the existing source-coverage/calibration gate remain unchanged.
+
+
+## 2026-11-28 — Institutional regime evidence-bundle promotion
+
+The platform owner reported that the v5 institutional-regime pipeline QA and tests
+passed. This section records the next implementation tranche separately; it does
+not upgrade calibration, eligibility, or paper/live authority.
+
+### Existing operational evidence path
+
+Repository inspection confirmed that the decision loop already:
+
+- Runs the registered `institutional_regime` evidence plugin.
+- Persists the complete plugin payload in `decision_evidence`.
+- Applies first-write-only behavior to the institutional-regime plugin row.
+- Retains the exact returned evidence ID in `_decision_evidence_pins`.
+- Includes that exact evidence pin in the decision-audit regime section.
+
+No duplicate operational evidence table or second writer is introduced.
+
+### Research evidence assembly
+
+Added:
+
+- `src/nse_quant/research/institutional_regime_evidence.py`: read-only source-row
+  validation, exact-pin collection, point-in-time checks, coverage/state summaries,
+  provenance manifest, deterministic content hash and research review packet.
+- `scripts/build_institutional_regime_evidence_bundle.py`: offline read-only
+  builder for a requested symbol and half-open UTC time window.
+- `tests/research/test_institutional_regime_evidence.py`: source-window,
+  deterministic bundle, incomplete-observation, governance-boundary, duplicate-pin,
+  point-in-time and artifact-write coverage.
+- `docs/INSTITUTIONAL_REGIME_EVIDENCE_BUNDLE.md`: operating and governance contract.
+
+The JSON bundle contains the exact source evidence IDs and original payloads, plus
+classifier/source-vocabulary provenance, component coverage, canonical-label
+frequencies, missing-component counts, a deterministic bundle ID and SHA-256.
+A Markdown review report is emitted alongside it.
+
+The builder must run after the decisions-database writer stops or against an
+immutable copy/export. It does not write to the operational DuckDB database.
+
+### Promotion boundary
+
+This is promotion from per-cycle decision evidence into a content-addressed
+**research review candidate** only:
+
+- Review status remains `PENDING_HUMAN_REVIEW`.
+- Gold publication remains `CANDIDATE_NOT_PUBLISHED`.
+- Thresholds remain provisional.
+- v4 IV/term/skew semantics remain uncalibrated.
+- Decision eligibility, paper-trading approval and live-trading approval remain
+  explicitly false.
+- No strategy allowlist, risk policy, plugin mode or execution behavior changes.
+
+### Validation status
+
+Implementation is committed as a code change, but the new evidence-bundle tests,
+Ruff, mypy and read-only CLI integration have not yet been run in the operator's
+checkout. The owner-reported QA pass applies to the preceding v5 classifier and
+composite-evidence tranche, not this new bundle workflow.
+
+See `docs/INSTITUTIONAL_REGIME_EVIDENCE_BUNDLE.md` for the invocation and focused
+acceptance commands.
