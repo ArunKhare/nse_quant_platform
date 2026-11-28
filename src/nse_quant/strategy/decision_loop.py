@@ -251,6 +251,7 @@ class DecisionLoop:
         ] = {}
 
     def run_once(self) -> dict[str, Any]:
+        self._current_strategy_eligibility: dict[str, Any] | None = None
         if self.kill_switch.is_active():
             return self.handle_kill_switch()
         symbol = self.settings.market_data.default_symbol
@@ -558,6 +559,7 @@ class DecisionLoop:
                 classifier_version=institutional["classifier_version"],
                 institutional_regime_audit=institutional,
             )
+            self._current_strategy_eligibility = eligibility.model_dump(mode="json")
 
             self.decisions.save_decision(
                 self.run_id,
@@ -862,7 +864,11 @@ class DecisionLoop:
             None,
         )
 
-        strategy_eligibility = eligibility_gate.model_dump(mode="json") if eligibility_gate is not None else None
+        strategy_eligibility = (
+            eligibility_gate.model_dump(mode="json")
+            if eligibility_gate is not None
+            else getattr(self, "_current_strategy_eligibility", None)
+        )
         self.decisions.save_decision(
             self.run_id,
             status,
